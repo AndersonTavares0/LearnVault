@@ -1223,7 +1223,9 @@ pub(crate) async fn list_pdf_annotations(
         return invalid_query();
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &query.media_id)?;
         learnvault_core::list_pdf_annotations(db, &owner, &query.media_id)
     })
     .await
@@ -1252,7 +1254,9 @@ pub(crate) async fn create_pdf_annotation(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        require_media_access(db, &owner, admin, &request.media_id)?;
         let (Some(kind), Some(color)) = (
             learnvault_core::PdfAnnotationKind::parse(&request.kind),
             learnvault_core::PdfAnnotationColor::parse(&request.color),
@@ -1310,7 +1314,11 @@ pub(crate) async fn update_pdf_annotation(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        if let Some(media_id) = learnvault_core::pdf_annotation_media_id(db, &annotation_id)? {
+            require_media_access(db, &owner, admin, &media_id)?;
+        }
         let color = match request.color.as_deref() {
             Some(value) => Some(
                 learnvault_core::PdfAnnotationColor::parse(value)
@@ -1349,7 +1357,11 @@ pub(crate) async fn delete_pdf_annotation(
         Err(failure) => return failure.into_response(),
     };
     let owner = user.user_id;
+    let admin = user.is_admin;
     match run_study(&state, move |db| {
+        if let Some(media_id) = learnvault_core::pdf_annotation_media_id(db, &annotation_id)? {
+            require_media_access(db, &owner, admin, &media_id)?;
+        }
         learnvault_core::delete_pdf_annotation(db, &owner, &annotation_id)
     })
     .await
