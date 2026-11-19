@@ -474,3 +474,155 @@ async fn the_server_device_id_is_reserved_and_another_user_never_sees_the_journa
     .await;
     assert!(theirs["items"].as_array().unwrap().is_empty());
 }
+
+fn note(op_id: &str) -> Value {
+    json!({
+        "op_id": op_id,
+        "client_at": 100,
+        "payload": {
+            "kind": "note", "note_id": format!("note-{op_id}"), "media_id": "m1",
+            "position_seconds": 5, "content": "synthetic", "created_at": 100, "updated_at": 100
+        }
+    })
+}
+
+fn note_deleted(op_id: &str) -> Value {
+    json!({
+        "op_id": op_id,
+        "client_at": 101,
+        "payload": { "kind": "note_deleted", "note_id": "note-other" }
+    })
+}
+
+async fn push_ops(app: &axum::Router, cookie: &str, device: &str, operations: Vec<Value>) {
+    let response = app
+        .clone()
+        .oneshot(push_request(
+            cookie,
+            json!({ "device_id": device, "operations": operations }),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+}
+
+async fn pull_json(app: &axum::Router, cookie: &str, query: &str) -> Value {
+    let response = app
+        .clone()
+        .oneshot(pull_request(&format!("/api/sync/pull?{query}"), cookie))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    json_body(response).await
+}
+
+fn op_ids(batch: &Value) -> Vec<&str> {
+    batch["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|item| item["op_id"].as_str().unwrap())
+        .collect()
+}
+
+fn set_course_access(temp: &TempDir, user_id: &str, course_id: Option<&str>) {
+    let db = Database::open(temp.path().join("sync.sqlite")).unwrap();
+    db.connection()
+        .execute(
+            "DELETE FROM user_course_access WHERE user_id = ?1",
+            [user_id],
+        )
+        .unwrap();
+    if let Some(course_id) = course_id {
+        db.connection()
+            .execute(
+                "INSERT INTO user_course_access (user_id, course_id) VALUES (?1, ?2)",
+                [user_id, course_id],
+            )
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn pull_applies_the_current_course_grant_and_restores_on_regrant() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+    seed_user(&temp, "reader-id", READER, READER_PASSWORD);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, READER, READER_PASSWORD).await;
+
+    push_ops(
+        &app,
+        &cookie,
+        "device-a",
+        vec![note("op-note"), note_deleted("op-free")],
+    )
+    .await;
+    let before = pull_json(&app, &cookie, "device=device-b&cursor=0").await;
+    assert_eq!(op_ids(&before), ["op-note", "op-free"]);
+
+    // The grant is revoked: the course-linked note is no longer served to another device.
+    set_course_access(&temp, "reader-id", Some("library-2"));
+    let after = pull_json(&app, &cookie, "device=device-c&cursor=0").await;
+    assert_eq!(op_ids(&after), ["op-free"], "{after}");
+
+    // Granting the course again makes the journal entry visible to a device that has not passed it.
+    set_course_access(&temp, "reader-id", Some("library-1"));
+    let again = pull_json(&app, &cookie, "device=device-d&cursor=0").await;
+    assert_eq!(op_ids(&again), ["op-note", "op-free"]);
+}
+
+#[tokio::test]
+async fn pull_advances_the_cursor_across_a_page_made_only_of_filtered_operations() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+    seed_user(&temp, "reader-id", READER, READER_PASSWORD);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, READER, READER_PASSWORD).await;
+
+    push_ops(
+        &app,
+        &cookie,
+        "device-a",
+        vec![note("n1"), note("n2"), note("n3")],
+    )
+    .await;
+    set_course_access(&temp, "reader-id", Some("library-2"));
+
+    // Everything is filtered: the page is empty, the cursor moved past it and there is nothing more.
+    let empty = pull_json(&app, &cookie, "device=device-b&cursor=0&limit=2").await;
+    assert!(op_ids(&empty).is_empty(), "{empty}");
+    let cursor = empty["cursor"].as_i64().unwrap();
+    assert!(cursor >= 3, "{empty}");
+    assert_eq!(empty["has_more"], false);
+    let next = pull_json(&app, &cookie, &format!("device=device-b&cursor={cursor}")).await;
+    assert!(op_ids(&next).is_empty());
+    assert_eq!(next["cursor"], cursor);
+
+    // A visible operation behind a full page of filtered ones is still reached with a small limit.
+    push_ops(&app, &cookie, "device-a", vec![note_deleted("after")]).await;
+    let reached = pull_json(&app, &cookie, "device=device-e&cursor=0&limit=2").await;
+    assert_eq!(op_ids(&reached), ["after"], "{reached}");
+    assert_eq!(reached["has_more"], false);
+}
+
+#[tokio::test]
+async fn pull_for_an_administrator_ignores_course_access_rows() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+    push_ops(&app, &cookie, "device-a", vec![note("op-note")]).await;
+    let admin_id: String = Database::open(temp.path().join("sync.sqlite"))
+        .unwrap()
+        .connection()
+        .query_row(
+            "SELECT user_id FROM user WHERE username = ?1",
+            [ADMIN],
+            |r| r.get(0),
+        )
+        .unwrap();
+    set_course_access(&temp, &admin_id, Some("library-2"));
+    let pulled = pull_json(&app, &cookie, "device=device-b&cursor=0").await;
+    assert_eq!(op_ids(&pulled), ["op-note"]);
+}
