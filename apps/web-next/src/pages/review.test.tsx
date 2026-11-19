@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { setLocale } from '@/lib/i18n';
 import { transport, type Catalog, type Flashcard } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
 
@@ -17,6 +18,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+	setLocale('en');
 	cleanup();
 	vi.restoreAllMocks();
 });
@@ -29,9 +31,16 @@ describe('review', () => {
 		expect(await screen.findByText('2 cards are due')).toBeTruthy();
 		expect(await screen.findByRole('link', { name: /^Rust/ })).toBeTruthy();
 		expect(screen.getAllByText('2 due · 2 cards').length).toBeGreaterThan(0);
-		expect(screen.getAllByText('0 due · 1 cards').length).toBeGreaterThan(0);
+		expect(screen.getAllByText('0 due · 1 card').length).toBeGreaterThan(0);
 		expect(transport.listFlashcards).toHaveBeenCalledWith();
 		cleanup();
+		setLocale('pt-BR');
+		renderApp('/review', { catalog });
+		expect(await screen.findByText('2 cartões vencem agora')).toBeTruthy();
+		expect(screen.getAllByText('2 vencem · 2 cartões').length).toBeGreaterThan(0);
+		expect(screen.getAllByText('0 vencem · 1 cartão').length).toBeGreaterThan(0);
+		cleanup();
+		setLocale('en');
 		renderApp('/review?course=rust', { catalog });
 		expect(await screen.findByRole('heading', { name: '2 cards are due' })).toBeTruthy();
 	});
