@@ -208,14 +208,56 @@ test('a release must be published and not a draft; a pre-release is flagged so i
 test('packaged Linux binaries and container images are smoke-tested before upload or index tagging', () => {
     for (const arch of ['amd64', 'arm64']) {
         const block = runBlock(`Smoke test packaged Linux ${arch} binary`);
-        assert.match(block, /--version/);
-        assert.match(block, /--listen-addr 127\.0\.0\.1:0/);
-        assert.match(block, /--no-update-check/);
-        assert.match(block, /LEARNVAULT_READY/);
-        assert.match(block, /\/api\/healthz/);
+        assert.match(block, /\.\/scripts\/smoke-release-binary\.sh/);
+        assert.match(block, new RegExp(`learnvault-linux-${arch}\\.tar\\.gz`));
     }
     const ociBlock = runBlock('Smoke test the pushed ${{ matrix.arch }} image');
     assert.match(ociBlock, /docker pull "\$IMAGE"/);
     assert.match(ociBlock, /\.\/scripts\/verify-rust-oci\.sh/);
     assert.match(workflow, /SKIP_BUILD: '1'/);
+});
+
+test('smoke-release-binary.sh verifies --version, LEARNVAULT_READY, /api/healthz, and explicit v-prefix matching', async t => {
+    const { chmodSync, mkdirSync, writeFileSync } = await import('node:fs');
+    const dir = mkdtempSync(join(tmpdir(), 'learnvault-smoke-test-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const webDir = join(dir, 'web');
+    mkdirSync(webDir);
+    const stub = join(dir, 'stub-server');
+    writeFileSync(stub, `#!/usr/bin/env node
+import http from 'node:http';
+const args = process.argv.slice(2);
+const version = process.env.STUB_VERSION || 'v0.9.5';
+if (args.includes('--version')) {
+  console.log('learnvault-server ' + version);
+  process.exit(0);
+}
+if (!args.includes('--no-update-check') || !args.includes('--insecure-http') || !args.includes('--listen-addr')) {
+  process.exit(2);
+}
+const server = http.createServer((req, res) => {
+  if (req.url === '/api/healthz') {
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', version: process.env.STUB_HEALTHZ_VERSION || version }));
+    return;
+  }
+  res.writeHead(404);
+  res.end();
+});
+server.listen(0, '127.0.0.1', () => {
+  const addr = server.address();
+  console.log('LEARNVAULT_READY ' + addr.address + ':' + addr.port);
+});
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
+`);
+    chmodSync(stub, 0o755);
+    const smokeScript = join(root, 'scripts/smoke-release-binary.sh');
+    const runSmoke = (expectedTag, envOverrides = {}) => spawnSync('bash', [smokeScript, stub, expectedTag, webDir], {
+        encoding: 'utf8',
+        env: { ...process.env, ...envOverrides }
+    });
+    assert.equal(runSmoke('v0.9.5', { STUB_VERSION: 'v0.9.5' }).status, 0);
+    assert.equal(runSmoke('0.9.5', { STUB_VERSION: '0.9.5' }).status, 0);
+    assert.notEqual(runSmoke('v0.9.5', { STUB_VERSION: '0.9.5' }).status, 0);
+    assert.notEqual(runSmoke('v0.9.5', { STUB_VERSION: 'v0.9.5', STUB_HEALTHZ_VERSION: '0.0.0' }).status, 0);
 });
