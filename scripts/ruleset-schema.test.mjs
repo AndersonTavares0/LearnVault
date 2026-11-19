@@ -41,6 +41,7 @@ test('learnvault-main.json is valid and enforces required invariants', () => {
 		[
 			'CI gate',
 			'Container build (Rust)',
+			'Dependency review',
 			'Desktop crate compile and guards',
 			'Rust tests and lints',
 			'SPA checks',

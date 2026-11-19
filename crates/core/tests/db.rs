@@ -642,3 +642,83 @@ fn a_version_nineteen_database_gets_the_coalesce_keys_of_its_journal() -> TestRe
     assert!(db.has_current_schema()?);
     Ok(())
 }
+
+#[test]
+fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("learnvault.sqlite");
+
+    {
+        let mut conn = rusqlite::Connection::open(&path)?;
+        conn.execute_batch("PRAGMA foreign_keys = ON;")?;
+        let tx = conn.transaction()?;
+        for step in &learnvault_core::migration_steps_for_test()[..16] {
+            tx.execute_batch(step)?;
+        }
+        tx.pragma_update(None, "user_version", 16)?;
+        tx.commit()?;
+
+        conn.execute_batch(
+            "INSERT INTO library (library_id, available) VALUES ('bib-1', 1);
+             INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+             VALUES ('mid-1', 'bib-1', 'Course/Lesson/video.mp4', 'course/lesson/video.mp4', 2048, 1760000000, 'available');
+             INSERT INTO scan (library_id, status, completed_at, complete)
+             VALUES ('bib-1', 'completed', 1760000000, 1);
+             INSERT INTO study_state (owner_id, media_id, position_seconds, completed, updated_at)
+             VALUES ('owner-a', 'mid-1', 42, 1, 1760000000);
+             INSERT INTO user (user_id, username, password_hash, is_admin, created_at)
+             VALUES ('usr-1', 'admin', 'hash', 1, 1760000000);
+             INSERT INTO session (token_hash, user_id, expires_at)
+             VALUES ('tok-1', 'usr-1', 1760003600);
+             INSERT INTO study_note (note_id, owner_id, media_id, position_seconds, content, created_at, updated_at)
+             VALUES ('note-1', 'owner-a', 'mid-1', 10, 'old note', 1760000000, 1760000000);
+             INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
+             VALUES ('card-1', 'owner-a', 'mid-1', 'Q', 'A', 1, 1760000000, 1760000000, 1760000000);",
+        )?;
+    }
+
+    let db = Database::open(&path)?;
+    assert_eq!(
+        db.schema_version()?,
+        learnvault_core::CURRENT_SCHEMA_VERSION
+    );
+
+    let integrity: String = db
+        .connection()
+        .query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
+    assert_eq!(
+        integrity, "ok",
+        "migrated database must pass PRAGMA integrity_check"
+    );
+
+    let mut fk_stmt = db.connection().prepare("PRAGMA foreign_key_check")?;
+    let fk_violations: Vec<String> = fk_stmt
+        .query_map([], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert!(
+        fk_violations.is_empty(),
+        "migrated database must have no foreign key violations: {fk_violations:?}"
+    );
+
+    let note_content: String = db.connection().query_row(
+        "SELECT content FROM study_note WHERE note_id = 'note-1'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(note_content, "old note");
+
+    let card_front: String = db.connection().query_row(
+        "SELECT front FROM flashcard WHERE card_id = 'card-1'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(card_front, "Q");
+
+    let position: i64 = db.connection().query_row(
+        "SELECT position_seconds FROM study_state WHERE owner_id = 'owner-a' AND media_id = 'mid-1'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(position, 42);
+    Ok(())
+}
