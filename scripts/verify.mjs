@@ -25,7 +25,12 @@ export function buildSteps({ fast = false } = {}) {
 		{ label: 'pnpm run build', command: 'pnpm', args: ['run', 'build'], slow: true },
 		{ label: 'pnpm run build:desktop', command: 'pnpm', args: ['run', 'build:desktop'], slow: true },
 		{ label: 'pnpm --filter learnvault-web-next lint', command: 'pnpm', args: ['--filter', 'learnvault-web-next', 'lint'] },
-		{ label: 'pnpm --filter learnvault-web-next test', command: 'pnpm', args: ['--filter', 'learnvault-web-next', 'test'] },
+		{
+			label: 'pnpm --filter learnvault-web-next test',
+			command: 'pnpm',
+			args: ['--filter', 'learnvault-web-next', 'test'],
+			...(fast ? {} : { env: { LEARNVAULT_PREBUILT_OUTPUTS: '1' } })
+		},
 		{ label: 'pnpm run test:scripts', command: 'pnpm', args: ['run', 'test:scripts'] },
 		{ label: 'pnpm audit --audit-level=low', command: 'pnpm', args: ['audit', '--audit-level=low'], slow: true },
 		{ label: 'cargo fmt --all -- --check', command: 'cargo', args: ['fmt', '--all', '--', '--check'] },
@@ -50,7 +55,8 @@ export async function runSteps(steps, {
 			const child = spawnImpl(step.command, step.args, {
 				cwd,
 				stdio: 'inherit',
-				shell: process.platform === 'win32'
+				shell: process.platform === 'win32',
+				...(step.env ? { env: { ...process.env, ...step.env } } : {})
 			});
 			// A missing tool (ENOENT) emits 'error' without 'exit'; without this handler the
 			// promise would never resolve and `pnpm verify` would hang instead of failing.
