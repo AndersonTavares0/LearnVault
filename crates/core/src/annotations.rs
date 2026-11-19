@@ -216,6 +216,18 @@ fn checked_text(value: &str, limit: usize) -> Result<String> {
     Ok(trimmed.to_owned())
 }
 
+/// Finds the media linked to a PDF annotation without returning the annotation contents.
+pub fn pdf_annotation_media_id(db: &Database, annotation_id: &str) -> Result<Option<String>> {
+    Ok(db
+        .connection()
+        .query_row(
+            "SELECT media_id FROM pdf_annotation WHERE annotation_id = ?1",
+            [annotation_id],
+            |row| row.get(0),
+        )
+        .optional()?)
+}
+
 /// Lists the owner's annotations on one PDF, by page and then by creation time.
 pub fn list_pdf_annotations(
     db: &Database,
