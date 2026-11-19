@@ -624,7 +624,7 @@ fn github_client() -> Result<&'static reqwest::Client, String> {
 pub(crate) fn github_fetcher() -> Fetcher {
     Arc::new(|| {
         Box::pin(async {
-            if VERSION == "0.0.0" {
+            if VERSION == crate::DEV_VERSION {
                 return Err("versão local indisponível para comparação".to_owned());
             }
             let client = github_client()?;
