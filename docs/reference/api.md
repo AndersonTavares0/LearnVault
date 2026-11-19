@@ -87,6 +87,9 @@ credentials without transport encryption, so use them only on a trusted private 
 (`169.254.0.0/16`, the IPv4 and IPv6 link-local ranges, `224.0.0.0/4`, `0.0.0.0/8`) are refused
 with `unsafe_source_target`, so a source can never point at a cloud metadata endpoint. Loopback and
 private LAN addresses stay usable, because a source on the same network is the normal deployment.
+WebDAV connections go directly to the validated source address; the server ignores `HTTP_PROXY`,
+`HTTPS_PROXY` and `ALL_PROXY` for these requests so a proxy cannot resolve the source hostname
+outside the address policy.
 
 SMB sources use `smb://host[:port]/share/path`. The share is mandatory; `.`/`..` segments, encoded
 separators and control characters are rejected before they become a UNC path. The server is

@@ -152,6 +152,10 @@ Native installations configure runtime options via environment variables or CLI 
 - A network listener requires explicit initial admin credentials. Loopback-only first startup may use the temporary `admin/admin` account, which must change its password before accessing protected endpoints.
 - `TRUSTED_PROXY_IPS`: Optional comma-separated IP addresses of reverse proxies trusted for login rate limiting. Only `X-Forwarded-For` is used; `X-Real-IP` is ignored. When the direct socket peer is trusted, the server walks the `X-Forwarded-For` chain right to left, skips addresses in `TRUSTED_PROXY_IPS`, and uses the first untrusted address. If no usable untrusted address is present, it uses the socket peer. Configure each trusted proxy to append the address it observed, and list every trusted hop; earlier client-supplied entries are ignored by this right-to-left resolution.
 
+WebDAV remote sources connect directly to the validated NAS address. The server ignores `HTTP_PROXY`,
+`HTTPS_PROXY` and `ALL_PROXY` for WebDAV source requests; configure network routing so the server can
+reach each source directly.
+
 Course folders remain external and read-only across all platforms. Installers never copy course folders.
 
 ## Related Documentation

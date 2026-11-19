@@ -417,14 +417,30 @@ fn client() -> Result<&'static Client, ()> {
 /// Builds the HTTP client; names are resolved by `resolver` on every new connection and
 /// every answer must pass the address policy.
 fn build_client(resolver: Arc<dyn AddressResolver>) -> Result<Client, ()> {
+    build_client_with_proxy(resolver, None)
+}
+
+fn build_client_with_proxy(
+    resolver: Arc<dyn AddressResolver>,
+    proxy: Option<reqwest::Proxy>,
+) -> Result<Client, ()> {
     // Same provider as the rest of the server: `ring`, without OpenSSL or CMake.
     let _ = rustls::crypto::ring::default_provider().install_default();
-    Client::builder()
+    let builder = Client::builder()
         .connect_timeout(CONNECT_TIMEOUT)
         .read_timeout(READ_TIMEOUT)
         // Cross-origin redirects would take the authorization header to another
         // host. The source must point to the final URL.
-        .redirect(reqwest::redirect::Policy::none())
+        .redirect(reqwest::redirect::Policy::none());
+    let builder = match proxy {
+        Some(proxy) => builder.proxy(proxy),
+        None => builder,
+    };
+    builder
+        // Remote sources are LAN/NAS endpoints and must connect directly: proxying would
+        // move DNS resolution outside this client's validated resolver. This also ignores
+        // HTTP_PROXY, HTTPS_PROXY and ALL_PROXY from the server environment.
+        .no_proxy()
         // The URL keeps the host name (SNI, certificate, `Host`); only the address the
         // socket connects to comes from the validated answer.
         .dns_resolver(Arc::new(PolicyResolver(resolver)))
@@ -1103,6 +1119,40 @@ mod tests {
             SourceError::Unreachable
         );
         task.abort();
+    }
+
+    #[tokio::test]
+    async fn a_configured_proxy_cannot_bypass_the_denied_address_policy() {
+        let proxy_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let proxy_address = proxy_listener.local_addr().unwrap();
+        let resolver = crate::source_dns::tests::FakeResolver::new(
+            "nas.test",
+            vec![vec!["169.254.169.254".parse().unwrap()]],
+        );
+        let proxy = reqwest::Proxy::http(format!("http://{proxy_address}")).unwrap();
+        let http = super::build_client_with_proxy(resolver.clone(), Some(proxy)).unwrap();
+        let base = url::Url::parse("http://nas.test:8080/dav/").unwrap();
+        let client = WebDavClient::new(base, None, None).unwrap().with_http(http);
+        let mut proxy_accept = tokio::spawn(async move { proxy_listener.accept().await });
+
+        tokio::select! {
+            result = client.list_directory("") => {
+                assert_eq!(result.unwrap_err(), SourceError::Unreachable);
+                assert!(
+                    tokio::time::timeout(
+                        std::time::Duration::from_millis(50),
+                        &mut proxy_accept
+                    )
+                    .await
+                    .is_err(),
+                    "the request reached the configured proxy"
+                );
+            }
+            accepted = &mut proxy_accept => {
+                panic!("the request reached the configured proxy: {accepted:?}");
+            }
+        }
+        assert_eq!(*resolver.lookups.lock().unwrap(), 1);
     }
 
     #[tokio::test]
