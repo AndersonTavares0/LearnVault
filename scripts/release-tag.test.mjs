@@ -246,9 +246,31 @@ test('post-publication verification binds this run digest to targeted aliases an
     assert.match(verify, /needs\.publish\.outputs\.asset_upload_started == 'true'/);
     assert.match(
         verify,
-        /\(needs\.publish\.outputs\.asset_upload_started == 'true' \|\|\s*\(needs\.publish\.result != 'failure' &&\s*\(needs\.container\.outputs\.tag_move_started == 'true'/,
-        'a rejected publish environment approval must not start verification'
+        /\(needs\.container\.outputs\.tag_move_started == 'true' \|\|\s*needs\.publish\.outputs\.asset_upload_started == 'true'\)/,
+        'verification must start whenever either mutation started'
     );
+    assert.doesNotMatch(
+        verify,
+        /needs\.publish\.result != 'failure'/,
+        'a failed or unapproved publish must not skip verification of the aliases the container job already moved'
+    );
+    // Asset checks stay gated on the upload having started or publish fully succeeding, so they never
+    // run for a publish that failed before uploading and never require publish success.
+    for (const assetStep of [
+        'Download release assets after publication',
+        'Verify release checksums and downloaded binary',
+        'Verify signed checksums and published binary provenance'
+    ]) {
+        const stepStart = verify.indexOf(`      - name: ${assetStep}\n`);
+        assert.ok(stepStart >= 0, `missing step ${assetStep}`);
+        const nextStep = verify.indexOf('\n      - name:', stepStart);
+        const step = verify.slice(stepStart, nextStep < 0 ? undefined : nextStep);
+        assert.match(
+            step,
+            /if: \$\{\{ needs\.publish\.outputs\.asset_upload_started == 'true' \|\| needs\.publish\.result == 'success' \}\}/,
+            `${assetStep} must run after the upload started or a successful publish, without requiring publish success`
+        );
+    }
     assert.match(workflow, /index_digest: \$\{\{ steps\.index\.outputs\.digest \}\}/);
     assert.match(workflow, /image_tags: \$\{\{ steps\.meta\.outputs\.tags \}\}/);
     assert.match(verify, /EXPECTED_DIGEST: \$\{\{ needs\.container\.outputs\.index_digest \}\}/);
@@ -269,7 +291,13 @@ test('post-publication verification binds this run digest to targeted aliases an
     assert.match(verify, /gh attestation verify verify-dist\/learnvault-linux-amd64\.tar\.gz/);
     assert.match(verify, /--predicate-type https:\/\/slsa\.dev\/provenance\/v1/);
     assert.match(verify, /HTTP 404\|404 Not Found\|status code: 404/);
-    assert.match(verify, /Alert on partial publication or verification failure/);
+    const alertStart = verify.indexOf('      - name: Alert on partial publication or verification failure\n');
+    assert.ok(alertStart >= 0, 'missing partial-publication alert step');
+    assert.match(
+        verify.slice(alertStart),
+        /failure\(\) \|\| needs\.container\.result == 'failure' \|\| needs\.publish\.result == 'failure'/,
+        'the alert must fire when the container or publish job failed'
+    );
     assert.doesNotMatch(verify, /^  concurrency:/m, 'verification remains inside the Release run and its existing concurrency lock');
 });
 
