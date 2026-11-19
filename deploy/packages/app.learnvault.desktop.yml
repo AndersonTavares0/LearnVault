@@ -9,6 +9,9 @@ finish-args:
   - --socket=fallback-x11
   - --socket=pulseaudio
   - --device=dri
+  # WebKitGTK's DMA-BUF renderer aborts with "Error 71 (Protocol error) dispatching to Wayland display"
+  # on NVIDIA + Wayland sessions, so the window never opens. The software-composited path is stable.
+  - --env=WEBKIT_DISABLE_DMABUF_RENDERER=1
 modules:
   - name: learnvault-desktop
     buildsystem: simple
