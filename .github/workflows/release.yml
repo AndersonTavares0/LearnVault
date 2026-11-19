@@ -508,6 +508,10 @@ jobs:
   container:
     name: Publish the container image (GHCR)
     needs: [validate-tag, container-build]
+    outputs:
+      index_digest: ${{ steps.index.outputs.digest }}
+      image_tags: ${{ steps.meta.outputs.tags }}
+      tag_move_started: ${{ steps.tag-move-start.outputs.started }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -624,6 +628,10 @@ jobs:
             type=raw,value=stable,enable=${{ github.event_name == 'release' && needs.validate-tag.outputs.prerelease == 'false' }}
             type=raw,value=latest,enable=${{ github.event_name == 'release' && needs.validate-tag.outputs.prerelease == 'false' }}
       # Tags are applied last: only a scanned and signed-and-verified digest gets :version, :stable or :latest.
+      - name: Mark release tag update started
+        id: tag-move-start
+        shell: bash
+        run: echo "started=true" >> "$GITHUB_OUTPUT"
       - name: Apply the release tags to the verified image
         shell: bash
         env:
@@ -644,6 +652,8 @@ jobs:
   publish:
     name: Publish release assets
     needs: [validate-tag, linux, linux-arm64, windows, flatpak, container]
+    outputs:
+      asset_upload_started: ${{ steps.upload-assets.outputs.started }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: release
@@ -737,6 +747,7 @@ jobs:
             exit 1
           fi
       - name: Upload assets to the published release
+        id: upload-assets
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
@@ -758,6 +769,7 @@ jobs:
             upload_args+=("dist/$asset")
           done
           upload_args+=("dist/SHA256SUMS" "dist/SHA256SUMS.sigstore.json")
+          echo "started=true" >> "$GITHUB_OUTPUT"
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             "${upload_args[@]}" \
             --clobber
@@ -797,3 +809,227 @@ jobs:
             fi
             gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --notes-file "$notes"
           fi
+
+  verify-published:
+    name: Verify published release
+    # Run in this same Release workflow/concurrency group. Rollback refuses to proceed while a
+    # Release run is active, so verification cannot race with alias movement or rollback.
+    needs: [validate-tag, container, publish]
+    if: >-
+      ${{ always() && needs.validate-tag.result == 'success' &&
+      (needs.container.outputs.tag_move_started == 'true' ||
+       needs.publish.outputs.asset_upload_started == 'true' ||
+       needs.publish.result == 'success') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.validate-tag.outputs.commit_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .trusted-workflow
+          sparse-checkout: scripts
+          persist-credentials: false
+      - name: Install cosign
+        if: ${{ needs.container.outputs.tag_move_started == 'true' }}
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+      - name: Set up Docker Buildx
+        if: ${{ needs.container.outputs.tag_move_started == 'true' }}
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Log in to GitHub Container Registry
+        if: ${{ needs.container.outputs.tag_move_started == 'true' }}
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download per-architecture build digests
+        if: ${{ needs.container.outputs.tag_move_started == 'true' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: container-digest-*
+          path: verify-digests
+          merge-multiple: true
+      - name: Verify exact signed image digest and every alias targeted by this run
+        if: ${{ needs.container.outputs.tag_move_started == 'true' }}
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          EXPECTED_DIGEST: ${{ needs.container.outputs.index_digest }}
+          TARGET_TAGS: ${{ needs.container.outputs.image_tags }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          if [[ ! "$EXPECTED_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::Container job did not expose its staged index digest" >&2
+            exit 1
+          fi
+
+          verify_alias() {
+            local tag="$1"
+            local observed=""
+            local error_file
+            error_file="$(mktemp)"
+            for attempt in 1 2 3 4 5 6; do
+              if observed="$(docker buildx imagetools inspect --format '{{.Manifest.Digest}}' "$tag" 2>"$error_file")"; then
+                if [[ ! "$observed" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+                  echo "::error::Registry returned an invalid digest for $tag: $observed" >&2
+                  cat "$error_file" >&2
+                  return 1
+                fi
+                if [[ "$observed" != "$EXPECTED_DIGEST" ]]; then
+                  echo "::error::$tag resolves to $observed, expected this run's $EXPECTED_DIGEST" >&2
+                  return 1
+                fi
+                echo "Verified $tag -> $EXPECTED_DIGEST"
+                return 0
+              fi
+              if ! grep -Eqi 'manifest unknown|no such manifest|404 Not Found|status code: 404' "$error_file"; then
+                cat "$error_file" >&2
+                return 1
+              fi
+              if (( attempt == 6 )); then
+                echo "::error::Registry did not expose $tag after bounded propagation retries" >&2
+                cat "$error_file" >&2
+                return 1
+              fi
+              echo "::notice::Registry has not exposed $tag yet; retrying propagation check ($attempt/6)."
+              sleep 5
+            done
+            return 1
+          }
+
+          target_count=0
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            case "$tag" in
+              "$IMAGE":*) ;;
+              *) echo "::error::Unexpected target tag from container job: $tag" >&2; exit 1 ;;
+            esac
+            verify_alias "$tag"
+            target_count=$((target_count + 1))
+          done <<< "$TARGET_TAGS"
+          if (( target_count == 0 )); then
+            echo "::error::Container job exposed no target aliases for verification" >&2
+            exit 1
+          fi
+
+          # A verified index signature covers the exact digest and every alias checked above.
+          cosign verify "${IMAGE}@${EXPECTED_DIGEST}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            --certificate-identity-regexp "^https://github\\.com/${REPOSITORY//./\\.}/\\.github/workflows/release\\.yml@refs/(tags/v[0-9]+\\.[0-9]+\\.[0-9]+|heads/main)$" >/dev/null
+      - name: Verify per-architecture image manifests and attestations
+        if: ${{ needs.container.outputs.tag_move_started == 'true' }}
+        shell: bash
+        env:
+          REPOSITORY: ${{ github.repository }}
+          EXPECTED_INDEX_DIGEST: ${{ needs.container.outputs.index_digest }}
+        run: |
+          set -euo pipefail
+          IMAGE="ghcr.io/${REPOSITORY,,}"
+          verify_dir="$(mktemp -d)"
+          trap 'rm -rf "$verify_dir"' EXIT
+          docker buildx imagetools inspect --raw "${IMAGE}@${EXPECTED_INDEX_DIGEST}" > "$verify_dir/index.json"
+
+          for architecture in amd64 arm64; do
+            expected_digest="$(tr -d '[:space:]' < "verify-digests/${architecture}.txt")"
+            [[ "$expected_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            attestation_digests="$(jq -r --arg digest "$expected_digest" \
+              '.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest" and .annotations["vnd.docker.reference.digest"] == $digest) | .digest' \
+              "$verify_dir/index.json")"
+            if [[ -z "$attestation_digests" ]]; then
+              echo "::error::No indexed attestation manifest refers to linux/${architecture} digest ${expected_digest}" >&2
+              exit 1
+            fi
+            mkdir -p "$verify_dir/$architecture"
+            while IFS= read -r attestation_digest; do
+              [[ "$attestation_digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+              filename="${attestation_digest/:/-}.json"
+              docker buildx imagetools inspect --raw "${IMAGE}@${attestation_digest}" > "$verify_dir/$architecture/$filename"
+            done <<< "$attestation_digests"
+          done
+
+          node .trusted-workflow/scripts/verify-release-index-attestations.mjs \
+            "$verify_dir/index.json" \
+            "$(tr -d '[:space:]' < verify-digests/amd64.txt)" \
+            "$(tr -d '[:space:]' < verify-digests/arm64.txt)" \
+            "$verify_dir/amd64" "$verify_dir/arm64"
+      - name: Download release assets after publication
+        if: ${{ needs.publish.outputs.asset_upload_started == 'true' || needs.publish.result == 'success' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          mkdir -p verify-dist
+          expected=(
+            "learnvault-linux-amd64.tar.gz"
+            "learnvault-linux-arm64.tar.gz"
+            "learnvault-windows-${RELEASE_TAG}.exe"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip"
+            "learnvault-windows-${RELEASE_TAG}.nsis.zip.sig"
+            "learnvault-linux-desktop-amd64.flatpak"
+            "learnvault-linux-desktop-arm64.flatpak"
+            "latest.json"
+            "SHA256SUMS"
+          )
+          for asset in "${expected[@]}"; do
+            error_file="$(mktemp)"
+            for attempt in 1 2 3 4 5 6; do
+              if gh release download "$RELEASE_TAG" --repo "$REPOSITORY" \
+                --pattern "$asset" --dir verify-dist --clobber 2>"$error_file"; then
+                break
+              fi
+              if ! grep -Eqi 'HTTP 404|404 Not Found|release asset .* not found' "$error_file"; then
+                cat "$error_file" >&2
+                exit 1
+              fi
+              if (( attempt == 6 )); then
+                echo "::error::Release asset $asset was not available after bounded propagation retries" >&2
+                cat "$error_file" >&2
+                exit 1
+              fi
+              echo "::notice::Release asset $asset is not visible yet; retrying propagation check ($attempt/6)."
+              sleep 5
+            done
+            [[ -s "verify-dist/$asset" ]]
+          done
+      - name: Verify release checksums and downloaded binary
+        if: ${{ needs.publish.outputs.asset_upload_started == 'true' || needs.publish.result == 'success' }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          (cd verify-dist && sha256sum -c SHA256SUMS)
+          smoke_dir="$(mktemp -d)"
+          trap 'rm -rf "$smoke_dir"' EXIT
+          tar -xzf verify-dist/learnvault-linux-amd64.tar.gz -C "$smoke_dir"
+          ./.trusted-workflow/scripts/smoke-release-binary.sh \
+            "$smoke_dir/learnvault-linux-amd64" "$RELEASE_TAG" "$smoke_dir/web"
+      - name: Alert on partial publication or verification failure
+        if: >-
+          ${{ always() &&
+          (failure() || needs.container.result == 'failure' || needs.publish.result == 'failure') }}
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.validate-tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          echo "::error::Release publication or post-publication verification failed for ${RELEASE_TAG}. Review completed tag and asset mutations, preserve digests and logs, and use the Rollback workflow only after its preflight." >&2
+          {
+            echo "## Release publication or verification failed for ${RELEASE_TAG}"
+            echo ""
+            echo "The release run held the repository's Release concurrency lock. Review its job outputs and registry state, then follow the rollback preflight in `.github/workflows/rollback.yml` if aliases moved partially."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1

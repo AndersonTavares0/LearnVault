@@ -237,6 +237,28 @@ test('pushing and publishing wait for approval in the release environment', () =
     }
 });
 
+test('post-publication verification binds this run digest to targeted aliases and handles partial mutation', () => {
+    const start = workflow.indexOf('\n  verify-published:\n');
+    assert.ok(start >= 0, 'missing Verify published release job');
+    const verify = workflow.slice(start);
+    assert.match(verify, /always\(\)/);
+    assert.match(verify, /needs\.container\.outputs\.tag_move_started == 'true'/);
+    assert.match(verify, /needs\.publish\.outputs\.asset_upload_started == 'true'/);
+    assert.match(workflow, /index_digest: \$\{\{ steps\.index\.outputs\.digest \}\}/);
+    assert.match(workflow, /image_tags: \$\{\{ steps\.meta\.outputs\.tags \}\}/);
+    assert.match(verify, /EXPECTED_DIGEST: \$\{\{ needs\.container\.outputs\.index_digest \}\}/);
+    assert.match(verify, /docker buildx imagetools inspect --format '\{\{\.Manifest\.Digest\}\}'/);
+    assert.match(verify, /observed" != "\$EXPECTED_DIGEST/);
+    assert.match(verify, /cosign verify "\$\{IMAGE\}@\$\{EXPECTED_DIGEST\}"/);
+    assert.doesNotMatch(verify, /cosign verify "\$IMAGE:\$\{alias\}"/);
+    assert.match(verify, /manifest unknown\|no such manifest\|404 Not Found/);
+    assert.match(verify, /sleep 5/);
+    assert.match(verify, /verify-release-index-attestations\.mjs/);
+    assert.match(verify, /sha256sum -c SHA256SUMS/);
+    assert.match(verify, /Alert on partial publication or verification failure/);
+    assert.doesNotMatch(verify, /^  concurrency:/m, 'verification remains inside the Release run and its existing concurrency lock');
+});
+
 test('a release must be published and not a draft; a pre-release is flagged so it keeps the moving tags', t => {
     const { directory } = fixture(t);
     const script = runBlock('Require an existing published release');
