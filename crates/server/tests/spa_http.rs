@@ -330,7 +330,7 @@ async fn csp_allows_the_downloaded_canonical_vite_shell() {
     let shell_path = canonical_root.join("200.html");
     assert!(
         shell_path.is_file(),
-        "o shell canônico da SPA deve existir antes do teste CSP"
+        "the canonical SPA shell must exist before the CSP test"
     );
     let shell = fs::read_to_string(&shell_path).unwrap();
     let mut inline_scripts = Vec::new();
@@ -598,7 +598,7 @@ async fn idle_spa_streams_release_asset_capacity_without_reading_the_body() {
         while let Some(frame) = idle.body_mut().frame().await {
             assert!(
                 frame.is_ok(),
-                "o watchdog não pode converter ociosidade em erro de I/O"
+                "the watchdog must not turn idleness into an I/O error"
             );
         }
     }
