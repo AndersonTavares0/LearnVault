@@ -311,21 +311,17 @@ impl AppState {
 
     /// Checks the database's readiness without exposing the persistence error to the client.
     ///
-    /// The health check does not wait for an operation already using the database:
-    /// in that case the process is still alive, but the dependency is not ready
-    /// to answer deterministically.
+    /// The health check uses an independent read-only connection so an active writer
+    /// does not make the database appear unavailable.
     pub(crate) async fn database_ready(&self) -> bool {
-        let database = match self.database.clone().try_lock_owned() {
-            Ok(database) => database,
-            Err(_) => return false,
-        };
         let blocking_task = match self.try_acquire_blocking_task() {
             Some(blocking_task) => blocking_task,
             None => return false,
         };
+        let database_path = self.config.database_path.clone();
         tokio::task::spawn_blocking(move || {
             let _blocking_task = blocking_task;
-            database.has_current_schema().unwrap_or(false)
+            learnvault_core::file_has_current_schema(database_path).unwrap_or(false)
         })
         .await
         .unwrap_or(false)

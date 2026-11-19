@@ -40,6 +40,19 @@ pub fn file_schema_version(path: impl AsRef<Path>) -> Result<usize> {
     schema_version(&conn).map_err(read_schema_version)
 }
 
+/// Checks the supported schema in a database file without opening it for writing.
+pub fn file_has_current_schema(path: impl AsRef<Path>) -> Result<bool> {
+    let path = path.as_ref();
+    let conn = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|source| Error::OpenDatabase {
+            path: PathBuf::from(path),
+            source,
+        })?;
+    // Wait briefly for transient SQLite lock contention while keeping probes bounded.
+    conn.busy_timeout(Duration::from_millis(500))?;
+    Database { conn }.has_current_schema()
+}
+
 impl Database {
     /// Opens (or creates) the database at `path` and applies the migration chain.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {

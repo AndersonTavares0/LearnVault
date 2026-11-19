@@ -64,7 +64,7 @@ pub use courses::{
     CourseRoot, CourseRootError, LEGACY_LIBRARY_ID, course_id_from_path, course_source_folder,
     course_title,
 };
-pub use db::{CURRENT_SCHEMA_VERSION, Database, file_schema_version};
+pub use db::{CURRENT_SCHEMA_VERSION, Database, file_has_current_schema, file_schema_version};
 pub use error::{Error, Result};
 pub use legacy_import::{LegacyImportOptions, LegacyImportReport, import_go_database};
 pub use media::{
