@@ -1,7 +1,7 @@
 # Rollback runbook
 
 The `Rollback` workflow (`.github/workflows/rollback.yml`, logic in `scripts/rollback.mjs`) returns the
-published state to a known-good release after a bad one. It runs only manually (`workflow_dispatch`) and only from `main`.
+published state to a known-good release after a bad one. It runs only manually (`workflow_dispatch`) and only from `main`. The `Verify and plan the rollback` job always runs; the `Apply the rollback` job runs only when `dry_run=false`.
 
 Steps, in order:
 
@@ -20,11 +20,11 @@ GHCR cannot untag. An alias that did not exist before the bad release is restore
 
 ## Unsigned legacy images (v0.8.0)
 
-`v0.8.0` predates image signing. On 2026-11-19 GHCR had no `.sig` tag and no referrer for `ghcr.io/andersontavares0/learnvault:0.8.0` (index `sha256:67a29b09f708c980e1685871dbc71c9a00c345374b6250d4a1ea00fc0156d96b`, amd64 plus an attestation manifest), so signature verification cannot pass. Rolling back to it needs `allow_unsigned_legacy=true`, which the workflow accepts only when all of these hold:
+`v0.8.0` and older images were published before image signing, so signature verification cannot pass for them. Rolling back to one needs `allow_unsigned_legacy=true`, which the workflow accepts only when all of these hold:
 
 - `target_version` is `v0.8.0` or older;
 - `recorded_aliases` also contains the exact version key (for example `"0.8.0": "sha256:..."`) and it equals the live digest of `:0.8.0`;
-- cosign reports exactly `no signatures found` (a wrong identity or any other error still fails);
+- the cosign output contains `no signatures found` (case-insensitive) and does not mention expected identities or a certificate; any other error still fails;
 - every platform in the index resolves.
 
 The plan prints an `UNSIGNED LEGACY IMAGE` warning. Record the digest from your own pre-release inspection, not from the dry run.
@@ -37,14 +37,14 @@ Run these read-only commands and keep the output in the release PR or issue.
 IMAGE=ghcr.io/andersontavares0/learnvault
 gh api repos/AndersonTavares0/LearnVault/releases/latest --jq .tag_name
 gh release list --repo AndersonTavares0/LearnVault --limit 10
-for alias in latest stable 0.8 0.9; do   # latest, stable, and the minor tags of the current and next release
+for alias in latest stable 0.8 0.9; do   # latest, stable, and the minor tags of the rollback target and of the release being published
   printf '%s ' "$alias"
   docker buildx imagetools inspect "$IMAGE:$alias" --format '{{.Manifest.Digest}}' 2>&1 | tail -n1
 done
 docker buildx imagetools inspect --raw "$IMAGE:<current-version>" | jq '.manifests[].platform'
 ```
 
-Write the result as the `recorded_aliases` JSON: the digest if the alias resolved, `null` if the command reported `not found`. Every alias must be listed; a missing key is rejected.
+Write the result as the `recorded_aliases` JSON: a `sha256:` digest if the alias resolved, `null` if the command reported `not found`. The aliases are exactly `latest`, `stable`, the minor tag of `target_version` and the minor tag of `bad_version` (one entry when both share a minor line); a missing or extra key is rejected. The sample below suits a rollback from `v0.9.5` to `v0.8.0`. Replace every angle-bracket placeholder with a real value before running a command or submitting the JSON.
 
 ```json
 {"latest":"sha256:<digest>","stable":null,"0.8":null,"0.9":null,"0.8.0":"sha256:<digest, only for allow_unsigned_legacy>"}
@@ -63,8 +63,8 @@ A timeout, an auth error or any other output that is neither a clean digest nor 
    - `dry_run`: `true`
 
    Read the plan in the job summary: one line per alias (`keep`, `<old> -> <digest>`, or `-> absent (delete)`), the GitHub release changes, and the staging cleanup note. Any failure here (missing signature, unknown platform, uncertain lookup) is a stop: fix or choose another target.
-2. Run it again with `dry_run=false` and approve the `release` environment. The apply job refuses to continue if any alias differs from the plan.
-3. Verify afterwards (read-only). This step is mandatory because the tombstone mechanism has not been exercised against GHCR (see Limits).
+2. Dispatch it again from `main` with `dry_run=false` and approve the `release` environment. This run makes a fresh plan, and the apply job refuses to continue if any alias differs from that run's snapshot.
+3. Verify afterwards (read-only). Check the registry yourself: the script verifies its own outcome, but this step confirms it independently.
 
    ```sh
    gh api repos/AndersonTavares0/LearnVault/releases/latest --jq .tag_name   # the known-good tag
@@ -72,15 +72,16 @@ A timeout, an auth error or any other output that is neither a clean digest nor 
    docker buildx imagetools inspect "$IMAGE:latest" --format '{{.Manifest.Digest}}'
    ```
 
-   `latest.json` must come from the known-good release. Also confirm that every alias recorded as `null` now reports `not found`, and that every `vX.Y.Z` tag still resolves to its original digest:
+   `latest.json` must come from the known-good release. Compare every alias with `recorded_aliases` (an alias recorded as `null` must report `not found`), and confirm that both exact-version tags, the known-good and the bad one, still resolve to their original digests:
 
    ```sh
    for alias in stable 0.8 0.9; do docker buildx imagetools inspect "$IMAGE:$alias" --format '{{.Manifest.Digest}}'; done
    docker buildx imagetools inspect "$IMAGE:<bad-version>" --format '{{.Manifest.Digest}}'   # unchanged
+   docker buildx imagetools inspect "$IMAGE:<target-version>" --format '{{.Manifest.Digest}}'   # unchanged
    ```
 4. Follow up with a fix release with a higher patch version; the bad release stays as a pre-release for traceability under the [release policy](../../.agents/policies/releases.md).
 
-The equivalent manual commands, if the workflow is unavailable (verify the target first with `cosign verify "$IMAGE@<digest>" --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/AndersonTavares0/LearnVault/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'`):
+If the workflow is unavailable, these commands are a partial manual recovery. They repoint only `latest` and flip the release flags. They do not restore `stable` or the minor tags, remove aliases that did not exist before, check for a running release, or clean up staging. Verify the target first with `cosign verify "$IMAGE@<digest>" --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp '^https://github\.com/AndersonTavares0/LearnVault/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'`, then:
 
 ```sh
 docker buildx imagetools create --tag "$IMAGE:latest" "$IMAGE@<known-good-digest>"
@@ -94,6 +95,6 @@ The Release workflow pushes `staging-<run id>` before applying release tags. The
 
 ## Limits
 
-- The tombstone (`imagetools create --annotation` to give an alias its own digest, then delete that one version) was not tested against GHCR, because review allows no mutation. The script refuses to delete unless the new digest differs from every known digest, and it removes only a version whose tags are exactly `[alias]`. The post-apply check above is the real confirmation. If an alias remains, inspect the package versions before retrying.
+- The tombstone step (`imagetools create --annotation` to give an alias its own digest, then delete that one version) is covered by the repository tests against a simulated registry in `scripts/rollback.test.mjs`. The script refuses to delete unless the new digest differs from every known digest, and it removes only a version whose tags are exactly `[alias]`. If an alias remains after apply, inspect the package versions before retrying.
 - Images published before cosign signing was introduced cannot pass signature verification. Only a target `v0.8.0` or older can be accepted, through `allow_unsigned_legacy` and the conditions in "Unsigned legacy images"; an unsigned image newer than `v0.8.0`, and any other verification failure, fails closed.
 - Users who already installed the bad release are not downgraded; publish a fixed higher version.

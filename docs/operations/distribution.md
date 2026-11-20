@@ -3,7 +3,7 @@
 **Audience:** operators who publish, install, or deploy LearnVault.
 Developers should start with the [README](../../README.md) and the [Architecture Overview](../architecture/overview.md).
 
-**Summary:** each release publishes a Windows desktop installer (NSIS), Linux server tarballs, Linux desktop Flatpak bundles ([`flatpak.md`](flatpak.md)), and an OCI container image. Docker and Podman are optional deployment adapters, not runtime requirements.
+Each release attaches a Windows NSIS installer, Linux server tarballs and Linux desktop Flatpak bundles ([`flatpak.md`](flatpak.md)) to the GitHub Release and pushes an OCI image to GHCR. Docker and Podman are optional: the same server binary runs natively, and the container only starts it with the SPA in `/app/web`.
 
 ## Release Targets
 
@@ -25,7 +25,7 @@ The full asset list is in [Published Release Assets](../releases/process.md#publ
 
 ### Update Notifications
 
-The server asks the GitHub Releases API over HTTPS for the latest stable tag and compares it with the running version using strict SemVer. The request times out after 5 seconds, reads at most 64 KiB, and the result is cached in memory for 1 hour. The check is on by default; turn it off with `--no-update-check` or `LEARNVAULT_UPDATE_CHECK=off`. Nothing is downloaded or installed automatically. Source builds report the version `dev` (the manifest placeholder `0.0.0` is never shown) and skip the remote check.
+The server asks the GitHub Releases API over HTTPS for the latest stable tag and compares it with the running version using strict SemVer. The request times out after 5 seconds and reads at most 64 KiB; a successful result is reused for 1 hour. The check is on by default; turn it off with `--no-update-check` or `LEARNVAULT_UPDATE_CHECK=off`. Nothing is downloaded or installed automatically. Source builds report the version `dev` (the manifest placeholder `0.0.0` is never shown) and skip the remote check.
 
 ### Desktop Update Checks
 
@@ -41,7 +41,7 @@ When the schema of the installed version is newer than the database file, the de
 
 ### Verify the Container Image
 
-The release workflow signs every image pushed to GHCR with keyless cosign, so there is no key to manage and the signature is tied to the workflow run. To check an image:
+The release workflow signs each release image digest with keyless cosign, so there is no key to manage and the signature is tied to the workflow run. To check an image:
 
 ```sh
 cosign verify ghcr.io/andersontavares0/learnvault:0.9.6 \
@@ -57,7 +57,7 @@ Limits of the check:
 
 - The updater verifies the tag, then pulls and starts the verified digest (`repo@sha256:…`), so retagging the registry between check and pull has no effect.
 - A signature proves the image came from `release.yml` in this repository, run for a version tag or for `main`. A manual run on `main` can re-sign a rebuilt tag, and the signature cannot tell that apart from the original.
-- The image is pushed before it is signed. If signing fails, the release is not published, but the tags already point at an unsigned image. The updater refuses it; `docker compose pull` of `:latest` does not. Re-run the workflow to fix it.
+- The workflow first pushes the image index under a temporary `staging-<run id>` tag, then signs and verifies it. Version, minor-line, `stable` and `latest` tags are applied only after verification, so a signing failure can leave an unsigned staging image but moves no release tag.
 - The updater installs `cosign` from the Alpine mirror at startup, unpinned. Bake a pinned `cosign` into the updater image if your threat model needs that.
 - `LEARNVAULT_CHANNEL` selects which releases may be installed. `stable` (the default) accepts final versions and reads the server's update endpoint or the repository's latest release. `rc` also accepts release candidates and reads the release list, newest first, because candidates are never marked "latest". Both channels run the signature check and refuse a candidate tag that is not shaped like `X.Y.Z-rc.N`.
 - The updater never moves backwards. If the discovered or requested version is not newer than the installed one, it logs the comparison and exits without touching the containers.
@@ -115,11 +115,11 @@ Reinstalling or updating keeps this data. The uninstaller has an opt-in checkbox
 
 ## Build & Release Constraints
 
-- Each Rust binary (`crates/server`, `crates/desktop`) is the source of truth for its target; containers add no behavior of their own.
+- Containers add no behavior of their own: the image runs `learnvault-server --web-root /app/web` as UID 10001.
 - The SPA builds into `crates/server/web/build` and `crates/desktop/frontend-dist`.
 - Container definitions live in `deploy/container/`, `deploy/compose/`, and `deploy/quadlet/`.
 - Release Please manages the changelog and the release PR.
-- `.github/workflows/release.yml` runs when a release is published (or manually, see [Asset Repair](../releases/process.md#asset-repair--manual-triggers)) and accepts only tags shaped `vMAJOR.MINOR.PATCH`.
+- `.github/workflows/release.yml` runs when a release is published, or manually to rebuild the assets of an existing release (see [Asset Repair](../releases/process.md#asset-repair--manual-triggers)). It accepts only tags shaped `vMAJOR.MINOR.PATCH`.
 
 ## Read-Only Verification
 
@@ -142,10 +142,11 @@ CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 It checks:
 
 - Non-root execution (UID 10001), `no-new-privileges`, and all capabilities dropped.
-- A read-only root filesystem and a read-only `/library` mount.
-- A writable `/data` whose database survives a restart.
-- `/api/healthz` returns `{"status":"ok"}` with `no-store`, and the image `HEALTHCHECK` becomes healthy.
+- A read-only root filesystem and a read-only, readable `/library` mount that the container cannot write to.
+- A writable `/data` whose database and directory survive a restart.
+- `/api/healthz` returns `{"status":"ok"}` with `no-store`, the image `HEALTHCHECK` becomes healthy, and health returns after a restart. Under Podman the script may skip the check of the image healthcheck command.
 - `/api/catalog` and `/api/media` return `401` without a session.
+- The packaged binary reports its version, and the script's validation container is removed afterwards.
 
 ## Configuration Reference
 
@@ -157,12 +158,13 @@ Environment variables and CLI flags (a flag overrides its variable):
 | `DATA_DIR` | `--database <file>` | `data` (database `data/learnvault.sqlite`) | Database and course registry location |
 | `LIBRARY_DIR` | `--library-root <dir>` | unset | Initial library seed (see [API reference](../reference/api.md#catalog-organization)) |
 | | `--web-root <dir>` | unset | Serve the SPA from this directory |
-| `ADMIN_USERNAME`, `ADMIN_PASSWORD` (or `*_FILE`) | `--admin-username` | unset | Initial admin credentials. There is no password flag. |
+| `ADMIN_USERNAME` or `ADMIN_USERNAME_FILE` | `--admin-username` | unset | Initial admin username; the `_FILE` variable reads it from a file. Setting both forms is an error. |
+| `ADMIN_PASSWORD` or `ADMIN_PASSWORD_FILE` | none | unset | Initial admin password; there is no password flag |
 | `COOKIE_SECURE` | `--insecure-http` | `true` | Session cookie `Secure` flag; the flag sets it to `false` for local HTTP only |
-| `LEARNVAULT_UPDATE_CHECK` | `--no-update-check` | on | Remote update check |
-| `TRUSTED_PROXY_IPS` | | empty | Reverse proxies trusted for client addresses (see below) |
+| `LEARNVAULT_UPDATE_CHECK` | `--no-update-check` | on | Remote update check; the variable accepts `on`, `off`, `true`, `false` in any case |
+| `TRUSTED_PROXY_IPS` | none | empty | Comma-separated literal IP addresses of trusted reverse proxies, used only for login throttling (see below) |
 
-A network listener requires explicit admin credentials. A loopback-only first start may use the temporary `admin/admin` account, which must change its password before reaching protected endpoints.
+Creating the first administrator on a network listener requires explicit credentials. A loopback-only first start may use the temporary `admin/admin` account, which must change its password before reaching protected endpoints.
 
 The server ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` for WebDAV remote sources and connects directly to the validated address, so the server must be able to reach each source without a proxy (see [Remote Course Sources](../reference/api.md#remote-course-sources-webdav-and-smb)).
 
@@ -170,7 +172,7 @@ Course folders stay external and read-only on every platform. Installers never c
 
 ## Reverse Proxy and Login Rate Limiting
 
-Login rate limiting is keyed on the client address. Behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy address or addresses (comma-separated) and make the proxy append the address it observed to `X-Forwarded-For`. When the direct peer is trusted, the server walks the `X-Forwarded-For` chain right to left, skips trusted addresses, and uses the first untrusted one. If none is usable, it uses the socket peer. Client-supplied entries to the left of the first untrusted address are never used. List every trusted hop.
+Login rate limiting is keyed on the client address. Behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy IP addresses (comma-separated literals; CIDR ranges are not supported and invalid entries are ignored) and make the proxy append the address it observed to `X-Forwarded-For`. When the direct peer is trusted, the server walks the `X-Forwarded-For` chain right to left, skips trusted addresses, and uses the first untrusted one. If none is usable, it uses the socket peer. Client-supplied entries to the left of the first untrusted address are never used. List every trusted hop.
 
 > **Warning:** `X-Real-IP` is ignored. A proxy that sets only `X-Real-IP` puts every client in the proxy's rate-limit bucket.
 >

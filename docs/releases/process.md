@@ -10,13 +10,13 @@ Before `1.0.0`, Release Please bumps the patch version for `feat:`, `fix:` and `
 4. The release workflow builds the Linux server tarballs, the Flatpak bundles ([`flatpak.md`](../operations/flatpak.md)), the Windows NSIS installer and the container image. It then generates the SBOM and `SHA256SUMS`, signs the checksums, attests the assets, and appends the contributors list.
 5. Check the assets, the checksums and the Contributors section before general distribution.
 
-The workflow validates the published tag: it must match `vMAJOR.MINOR.PATCH` with no leading zeros, and a pre-release suffix such as `-rc.1` is refused. A GitHub pre-release of a plain `vX.Y.Z` tag is accepted. It is built and published under its exact version only and never moves `:stable`, `:latest` or the `<major>.<minor>` image tags.
+The workflow validates the published tag: it must match `vMAJOR.MINOR.PATCH` with no leading zeros, and a pre-release suffix such as `-rc.1` is refused. A GitHub pre-release of a plain `vX.Y.Z` tag is accepted but is built and published under its exact version only; it never moves `:stable`, `:latest` or the `<major>.<minor>` image tags.
 
 ## How releases are prepared
 
-Release Please runs with `versioning: default` and `prerelease: false`, so every release is a normal GitHub release. It becomes `releases/latest`, the desktop updater serves it, and it moves the `latest`, `stable` and minor-line container tags. Releases up to and including `0.9.4` were published as pre-releases; the policy records the change. Preparing the release PR updates the version files and the English changelog and publishes nothing. Merging it creates the `vX.Y.Z` tag and the GitHub Release. The asset and container publication jobs then wait for approval in the `release` environment, which does not gate the tag or the GitHub Release.
+Release Please runs with `versioning: default` and `prerelease: false`, so a release is a normal GitHub release: it becomes `releases/latest`, the desktop updater serves it, and it moves the `latest`, `stable` and minor-line container tags. `v0.9.1` to `v0.9.4` were published as pre-releases and `v0.9.5` resumed stable publication; the policy records the change. Preparing the release PR publishes nothing.
 
-`0.9.0` was pinned once with `release-as` to leave `0.9.0-rc.5` behind without carrying its suffix; the override was removed in the release PR that published it. It is a GitHub pre-release, so the desktop updater (which reads `releases/latest`) does not offer it and the image has only its `0.9.0` tag. Editing a pre-release into a stable release does not trigger the publication workflow; publish a later non-pre-release instead. Keep a generated release PR unmerged until the final review and the maintainer's explicit authorization to publish. Routine code and configuration PRs are not that authorization.
+`0.9.0` was pinned once with `release-as` to leave `0.9.0-rc.5` behind without carrying its suffix; the override was removed in the release PR that published it. Editing a pre-release into a stable release does not trigger the publication workflow; publish a later non-pre-release instead. Keep a generated release PR unmerged until the final review and the maintainer's explicit authorization to publish. Routine code and configuration PRs are not that authorization.
 
 ## Release notes
 
@@ -32,13 +32,13 @@ Write the user-facing summary and highlights in `docs/releases/highlights/<versi
 
 ## Publication approval
 
-The container and asset publication jobs wait for approval in the `release` GitHub environment (required reviewer). The gate covers container tags and asset uploads, not the Git tag or GitHub Release that Release Please creates when the release PR merges.
+Two jobs of the `Release` workflow run in the `release` GitHub environment (required reviewer): `container-approval`, which gates the image push and tags, and `publish`, which gates the asset upload. The Git tag and GitHub Release that Release Please creates when the release PR merges are not gated.
 
 LearnVault no longer publishes release candidates. Changes are verified on `main` before the release PR is merged. The `0.9.0-rc.N` candidates were superseded by `0.9.1` and are pruned under the retention rule in the [release policy](../../.agents/policies/releases.md). The `:rc` container tag is no longer updated; the updater's `rc` channel remains only so existing candidate installations can move to a stable release.
 
 ## Canonical SPA Bundling
 
-The server binary embeds the SPA from `crates/server/web/build`, the output of the web build (`apps/web-next`). The `linux` (x86_64) and `linux-arm64` (aarch64) jobs in the release workflow compile `crates/server` with those assets.
+The `linux` (x86_64) and `linux-arm64` (aarch64) jobs package the `crates/server` binary together with the SPA build (`crates/server/web/build`, from `apps/web-next`) as `web/` inside each tarball. The binary does not embed the SPA; start it with `--web-root web`.
 
 ## Rollback
 
@@ -48,11 +48,11 @@ To return to a known-good release, follow the [rollback runbook](../operations/r
 
 On a GitHub `release` event, Actions runs the workflow definition from the **tagged commit**, not `main`. If a release was tagged before a workflow fix reached `main`, a maintainer can run the workflow by hand:
 
-1. Open Actions → `Release` → `Run workflow`.
-2. Enter the exact tag (for example `v0.9.6`).
-3. The workflow validates the tag, confirms or creates the release (drafts are supported for atomic publishing), rebuilds every platform asset from that tag, checks that the tag has not moved, uploads the assets with `--clobber`, publishes the release, and appends the Contributors section.
+1. Run the `Release` workflow from `main` (Actions → `Release` → `Run workflow`).
+2. Enter the exact tag (for example `v0.9.6`). It must belong to an existing, published, non-draft release.
+3. The workflow validates the tag, rebuilds every platform asset from it, checks that the tag has not moved, and uploads the assets with `--clobber`.
 
-The workflow never moves or recreates tags. The `<!-- learnvault:contributors -->` marker keeps the Contributors section from being appended twice.
+The workflow never moves or recreates tags. The contributors step runs only on `release` events, so a manual run does not touch the Contributors section, which `<!-- learnvault:contributors -->` otherwise keeps from being appended twice. Image tags: `stable` and `latest` move only on `release` events, while a manual run of a stable release can still update the `<major>.<minor>` tag.
 
 ## Published Release Assets
 
@@ -74,7 +74,7 @@ Each release publishes eleven files on GitHub Releases, plus the OCI image on GH
 
 Naming rules:
 
-- The prefix is always `learnvault-`.
+- Platform packages and the SBOM start with `learnvault-`; `latest.json`, `SHA256SUMS` and `SHA256SUMS.sigstore.json` have fixed names.
 - Architectures are `amd64` and `arm64`, never `x86_64`, `x64` or `win64`.
 - Windows files carry the version because users download them standalone.
 - `SHA256SUMS` is generated with `sha256sum` over every other asset except its own signature bundle.
@@ -85,7 +85,7 @@ Release notes must document database schema migrations. Releases must never cont
 
 ## Container Image Tags and Verification
 
-The image is built for `linux/amd64` and `linux/arm64`, each on its own native runner (no QEMU), and combined into one multi-architecture index. The tags applied depend on the release:
+The image is built for `linux/amd64` and `linux/arm64`, each on its own native runner (no QEMU), and combined into one multi-architecture index. The tags depend on the release:
 
 | Tag | When it is applied |
 | --- | --- |
@@ -109,7 +109,7 @@ Provenance and the SBOM are attached to the same digest; inspect them with `dock
 
 Each release publishes a keyless Sigstore bundle for `SHA256SUMS`, a CycloneDX SBOM generated from the tagged source and lockfiles with `trivy fs .`, and GitHub Artifact Attestations. The SBOM lists source and dependency metadata; it is not a scan of the compiled binaries. Build provenance covers every file in the release asset directory. The SBOM attestation covers each Linux server archive, Windows installer and updater bundle, and Flatpak bundle.
 
-Download the assets with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum signature with Cosign v3 or newer. Cosign 2.x cannot verify the bundle, which stores the certificate in a format that version does not expect:
+Download the assets with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum signature. The release workflow signs and verifies with `sigstore/cosign-installer` v4.1.2; use Cosign v3 or newer:
 
 ```sh
 cosign verify-blob SHA256SUMS \

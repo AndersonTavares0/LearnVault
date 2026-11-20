@@ -2,27 +2,27 @@
 
 The Rust server (`crates/server`) exposes the HTTP endpoints below. The React SPA uses the same study and catalog contract over HTTP and over desktop IPC. Endpoints consume and produce JSON unless stated otherwise. Authentication uses an HttpOnly session cookie with `SameSite=Strict`.
 
-The course registry is stored in `courses.json` next to the database. Raw filesystem paths never cross the API boundary: clients receive only opaque course identifiers and sanitized titles. Rescans revalidate each root and reject detected tampering. A local user who swaps a symlink or junction concurrently is stopped only by OS-level permissions.
+The course registry is stored in `courses.json` next to the database. Catalog responses never include the absolute path of a course root: courses have opaque IDs, and files are listed by relative path with their metadata. Rescans revalidate each root and reject detected tampering.
 
-The session cookie has the `Secure` flag by default and travels only over HTTPS. For local development without TLS, pass `--insecure-http`; never use it in production. State-changing authentication endpoints require a matching HTTP(S) `Origin` header.
+The session cookie has the `Secure` flag by default and travels only over HTTPS. For local development without TLS, pass `--insecure-http`; never use it in production. Guarded write endpoints require an HTTP(S) `Origin` that matches `Host` or, when `Origin` is absent, an HTTP(S) `Referer` whose origin matches. A failed check returns `403 csrf_failed`.
 
 ## SPA Delivery in Rust Server
 
-Static serving is off by default. Pass `--web-root` with the web build directory (`crates/server/web/build`), which contains the `200.html` shell. Existing files are served directly, extensionless paths fall back to `200.html`, missing files with an extension return 404, and `/api/*` never falls back to HTML. A missing shell returns 503. The shell is served with `Cache-Control: no-cache`, assets under `_app/immutable/` are cached as immutable, and SPA error responses use `no-store`. Errors never reveal local filesystem paths.
+Static serving is off by default. Pass `--web-root` with the web build directory (`crates/server/web/build`), which contains the `200.html` shell. Existing files are served directly, extensionless paths fall back to `200.html`, missing files with an extension return 404, and `/api/*` never falls back to HTML. A missing shell returns 503, and a file or shell larger than 16 MiB returns 413. The shell is served with `Cache-Control: no-cache`, assets under `_app/immutable/` are cached as immutable, and SPA error responses use `no-store`. Errors never reveal local filesystem paths.
 
 ## Health & Authentication Endpoints
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | `GET` | `/api/healthz` | Public | Database readiness and running version: `{"status":"ok","version":"..."}` (`dev` on source builds) |
-| `POST` | `/api/login` | Public | Authenticates `{ "username": "...", "password": "..." }` |
-| `POST` | `/api/logout` | Session | Invalidates the active session |
-| `GET` | `/api/me` | Session | Returns current authenticated account details |
-| `POST` | `/api/account/credentials` | Session | Accepts `{ "current_password": "...", "username": "...", "password": "..." }`, updates credentials, revokes older sessions, and issues a new session |
+| `POST` | `/api/login` | Public (same origin) | Authenticates `{ "username": "...", "password": "..." }`; returns `{ user_id, username, is_admin, must_change_credentials }` and sets the session cookie. Throttled attempts return `429` |
+| `POST` | `/api/logout` | Public (same origin) | Clears the cookie and returns an empty `204`; revokes the session when one is present |
+| `GET` | `/api/me` | Session | Returns `{ user_id, username, is_admin, must_change_credentials }`; `401` without a valid session |
+| `POST` | `/api/account/credentials` | Session (same origin) | Accepts `{ "current_password": "...", "username": "...", "password": "..." }`, updates credentials, revokes older sessions, and returns the account with a new session cookie; `422 invalid_credentials_format` for a rejected value |
 
-Readiness uses a separate read-only SQLite connection that waits at most 500 ms on a lock, so a library scan or other writer never turns it into a `503`. A missing, unreadable or incompatible database returns `503 {"status":"unavailable"}`. Responses carry `Cache-Control: no-store`.
+Readiness uses a separate read-only SQLite connection that waits at most 500 ms on a lock, so it does not queue behind the shared database connection that scans and writes hold. A missing, unreadable or incompatible database returns `503 {"status":"unavailable"}`, and so does a server with no spare capacity for blocking work. Responses carry `Cache-Control: no-store`.
 
-First start may create temporary credentials (`admin/admin`), and only when the server listens on a loopback address. The response then has `must_change_credentials: true`, and every protected endpoint returns `403 credentials_change_required` until the password changes. A non-loopback listener requires explicit bootstrap credentials, and a persisted administrator still marked for a credential change blocks network startup.
+When the database has no administrator, first start may create temporary credentials (`admin/admin`), and only when the server listens on a loopback address. The account then has `must_change_credentials: true`, and every protected endpoint except `GET /api/me` and `POST /api/account/credentials` returns `403 credentials_change_required` until the password changes. Creating the first administrator on a non-loopback listener requires explicit bootstrap credentials; an existing eligible administrator starts without them, but one still marked for a credential change blocks network startup.
 
 Login attempts are limited to 5 per 60 seconds per client address. The address is the socket peer or, when that peer is listed in `TRUSTED_PROXY_IPS`, the first untrusted address in `X-Forwarded-For` read right to left. `X-Real-IP` is ignored. Proxy setup is in [Distribution & Operations](../operations/distribution.md#reverse-proxy-and-login-rate-limiting).
 
@@ -51,13 +51,13 @@ Before bootstrapping or running migrations, the server checks for legacy Go data
 
 A module directory that contains videos becomes a collapsible module with one lesson per video. Other files in it stay available as materials, and matching subtitles stay with the lesson video. Course paths use natural sorting (`2` before `10`).
 
-With no registered courses, the catalog is empty. `LIBRARY_DIR` / `--library-root` seeds a new deployment once: when no registry exists, each top-level folder under it is registered as a course. A root that holds media directly is registered as one course with the historical ID `library-1`, and an empty root registers nothing. Administrators import folders added later.
+With no registered courses, the catalog is empty. `LIBRARY_DIR` / `--library-root` seeds a new deployment once, when no registry exists. Each top-level folder becomes a course, except that a folder containing 2 to 100 nested courses is split into those courses when they register. If no folder registers and a media or material file sits directly in the root, the root becomes one course with the historical ID `library-1`; otherwise an empty root registers nothing. Administrators import folders added later.
 
-The scanner reads directory metadata and does not follow symbolic links. It skips temporary download directories, detects media, subtitles and documents, and treats a `.ts` file as video only if it is larger than 1 MiB, so TypeScript files are not mistaken for video.
+The scanner reads directory metadata and does not follow symbolic links. It skips temporary download directories, detects media, subtitles and documents, and treats a `.ts` file as video only if it is at least 1 MiB, so TypeScript files are not mistaken for video.
 
 ### Automatic Indexing
 
-The server indexes registered courses in the background, outside the request path. A filesystem watcher debounces bursts of events, and a reconciliation every five minutes covers network mounts where events are unreliable. One job runs at a time; a manual rescan is deferred or rejected with `409` while it runs.
+The server indexes registered courses in the background, outside the request path. A filesystem watcher debounces bursts of events, and a reconciliation every five minutes covers network mounts where events are unreliable. One scan runs at a time. The background job waits for a running manual rescan, and a manual rescan that overlaps a running scan returns `409`.
 
 Each course is scanned without holding the database and applied in its own transaction. The database lock and the heavy-work permit are released between courses, so API requests are not blocked for the length of the library scan. `GET /api/indexing` exposes the job state, file counts, course progress, timestamps and a stable error code. Cancelling stops before the next course and keeps the courses already committed.
 
@@ -83,9 +83,10 @@ are always verified; there is no option to accept an invalid certificate. Redire
 the `Authorization` header never reaches another host. `dav://` and `http://` send Basic
 credentials without transport encryption, so use them only on a trusted private network; prefer
 `davs://`/`https://`. Link-local, multicast, broadcast and unspecified addresses
-(`169.254.0.0/16`, the IPv4 and IPv6 link-local ranges, `224.0.0.0/4`, `0.0.0.0/8`) are refused
-with `unsafe_source_target`, so a source cannot point at a cloud metadata endpoint. The check
-applies to the addresses a hostname resolves to, not only to literal IPs. Loopback and private LAN
+(`169.254.0.0/16`, the IPv4 and IPv6 link-local ranges, `224.0.0.0/4`, `0.0.0.0/8`) are not allowed,
+so a source cannot point at a cloud metadata endpoint. A URL whose host is such a literal address is
+rejected with `unsafe_source_target`. A hostname is resolved before every connection, and if any
+returned address is disallowed the operation fails with the sanitized `denied` code. Loopback and private LAN
 addresses stay usable, because a source on the same network is the normal deployment. WebDAV
 connections go directly to the validated address, and the server ignores `HTTP_PROXY`,
 `HTTPS_PROXY` and `ALL_PROXY` for these requests, so a proxy cannot resolve the hostname outside
@@ -93,7 +94,7 @@ the address policy.
 
 SMB sources use `smb://host[:port]/share/path`. The share is mandatory; `.`/`..` segments, encoded
 separators and control characters are rejected before they become a UNC path. The server is
-contacted on TCP/445 with NTLM authentication and SMB signing support, and SMB3 encryption is used
+contacted on TCP/445 unless the URL names a port, with NTLM authentication and SMB signing support, and SMB3 encryption is used
 when the server requires it. Kerberos is not supported in this build. DFS referrals are disabled so
 credentials stay on the configured server instead of following a referral to another host.
 
@@ -105,10 +106,12 @@ with a single `Range` over WebDAV (a server that ignores `Range` is rejected ins
 the wrong span) or ranged SMB reads. Only `PROPFIND`, `GET` and read-only SMB operations are ever
 issued: the remote server is never written, renamed or deleted.
 
-All transports share the scan limits: at most 32 directory levels, 200,000 files, 8 MiB per
-`read_range` call, and 100,000 entries in a single directory listing. Connection setup is limited
-to 10 seconds and each listing or read block to 30 seconds; a full remote scan is limited to 120
-seconds and a connection test to 20 seconds.
+A `CourseSource` walk descends at most 32 directory levels (deeper folders count as inaccessible)
+and rejects a scan of more than 200,000 accepted files. A `read_range` call returns at most 8 MiB.
+A single WebDAV or SMB directory listing is limited to 100,000 entries. Registered local folders use
+the local scanner instead. A connection attempt times out after 10 seconds and each listing or read
+block after 30 seconds; the whole remote walk is limited to 120 seconds and a connection test to
+20 seconds.
 
 Configuration lives in `sources.json` next to the database, next to `courses.json`. Passwords are
 encrypted at rest with ChaCha20-Poly1305 under a 32-byte key in `sources.key` (`0600`), created on
@@ -118,14 +121,14 @@ ciphertext is preserved until the key is restored.
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/admin/sources` | Admin Session | Lists sources as `{ id, name, url, username, has_password, credential_error }`; never returns the secret |
+| `GET` | `/api/admin/sources` | Admin Session | Returns `{ sources: [{ id, name, url, username, has_password, credential_error }] }`; never returns the secret |
 | `POST` | `/api/admin/sources` | Admin Session | Accepts `{ name, url, username?, password? }` and returns `201` with the sanitized source |
 | `DELETE` | `/api/admin/sources/{id}` | Admin Session | Removes the source configuration and detaches its roots (their media returns to the source library); returns `{ removed: bool }` and touches no remote file |
-| `POST` | `/api/admin/sources/{id}/test` | Admin Session | Validates reachability and authentication with a root listing (`PROPFIND` or SMB directory enumeration); returns `{ ok, entries }` or `{ ok: false, error }` (`unreachable`, `denied`, `not_found`, `invalid_response`, `limit_exceeded`, `credentials_unavailable`, `timeout`) |
+| `POST` | `/api/admin/sources/{id}/test` | Admin Session | Validates reachability and authentication with a root listing (`PROPFIND` or SMB directory enumeration); returns `404` (empty) for an unknown source, and otherwise HTTP `200` with `{ ok: true, entries }` or `{ ok: false, error }` for a failed probe too (`unreachable`, `denied`, `not_found`, `invalid_response`, `limit_exceeded`, `credentials_unavailable`, `invalid_source`, `timeout`). Needs the same origin |
 | `POST` | `/api/admin/sources/{id}/scan` | Admin Session | Walks the remote tree and applies it to the catalog as a course; returns the same rescan counters as the local rescan |
-| `GET` | `/api/admin/sources/{id}/browse?path=` | Admin Session | Lists one folder level of the source (`path` is relative, empty for the source root): `{ path, folders: [{ name, path, state }], media_files, other_files, truncated }`. `state` is `root`, `inside_root`, `contains_root` or `free`. Ignored folders are hidden and at most 2000 folders are listed (`truncated`). A path is relative, `\` is read as `/`, and an unclean one (`..`, absolute, `//`, a drive prefix, NUL, over 1024 characters) returns `400 invalid_path`; a missing folder returns `404 not_found`, unreadable credentials `400 credentials_unavailable`, and a remote failure `502` or `504` with the same sanitized codes as the connection test |
+| `GET` | `/api/admin/sources/{id}/browse?path=` | Admin Session | Lists one folder level of the source (`path` is relative, empty for the source root): `{ path, folders: [{ name, path, state }], media_files, other_files, truncated }`. `state` is `root`, `inside_root`, `contains_root` or `free`. Ignored folders are hidden and at most 2000 folders are listed (`truncated`). A path is relative, `\` is read as `/`, and an unclean one (`..`, absolute, `//`, a drive prefix, NUL, over 1024 characters) returns `400 invalid_path`; a missing folder returns `404 not_found`, unreadable credentials `400 credentials_unavailable`, a source that cannot build a client `400 invalid_source`, and a remote failure `502` or `504` with the same sanitized codes as the connection test |
 | `GET` | `/api/admin/sources/{id}/roots` | Admin Session | Lists the folders chosen as courses: `{ roots: [{ id, name, path }] }` |
-| `POST` | `/api/admin/sources/{id}/roots` | Admin Session | Accepts `{ path, mode }` with `mode` `course` (the folder is a course) or `children` (every folder directly inside is a course). The folder must exist on the source. `course` on an ignored folder (such as `temp`) returns `400 invalid_path`; more than 100 folders in `children` return `400 too_many_folders`. Returns `201 { created, skipped }` where `skipped` lists `{ path, reason }` (`overlaps_existing_root`, `invalid_path`, `invalid_root` or `unavailable` when a database failure stopped the rest); a single `course` that cannot be created returns `409` with the reason. Changing requests need the same origin |
+| `POST` | `/api/admin/sources/{id}/roots` | Admin Session | Accepts `{ path, mode }` with `mode` `course` (the folder is a course) or `children` (every folder directly inside is a course). The folder must exist on the source. `course` on an ignored folder (such as `temp`) or on an empty path returns `400 invalid_path` (use `children` at the source base to create roots below it); more than 100 folders in `children` return `400 too_many_folders`. Returns `201 { created, skipped }` where `skipped` lists `{ path, reason }` (`overlaps_existing_root`, `invalid_path`, `invalid_root` or `unavailable` when a database failure stopped the rest); a single `course` that cannot be created returns `409` with the reason. Changing requests need the same origin |
 | `DELETE` | `/api/admin/sources/{id}/roots/{root_id}` | Admin Session | The folder stops being a course of its own and its media returns to the source course; returns `{ removed: true }`, `404` when the root does not belong to that source, and touches no remote file |
 
 A scanned source appears in `GET /api/catalog` as a top-level `course` node with the source's
@@ -138,20 +141,17 @@ The library's "Refresh courses" button therefore also calls `POST /api/admin/sou
 source whose password can be read, one request at a time, and treats `400` as fine when remote sources
 exist, so a server with only remote sources can still be refreshed from the library page.
 
-The server also reads every remote source by itself, 30 seconds after it starts and then every hour, so new files
-on a share appear without pressing the button. A source that is busy (a manual refresh is running) or
-unreachable is skipped until the next round, and a scan lists up to 8 folders at once. A scan of a source is
-limited to 120 seconds, and its HTTP request to 130 seconds.
+The server also reads remote sources by itself: the first round starts 30 seconds after startup, sources are scanned one after another with a 5 second pause after each attempt, and the server sleeps an hour after each round. A source whose credentials cannot be read, or that is skipped because a scan holds the shared lock, waits for the next round. A walk lists up to 8 folders at once and is limited to 120 seconds; the HTTP timeout of both scan endpoints is 130 seconds.
 
 A source that is a whole library (categories, sub-categories, then courses) is split into one course per
-course folder by itself on its scan (`course_detect`, ADR 0004). A folder holds courses, instead of being one,
-when it has no media of its own, at least two levels of media-bearing folders below it, and its subfolders are
-not mostly numbered like modules ("01 Intro", "Module 15", "Lesson 41"), or one of them already holds
-courses. A numbered sequence of modules makes its parent a course at any depth. It reads only media, never
-names or a fixed depth. Files under a root the administrator chose are left alone, and a scan that could not
-read some folders does not change the split. A folder removed with `DELETE .../roots/{root_id}` is
-remembered (`library_root_dismissed`) and is not found again; choosing it again forgets that. A source that is
-one course, or has media at its top level, is not split.
+course folder by its scan (`course_detect`, ADR 0004). The detector looks at the folders that contain media
+and at the numbering of folder names. A folder holds courses, instead of being one, when it has no media of
+its own, at least two levels of media-bearing folders below it, and either fewer than half of its media-bearing
+subfolders are named like modules ("01 Intro", "Module 15", "Lesson 41") or one of them already holds courses.
+Files under a root the administrator chose are left alone. Nothing is promoted when the scan could not read
+some folders or when more than 100 courses would be found. A folder removed with `DELETE .../roots/{root_id}`
+is remembered (`library_root_dismissed`) and is not found again; choosing it again forgets that. A source that
+is one course, or has media at its top level, is not split.
 
 A source can be split into several courses by choosing folders as roots (ADR 0004). Choosing a folder
 moves its already scanned media to a course of its own and every later scan of the source is applied
@@ -177,10 +177,10 @@ the others are still applied and the request reports the failure, and the next s
 | --- | --- | --- | --- |
 | `GET` | `/api/study/capabilities` | Session | Returns supported study capabilities |
 | `GET` | `/api/study/recent` | Session | Returns recently studied lessons |
-| `GET` | `/api/study/progress?media_id=<id>` | Session | Returns the user's progress for one lesson; absent progress is returned as such, not as `404` |
+| `GET` | `/api/study/progress?media_id=<id>` | Session | Returns `{ media_id, position_seconds, completed, updated_at, recorded }` for one lesson (`recorded: false` and a null `updated_at` when none exists); `404 media_not_found` for an unknown or inaccessible lesson |
 | `POST` | `/api/study/position` | Session | Records the resume position `{ "media_id", "position_seconds" }`; completion is preserved |
 | `POST` | `/api/study/completed` | Session | Sets completion `{ "media_id", "completed" }` |
-| `GET` | `/api/study/summary` | Session | Daily study minutes, active streak, and weekly totals |
+| `GET` | `/api/study/summary` | Session | Streaks and activity: `{ current_streak, longest_streak, today, today_active, at_risk, week_active_days, completed_lessons, days: [{ day, active }], active_days_year }` |
 | `GET` | `/api/focus/sessions` | Session | Lists the user's focus sessions |
 | `POST` | `/api/focus/sessions` | Session | Records a focus session `{ id, kind, planned_seconds, actual_seconds, completed, started_at, ended_at }` |
 | `GET` | `/api/focus/summary` | Session | Focus totals, completion rate, best day, and per-day minutes |
@@ -226,7 +226,7 @@ flashcards (with their reviews) and playback preferences travel.
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | `POST` | `/api/sync/push` | Session | Accepts `{ "device_id": "...", "operations": [...] }` and applies each new operation, returning `{ applied, duplicated, cursor }` |
-| `GET` | `/api/sync/pull?device=<id>&cursor=<seq>&limit=<n>` | Session | Returns `{ cursor, has_more, items }` with the operations after `cursor`, excluding the requesting device and, for non-admin users, operations on media of courses the user can no longer open (the cursor still advances past them) |
+| `GET` | `/api/sync/pull?device=<id>&cursor=<seq>&limit=<n>` | Session | Returns `{ cursor, has_more, items }` (`limit` defaults to 100 and is clamped to 1-500; each item has `seq`, `op_id`, `device_id`, `client_at`, `payload`) with the operations after `cursor`, excluding the requesting device and, for non-admin users, operations on media of courses the user can no longer open (the cursor still advances past them) |
 
 Writes made in a browser reach the journal too (ADR 0005). Once an owner has registered a device (any push
 or pull registers it), the server records the owner's own study writes as operations of the reserved device
@@ -235,7 +235,7 @@ registration also backfills what was written before (progress, bookmarks, flashc
 schedule, preferences and notes that have no synced version yet). A newer `progress` replaces the older
 ones of the same media and a newer `preference` the older ones, with `completed` staying set, so autosaves do
 not grow the log; notes, bookmarks, flashcards, reviews and deletions are kept. Deletion tombstones and
-idle devices older than 180 days are removed (a device that is the owner's latest is kept), and an owner keeps at most 32 registered devices.
+idle devices older than 180 days are pruned on a best-effort basis, at most once per process per day (the owner's latest device is kept), and registering a device beyond 32 per owner forgets the least recently seen ones.
 
 Each operation is `{ "op_id": "...", "client_at": <unix-seconds>, "payload": { "kind": ... } }`
 with one of the payload kinds below:
@@ -254,14 +254,14 @@ with one of the payload kinds below:
 | `preference` | `video_speed`, `audio_speed` (percent of normal), `subtitle_language` |
 
 `op_id` is stable and globally unique: replaying a pushed operation is a duplicate and does
-not repeat its effect. `seq` is the monotonic pull cursor; rows are never deleted, so a
-device resumes from the last cursor it applied. Pulling excludes operations produced by the
+not repeat its effect. `seq` is the monotonic pull cursor, so a
+device resumes from the last cursor it applied. A newer `progress` or `preference` operation replaces the older rows it supersedes under a new `seq`, inserted before the old rows are deleted, so incremental cursors keep working. Pulling excludes operations produced by the
 requesting `device_id`, because that device already applied them locally.
 
 Conflict rules:
 
 - **progress**: last write wins by `client_at`, with the position clamped to
-  `[0, 86400]` seconds; completion is monotonic and is never undone by an older write;
+  `[0, 86400]` seconds; completion is monotonic: no incoming sync operation clears it, even a newer one;
 - **notes**: each synchronized version is identified by its `op_id`. The largest `op_id`
   (UUID v7, so the latest version) owns the note row and every other version is kept as a
   conflict copy with the deterministic id `<note_id>~<op_id>`. No content is silently lost,
@@ -297,11 +297,11 @@ is refused as `404 media_not_found`. The push body accepts up to 200 operations 
 | `DELETE` | `/api/admin/users/{id}` | Admin Session | Deletes a user |
 | `GET`, `PUT`, `DELETE` | `/api/user/avatar` | Session | Reads, replaces (raw image body up to 2 MiB) or removes the user's avatar |
 | `PUT`, `DELETE` | `/api/admin/courses/{id}/order` | Admin Session | Saves or resets a manual lesson order for a course |
-| `GET` | `/api/admin/backup` | Admin Session | Downloads a transactional backup of the database |
-| `GET` | `/api/update` | Session | Update check result `{ current, enabled, available, latest, released_at, url, changelog, checked_at, error }`; `?force=1` bypasses the cache for administrators |
+| `GET` | `/api/admin/backup` | Admin Session | Downloads a transactional backup of the database; non-administrators get a plain-text `403` |
+| `GET` | `/api/update` | Session | Update check result `{ current, enabled, available, latest, releasedAt, url, changelog, checkedAt, error }`; `?force=1` or `?force=true` bypasses the interval for administrators only |
 | `GET` | `/api/update/history` | Admin Session | Entries the Compose updater wrote to `update-history.json` on the data volume |
 | `GET` | `/api/media/capabilities` | Session | Reports whether on-demand transcoding is available (`ffmpeg` found) |
-| `GET`, `HEAD` | `/api/media/transcode?course=...&path=...` | Session | Streams a transcoded lesson video; `start` seeks |
+| `GET`, `HEAD` | `/api/media/transcode?course=...&path=...` | Session | Streams a transcoded lesson video; `start` seeks and `reencode=true` forces H.264 encoding |
 
 ## Search
 
