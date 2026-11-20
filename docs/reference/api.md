@@ -14,11 +14,13 @@ Static file serving is disabled by default. Pass `--web-root` pointing to the di
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/healthz` | Public | Process and database readiness, including running version |
+| `GET` | `/api/healthz` | Public | Process and database readiness, including running version (`dev` on source builds) |
 | `POST` | `/api/login` | Public | Authenticates `{ "username": "...", "password": "..." }` |
 | `POST` | `/api/logout` | Session | Invalidates the active session |
 | `GET` | `/api/me` | Session | Returns current authenticated account details |
 | `POST` | `/api/account/credentials` | Session | Accepts `{ "current_password": "...", "username": "...", "password": "..." }`, updates credentials, revokes older sessions, and issues a new session |
+
+Readiness is checked on a separate read-only SQLite connection that waits at most 500 ms for lock contention, so a library scan or other write holding the writer lock never turns it into a `503`. A missing, unreadable or incompatible database still returns `503 {"status":"unavailable"}`. The response is `Cache-Control: no-store`.
 
 Initial bootstrap allows temporary credentials (`admin/admin`). The response marks `must_change_credentials: true`, and all protected endpoints return `403 credentials_change_required` until the password is changed.
 
@@ -218,7 +220,7 @@ flashcards (with their reviews) and playback preferences travel.
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | `POST` | `/api/sync/push` | Session | Accepts `{ "device_id": "...", "operations": [...] }` and applies each new operation, returning `{ applied, duplicated, cursor }` |
-| `GET` | `/api/sync/pull?device=<id>&cursor=<seq>&limit=<n>` | Session | Returns `{ cursor, has_more, items }` with the operations after `cursor`, excluding the requesting device |
+| `GET` | `/api/sync/pull?device=<id>&cursor=<seq>&limit=<n>` | Session | Returns `{ cursor, has_more, items }` with the operations after `cursor`, excluding the requesting device and, for non-admin users, operations on media of courses the user can no longer open (the cursor still advances past them) |
 
 Writes made in a browser reach the journal too (ADR 0005). Once an owner has registered a device (any push
 or pull registers it), the server records the owner's own study writes as operations of the reserved device

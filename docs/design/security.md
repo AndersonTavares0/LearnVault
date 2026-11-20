@@ -89,6 +89,10 @@ described below. The desktop application is single-user and has no accounts.
 - Course access is per user. With no `user_course_access` rows the user sees every course; with rows,
   only the listed courses, and the sentinel `__none__` means no access. New users start with no
   access until an admin grants it.
+- A sync pull applies the user's current course grants when it is served: operations on media of a
+  course the user can no longer open are skipped, the cursor still advances past them, and a later
+  re-grant makes them visible again to devices whose cursor has not passed them. Copies already pulled
+  to a device are not purged. Administrators see the whole journal (`crates/core`, `pull_operations_for_user`).
 - Admin-only operations: listing, creating, and deleting users, setting course access, catalog
   rescan, course import and removal, covers, manual ordering, media impact and removal, and database
   backup download. These check the admin role in the handler.
@@ -104,6 +108,10 @@ described below. The desktop application is single-user and has no accounts.
   junction cannot redirect access outside the root.
 - Hard links to files outside the root are indistinguishable from ordinary files. This is a known,
   documented limit of the confinement model.
+- Cover discovery, server video cover generation and scan hashing use the same confined opener as
+  streaming (`open_confined_file`): they inspect the opened handle (regular file, not a link or reparse
+  point, inside the root) and read only from it instead of checking a path and reopening it by name.
+  FFmpeg receives the opened handle on stdin, not a pathname.
 - Range requests are supported for streaming. No code path writes, renames, moves, or deletes inside
   the course library; the scanner and indexer are read-only.
 - Subtitle sidecars are served through the same authenticated media route with the same confinement,
@@ -112,7 +120,11 @@ described below. The desktop application is single-user and has no accounts.
   rest, never logged, and never echoed back in API responses. WebDAV refuses cross-host redirects
   and SMB disables DFS referrals for the same reason: credentials must not follow a server-chosen
   redirect to another host. Source URLs with a link-local, multicast, broadcast or unspecified
-  host are rejected (`unsafe_source_target`), which keeps a source away from cloud metadata and
+  host are rejected (`unsafe_source_target`), and so are host names that resolve to such an address:
+  every returned address is checked, one denied address rejects the whole answer, and the connection
+  goes only to a validated address (IPv4 and IPv6, WebDAV and SMB). WebDAV keeps the URL host name for
+  TLS and `Host`, and ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY`, so a proxy cannot resolve the
+  name outside the policy. This keeps a source away from cloud metadata and
   other non-library endpoints; private LAN and loopback addresses remain allowed by design, and
   plain `http://`/`dav://` credentials are accepted with a warning in the admin UI.
 
@@ -157,7 +169,7 @@ described below. The desktop application is single-user and has no accounts.
   installation.
 - The desktop database lives in the application data directory and is not shared with the server.
 - Sync is the only outbound network path. The desktop may call one user-configured server over
-  http(s) with TLS verification never disabled, sends only the operation log described in §5, and
+  http(s) with TLS verification never disabled, sends only the operation log (see [Offline Sync](../reference/api.md#offline-sync); the server applies the current course grants on pull, §4), and
   keeps the session cookie in a `0600` file next to its database. It never opens a listening socket,
   and the guard tests in `crates/desktop/tests/foundation.rs` still forbid listeners, embedded
   servers, and privileged Tauri plugins.
