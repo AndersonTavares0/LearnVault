@@ -1,91 +1,97 @@
 # Distribution & Operations
 
-**Target audience:** operators publishing, installing, or deploying LearnVault.
-If you are developing or studying the architecture, start with the [README](../../README.md) and [Architecture Overview](../architecture/overview.md).
+**Audience:** operators who publish, install, or deploy LearnVault.
+Developers should start with the [README](../../README.md) and the [Architecture Overview](../architecture/overview.md).
 
-**Summary:** LearnVault publishes a Windows desktop installer (NSIS), Linux server tarballs, and an optional OCI container image. Flatpak Linux desktop bundles are attached to each release (see [`flatpak.md`](flatpak.md)). Docker and Podman are optional deployment adapters, not runtime requirements.
+**Summary:** each release publishes a Windows desktop installer (NSIS), Linux server tarballs, Linux desktop Flatpak bundles ([`flatpak.md`](flatpak.md)), and an OCI container image. Docker and Podman are optional deployment adapters, not runtime requirements.
 
-## Current Release Targets
+## Release Targets
 
 | Target | Artifact | Purpose | Status |
 | --- | --- | --- | --- |
-| Linux Server | Rust Linux tarball (`learnvault-linux-<arch>.tar.gz`) | Primary supported Linux server deployment | Available |
-| Self-hosted | OCI container image via Compose (Docker/Podman) | Containerized server deployment | Supported; local or published image |
-| Windows Desktop | NSIS installer (`.exe`) | Local desktop usage; per-user installation without admin rights | Automated, verified with SHA256SUMS |
-| Linux Desktop | Flatpak bundle (amd64, arm64) | Desktop application for Linux | Available from the release that ships it; built and sandbox-checked in CI, see [`flatpak.md`](flatpak.md) |
+| Linux Server | `learnvault-linux-<arch>.tar.gz` (amd64, arm64) | Primary Linux server deployment | Available |
+| Self-hosted | OCI image via Compose or Quadlet (Docker/Podman) | Containerized server | Local or published image |
+| Windows Desktop | NSIS installer (`.exe`) | Per-user install in `%LOCALAPPDATA%\LearnVault`, no admin rights | Available, listed in `SHA256SUMS` |
+| Linux Desktop | `learnvault-linux-desktop-<arch>.flatpak` (amd64, arm64) | Desktop app | Attached to each release, built and sandbox-checked in CI |
 
-## Choosing a Distribution Target
+The full asset list is in [Published Release Assets](../releases/process.md#published-release-assets).
 
-- **Windows Desktop:** use the NSIS installer. It installs per-user in `%LOCALAPPDATA%\LearnVault` without requiring administrator privileges.
-- **Linux Server:** use the `learnvault-linux-<arch>.tar.gz` tarball.
-- **Container Deployments:** use Docker Compose or systemd Quadlet.
-- **Linux Desktop:** install the `learnvault-linux-desktop-<arch>.flatpak` bundle with `flatpak install --user <file>`. The GNOME runtime comes from Flathub. Details and checks are in [`flatpak.md`](flatpak.md).
+## Choosing a Target
+
+- **Windows Desktop:** run the NSIS installer.
+- **Linux Server:** extract the tarball (see below).
+- **Containers:** use Docker Compose or the Podman Quadlet unit in `deploy/`.
+- **Linux Desktop:** `flatpak install --user <file>`. The GNOME runtime comes from Flathub. See [`flatpak.md`](flatpak.md).
 
 ### Update Notifications
 
-When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Source builds report the version `dev` (the manifest placeholder `0.0.0` is never shown) and skip remote checks.
+The server asks the GitHub Releases API over HTTPS for the latest stable tag and compares it with the running version using strict SemVer. The request times out after 5 seconds, reads at most 64 KiB, and the result is cached in memory for 1 hour. The check is on by default; turn it off with `--no-update-check` or `LEARNVAULT_UPDATE_CHECK=off`. Nothing is downloaded or installed automatically. Source builds report the version `dev` (the manifest placeholder `0.0.0` is never shown) and skip the remote check.
 
-### Desktop Automatic Update Checks
+### Desktop Update Checks
 
-The desktop application checks for a new version on launch and at most once every 24 hours, recording the last check time locally. A failed check stays quiet: the app keeps working offline and offers no retry loop. The result appears in the same update banner used everywhere else.
+The desktop app checks for a new version on launch and at most once every 24 hours, and stores the time of the last check locally. A failed check is silent: the app keeps working offline and does not retry. The result appears in the update banner.
 
-From the banner (or Settings → Updates), **Download update** fetches the signed manifest artifact in the background without pausing playback or reloading the page. Once the bytes are held, the banner offers **Restart to update**, with the release notes shown in place. Nothing restarts on its own: the click is the only trigger, so an open lesson is never interrupted. At install time the app checks the release again and applies the held bytes only while the same version is still offered; every failure is reported as a generic message with no path or URL.
+In the banner or in Settings → Updates, **Download update** fetches the signed update in the background without pausing playback or reloading the page. When the download finishes, the banner shows **Restart to update** with the release notes. Nothing restarts on its own, so an open lesson is never interrupted. At install time the app checks the release again and applies the downloaded update only if the same version is still offered. Failures are reported as a generic message with no path or URL.
+
+Inside the Flatpak the updater is off; a new version arrives as a new bundle.
 
 ### Desktop Database Before Migration
 
-Before the desktop opens the database on a version whose schema is newer than the file on disk, it copies the file next to itself as `<database>.backup-<old-version>-<timestamp>` (for example `learnvault.sqlite.backup-12-1763000000`). The three newest backups are kept and older ones are pruned. The copy is best effort: a failed backup never blocks startup, but it is reported on stderr so it is not mistaken for success.
+When the schema of the installed version is newer than the database file, the desktop copies the file next to itself as `<database>.backup-<old-version>-<timestamp>` (for example `learnvault.sqlite.backup-12-1763000000`) before opening it. The three newest backups are kept and older ones are deleted. A failed backup does not block startup; it is written to stderr.
 
-### Verify the container image
+### Verify the Container Image
 
-From the first release after this was added, every image pushed to GHCR is signed by the release workflow with cosign (keyless: no key to keep, the signature is tied to the workflow run). To check an image yourself:
+The release workflow signs every image pushed to GHCR with keyless cosign, so there is no key to manage and the signature is tied to the workflow run. To check an image:
 
 ```sh
-cosign verify ghcr.io/andersontavares0/learnvault:0.9.0 \
+cosign verify ghcr.io/andersontavares0/learnvault:0.9.6 \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   --certificate-identity-regexp '^https://github\.com/AndersonTavares0/LearnVault/\.github/workflows/release\.yml@refs/(tags/v[0-9]+\.[0-9]+\.[0-9]+|heads/main)$'
 ```
 
-The command succeeds only for an image signed by `release.yml` in this repository. The Compose updater (`deploy/scripts/update.sh`) runs the same check on the target version before it backs up or changes anything, and refuses to update to an image that is unsigned or signed by anything else. Set `LEARNVAULT_VERIFY_SIGNATURE=false` only for a private mirror that re-publishes the image. Images published before this change (up to v0.8.0) are not signed.
+The command succeeds only for an image signed by `release.yml` in this repository. Images up to v0.8.0 are not signed.
 
-What this does and does not promise:
+The Compose updater (`deploy/scripts/update.sh`) runs the same check on the target version before it backs up or changes anything, and refuses an image that is unsigned or signed by anything else. Set `LEARNVAULT_VERIFY_SIGNATURE=false` only for a private mirror that re-publishes the image.
 
-- The updater verifies the tag, then pulls and starts the verified digest (`repo@sha256:…`), so retagging the registry between the check and the pull has no effect.
-- A signature proves the image came from `release.yml` in this repository, run for a version tag or for `main`. A manual run of the workflow on `main` can re-sign a rebuilt tag; the signature does not distinguish that from the original.
-- The image is pushed before it is signed. If signing fails, the release is not published, but the tags already point at an unsigned image; the updater refuses it, but `docker compose pull` of `:latest` would not. Re-run the workflow to fix it.
-- The updater installs `cosign` from the Alpine mirror when it starts, unpinned. Bake a pinned `cosign` into the updater image if that matters for your threat model.
-- `LEARNVAULT_CHANNEL` decides which releases may be installed. `stable` (the default) accepts final versions only and reads the server's update endpoint or the repository's latest release. `rc` also accepts release candidates and reads the release list, newest first, because candidates are never marked "latest". Both channels run the same signature check and refuse a candidate tag that is not shaped like `X.Y.Z-rc.N`.
-- The updater never moves backwards: when the discovered or requested version is not newer than the installed one, it logs the comparison and exits without touching the containers.
-- `LEARNVAULT_GITHUB_REPO` must look like `owner/name`, and `LEARNVAULT_VERIFY_SIGNATURE` must be exactly `true` or `false`; anything else stops the update.
+Limits of the check:
 
-### Automatic updates with Podman Quadlet
+- The updater verifies the tag, then pulls and starts the verified digest (`repo@sha256:…`), so retagging the registry between check and pull has no effect.
+- A signature proves the image came from `release.yml` in this repository, run for a version tag or for `main`. A manual run on `main` can re-sign a rebuilt tag, and the signature cannot tell that apart from the original.
+- The image is pushed before it is signed. If signing fails, the release is not published, but the tags already point at an unsigned image. The updater refuses it; `docker compose pull` of `:latest` does not. Re-run the workflow to fix it.
+- The updater installs `cosign` from the Alpine mirror at startup, unpinned. Bake a pinned `cosign` into the updater image if your threat model needs that.
+- `LEARNVAULT_CHANNEL` selects which releases may be installed. `stable` (the default) accepts final versions and reads the server's update endpoint or the repository's latest release. `rc` also accepts release candidates and reads the release list, newest first, because candidates are never marked "latest". Both channels run the signature check and refuse a candidate tag that is not shaped like `X.Y.Z-rc.N`.
+- The updater never moves backwards. If the discovered or requested version is not newer than the installed one, it logs the comparison and exits without touching the containers.
+- `LEARNVAULT_GITHUB_REPO` must look like `owner/name`, and `LEARNVAULT_VERIFY_SIGNATURE` must be exactly `true` or `false`. Anything else stops the update.
 
-`deploy/quadlet/learnvault.container` pulls `ghcr.io/andersontavares0/learnvault:stable` and is marked `AutoUpdate=registry`. Enable the native Podman timer to apply new releases:
+### Automatic Updates with Podman Quadlet
+
+`deploy/quadlet/learnvault.container` pulls `ghcr.io/andersontavares0/learnvault:stable` and sets `AutoUpdate=registry`. Enable the native Podman timer to apply new releases:
 
 ```sh
 systemctl --user enable --now podman-auto-update.timer
 podman auto-update --dry-run   # shows what would change
 ```
 
-`Notify=healthy` delays the "started" signal until the container healthcheck passes. If a new image never becomes healthy, the unit restart fails and `podman auto-update` rolls back to the previous image. Back up the data directory first (`deploy/scripts/backup.sh`): a rollback restores the image, not the database.
+`Notify=healthy` holds the "started" signal until the container healthcheck passes. If a new image never becomes healthy, the unit restart fails and `podman auto-update` rolls back to the previous image. Back up the data directory first (`deploy/scripts/backup.sh`), because a rollback restores the image, not the database.
 
-To follow a slower line, change the tag to a minor line such as `:0.9`, or pin an exact version to turn automatic updates off. Previously the unit ran a locally built `localhost/learnvault:latest`; build and tag your own image if you prefer that.
+To follow a slower line, change the tag to a minor line such as `:0.9`. To turn automatic updates off, pin an exact version.
 
-### Linux Server Tarball Usage
+### Linux Server Tarball
 
-The `learnvault-linux-<arch>.tar.gz` tarball contains the `learnvault-linux-<arch>` binary, `LICENSE`, and canonical SPA files in `web/` with `web/200.html`. Extract and point `--web-root` to the web directory:
+`learnvault-linux-<arch>.tar.gz` contains the `learnvault-linux-<arch>` binary, `LICENSE`, and the SPA files in `web/` (including `web/200.html`). Extract it and point `--web-root` at `web`:
 
 ```sh
 tar -xzf learnvault-linux-amd64.tar.gz
 ./learnvault-linux-amd64 --web-root web
 ```
 
-Without `--web-root`, the server serves only the JSON API (web route returns 404).
+Without `--web-root` the server serves only the JSON API.
 
 ### Windows Desktop Installer (NSIS)
 
-The desktop installer is an NSIS `.exe` built in the release workflow. It installs to `%LOCALAPPDATA%\LearnVault` per-user. The installer supports English and Brazilian Portuguese. Missing WebView2 runtimes are downloaded automatically via `downloadBootstrapper`.
+The release workflow builds the NSIS `.exe`. It installs per user to `%LOCALAPPDATA%\LearnVault` and offers English and Brazilian Portuguese. If the WebView2 runtime is missing, the installer downloads it (`downloadBootstrapper`).
 
-To build the installer locally on Windows:
+To build it locally on Windows:
 
 ```sh
 pnpm install --frozen-lockfile
@@ -93,78 +99,82 @@ pnpm run build:desktop
 pnpm exec tauri build --bundles nsis --config crates/desktop/tauri.conf.json
 ```
 
-The output artifact is generated in `target/release/bundle/nsis/`. Verify against `SHA256SUMS`.
+The installer lands in `target/release/bundle/nsis/`. Verify downloaded installers against `SHA256SUMS`.
 
 #### Desktop User Data Paths on Windows
 
-Desktop state is kept strictly isolated from the external course library:
+Desktop state is kept apart from the course library:
 
 | Path | Contents |
 | --- | --- |
-| `%APPDATA%\app.learnvault.desktop\library.json` | Selected library root (versioned atomic configuration) |
-| `%APPDATA%\app.learnvault.desktop\learnvault.sqlite` | Catalog metadata, notes, flashcards, and study progress |
-| `%LOCALAPPDATA%\app.learnvault.desktop\` | WebView2 browser cache and state |
+| `%APPDATA%\app.learnvault.desktop\library.json` | Selected library root |
+| `%APPDATA%\app.learnvault.desktop\learnvault.sqlite` | Catalog metadata, notes, flashcards, study progress |
+| `%LOCALAPPDATA%\app.learnvault.desktop\` | WebView2 cache and state |
 
-Reinstalling or updating preserves this data. The uninstaller includes an opt-in checkbox ("Delete application data") to wipe local application state if desired. Course folders are never touched or modified.
+Reinstalling or updating keeps this data. The uninstaller has an opt-in checkbox to delete the application data. Course folders are never touched.
 
 ## Build & Release Constraints
 
-- Each Rust binary (`crates/server`, `crates/desktop`) is the source of truth for its target.
-- The web SPA is built into `crates/server/web/build` and `crates/desktop/frontend-dist`.
+- Each Rust binary (`crates/server`, `crates/desktop`) is the source of truth for its target; containers add no behavior of their own.
+- The SPA builds into `crates/server/web/build` and `crates/desktop/frontend-dist`.
 - Container definitions live in `deploy/container/`, `deploy/compose/`, and `deploy/quadlet/`.
-- Containers never define behavior absent from the binary.
-- Release Please manages changelogs and release PRs.
-- `.github/workflows/release.yml` triggers when a release is published on GitHub, validating tag format `vMAJOR.MINOR.PATCH`.
+- Release Please manages the changelog and the release PR.
+- `.github/workflows/release.yml` runs when a release is published (or manually, see [Asset Repair](../releases/process.md#asset-repair--manual-triggers)) and accepts only tags shaped `vMAJOR.MINOR.PATCH`.
 
 ## Read-Only Verification
 
-`scripts/verify-readonly.sh` verifies that the container runtime cannot write to the mounted library:
+`scripts/verify-readonly.sh` checks that the container cannot write to the mounted library:
 
 ```sh
 COMPOSE="docker compose --env-file deploy/compose/.env.example -f deploy/compose/compose.yaml" \
   ./scripts/verify-readonly.sh
 ```
 
-## OCI Container Image Validation
+## OCI Image Validation
 
-`scripts/verify-rust-oci.sh` validates the Rust container image locally:
+`scripts/verify-rust-oci.sh` validates the container image locally:
 
 ```sh
 ./scripts/verify-rust-oci.sh
 CONTAINER_ENGINE=podman ./scripts/verify-rust-oci.sh
 ```
 
-It validates:
-- Non-root execution (UID 10001) without additional capabilities (`cap_drop: [ALL]`, `no-new-privileges: true`).
-- Read-only root filesystem (`read_only: true`).
-- Read-only library mount (`/library:ro`).
-- Data directory persistence (`/data`).
-- Healthcheck endpoint (`/api/healthz`).
+It checks:
+
+- Non-root execution (UID 10001), `no-new-privileges`, and all capabilities dropped.
+- A read-only root filesystem and a read-only `/library` mount.
+- A writable `/data` whose database survives a restart.
+- `/api/healthz` returns `{"status":"ok"}` with `no-store`, and the image `HEALTHCHECK` becomes healthy.
+- `/api/catalog` and `/api/media` return `401` without a session.
 
 ## Configuration Reference
 
-Native installations configure runtime options via environment variables or CLI flags:
-- `DATA_DIR`: SQLite database and course registry directory.
-- `CACHE_DIR`: Ephemeral cache directory.
-- `LISTEN_ADDR`: Listening network address.
-- `PORT`: HTTP port.
-- `ADMIN_USERNAME` / `ADMIN_PASSWORD` (or `ADMIN_USERNAME_FILE` / `ADMIN_PASSWORD_FILE`): Initial admin credentials.
-- A network listener requires explicit initial admin credentials. Loopback-only first startup may use the temporary `admin/admin` account, which must change its password before accessing protected endpoints.
-- `TRUSTED_PROXY_IPS`: Optional comma-separated IP addresses of reverse proxies trusted for login rate limiting. Only `X-Forwarded-For` is used; `X-Real-IP` is ignored. When the direct socket peer is trusted, the server walks the `X-Forwarded-For` chain right to left, skips addresses in `TRUSTED_PROXY_IPS`, and uses the first untrusted address. If no usable untrusted address is present, it uses the socket peer. Configure each trusted proxy to append the address it observed, and list every trusted hop; earlier client-supplied entries are ignored by this right-to-left resolution.
+Environment variables and CLI flags (a flag overrides its variable):
 
-WebDAV remote sources connect directly to the validated NAS address. The server ignores `HTTP_PROXY`,
-`HTTPS_PROXY` and `ALL_PROXY` for WebDAV source requests; configure network routing so the server can
-reach each source directly.
+| Variable | Flag | Default | Purpose |
+| --- | --- | --- | --- |
+| `LISTEN_ADDR`, `PORT` | `--listen-addr <ip:port>` | `127.0.0.1`, `8090` | Listening address |
+| `DATA_DIR` | `--database <file>` | `data` (database `data/learnvault.sqlite`) | Database and course registry location |
+| `LIBRARY_DIR` | `--library-root <dir>` | unset | Initial library seed (see [API reference](../reference/api.md#catalog-organization)) |
+| | `--web-root <dir>` | unset | Serve the SPA from this directory |
+| `ADMIN_USERNAME`, `ADMIN_PASSWORD` (or `*_FILE`) | `--admin-username` | unset | Initial admin credentials. There is no password flag. |
+| `COOKIE_SECURE` | `--insecure-http` | `true` | Session cookie `Secure` flag; the flag sets it to `false` for local HTTP only |
+| `LEARNVAULT_UPDATE_CHECK` | `--no-update-check` | on | Remote update check |
+| `TRUSTED_PROXY_IPS` | | empty | Reverse proxies trusted for client addresses (see below) |
 
-Course folders remain external and read-only across all platforms. Installers never copy course folders.
+A network listener requires explicit admin credentials. A loopback-only first start may use the temporary `admin/admin` account, which must change its password before reaching protected endpoints.
 
-## Reverse proxy and login rate limiting
+The server ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` for WebDAV remote sources and connects directly to the validated address, so the server must be able to reach each source without a proxy (see [Remote Course Sources](../reference/api.md#remote-course-sources-webdav-and-smb)).
 
-Login rate limiting is keyed on the client address. Behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy address(es) and make the proxy send `X-Forwarded-For` with the address it observed appended to the chain. The server reads only `X-Forwarded-For`, right to left, skips trusted proxy addresses, and uses the first untrusted one.
+Course folders stay external and read-only on every platform. Installers never copy them.
 
-> **Warning:** `X-Real-IP` is ignored. If the proxy only sets `X-Real-IP`, every client shares the proxy's rate-limit bucket.
+## Reverse Proxy and Login Rate Limiting
+
+Login rate limiting is keyed on the client address. Behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy address or addresses (comma-separated) and make the proxy append the address it observed to `X-Forwarded-For`. When the direct peer is trusted, the server walks the `X-Forwarded-For` chain right to left, skips trusted addresses, and uses the first untrusted one. If none is usable, it uses the socket peer. Client-supplied entries to the left of the first untrusted address are never used. List every trusted hop.
+
+> **Warning:** `X-Real-IP` is ignored. A proxy that sets only `X-Real-IP` puts every client in the proxy's rate-limit bucket.
 >
-> **Upgrading:** if you relied on `X-Real-IP` before, add `X-Forwarded-For` to the proxy configuration and keep the proxy address in `TRUSTED_PROXY_IPS`.
+> **Upgrading:** if you relied on `X-Real-IP`, add `X-Forwarded-For` to the proxy configuration and keep the proxy address in `TRUSTED_PROXY_IPS`.
 
 nginx, in the `location` that proxies to LearnVault:
 
@@ -172,7 +182,7 @@ nginx, in the `location` that proxies to LearnVault:
 proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 ```
 
-Caddy: `reverse_proxy` sends `X-Forwarded-For` by default, so no extra directive is needed for a directly exposed proxy. If another proxy or load balancer sits in front of Caddy, list it in `trusted_proxies` (global `servers` options) so Caddy keeps and appends to the incoming chain instead of replacing it.
+Caddy's `reverse_proxy` sends `X-Forwarded-For` by default. If another proxy or load balancer sits in front of Caddy, list it in `trusted_proxies` (global `servers` options) so Caddy appends to the incoming chain instead of replacing it.
 
 ```caddyfile
 example.com {
@@ -180,7 +190,7 @@ example.com {
 }
 ```
 
-Traefik appends the client address automatically. Only when Traefik itself is behind another trusted proxy, list that proxy under the entry point's forwarded headers (static configuration):
+Traefik appends the client address automatically. Only if Traefik itself sits behind another trusted proxy, list that proxy under the entry point's forwarded headers (static configuration):
 
 ```yaml
 entryPoints:
@@ -191,10 +201,10 @@ entryPoints:
         - "192.0.2.10/32"
 ```
 
-Replace the example addresses with your own, and check your proxy's documentation for the exact options in your version. List every trusted hop in `TRUSTED_PROXY_IPS`.
+Replace the example addresses with your own and check your proxy's documentation for the options in your version.
 
 ## Related Documentation
 
-- [Architecture Overview](../architecture/overview.md) for core, server, and desktop boundaries.
-- [Governance](../governance/overview.md) for contribution guidelines and CI checks.
-- [Requirements](../product/requirements.md) for functional and non-functional requirements.
+- [Architecture Overview](../architecture/overview.md): core, server, and desktop boundaries.
+- [Governance](../governance/overview.md): contribution guidelines and CI checks.
+- [Requirements](../product/requirements.md): functional and non-functional requirements.

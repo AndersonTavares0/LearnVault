@@ -1,36 +1,34 @@
 # API Reference
 
-The primary backend implementation is the Rust server (`crates/server`), exposing the HTTP endpoints below. The React SPA uses the same study and catalog contract across both HTTP and desktop IPC transports. All endpoints consume and produce JSON unless otherwise specified. Authentication is handled via an HttpOnly cookie session with `SameSite=Strict`.
+The Rust server (`crates/server`) exposes the HTTP endpoints below. The React SPA uses the same study and catalog contract over HTTP and over desktop IPC. Endpoints consume and produce JSON unless stated otherwise. Authentication uses an HttpOnly session cookie with `SameSite=Strict`.
 
-In the Rust server, each registered course directory remains under strict filesystem integrity control between administrative operations. The course registry is stored in `courses.json` alongside the database, and raw filesystem paths never cross the API boundary: clients receive only opaque course identifiers and sanitized titles. Rescans revalidate each root and reject detected tampering; however, concurrent alterations of symlinks or junctions by local users still depend on OS-level permissions.
+The course registry is stored in `courses.json` next to the database. Raw filesystem paths never cross the API boundary: clients receive only opaque course identifiers and sanitized titles. Rescans revalidate each root and reject detected tampering. A local user who swaps a symlink or junction concurrently is stopped only by OS-level permissions.
 
-The session cookie includes the `Secure` flag by default and is only transmitted over HTTPS. For local development without TLS, pass `--insecure-http`; this flag must never be used in production. State-mutating authentication endpoints require matching HTTP(S) Origin headers and `SameSite=Strict`.
+The session cookie has the `Secure` flag by default and travels only over HTTPS. For local development without TLS, pass `--insecure-http`; never use it in production. State-changing authentication endpoints require a matching HTTP(S) `Origin` header.
 
 ## SPA Delivery in Rust Server
 
-Static file serving is disabled by default. Pass `--web-root` pointing to the directory produced by the web build (`crates/server/web/build`), containing the `200.html` shell. Existing asset files are served directly; extensionless paths fall back to `200.html`; missing assets with file extensions return 404; `/api/*` endpoints never fall back to HTML. If the shell file is missing, the server returns 503. The shell is served with `Cache-Control: no-cache`; assets under `_app/immutable/` use immutable caching; SPA error responses use `no-store`. Directory validation never leaks local filesystem paths.
+Static serving is off by default. Pass `--web-root` with the web build directory (`crates/server/web/build`), which contains the `200.html` shell. Existing files are served directly, extensionless paths fall back to `200.html`, missing files with an extension return 404, and `/api/*` never falls back to HTML. A missing shell returns 503. The shell is served with `Cache-Control: no-cache`, assets under `_app/immutable/` are cached as immutable, and SPA error responses use `no-store`. Errors never reveal local filesystem paths.
 
 ## Health & Authentication Endpoints
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/healthz` | Public | Process and database readiness, including running version (`dev` on source builds) |
+| `GET` | `/api/healthz` | Public | Database readiness and running version: `{"status":"ok","version":"..."}` (`dev` on source builds) |
 | `POST` | `/api/login` | Public | Authenticates `{ "username": "...", "password": "..." }` |
 | `POST` | `/api/logout` | Session | Invalidates the active session |
 | `GET` | `/api/me` | Session | Returns current authenticated account details |
 | `POST` | `/api/account/credentials` | Session | Accepts `{ "current_password": "...", "username": "...", "password": "..." }`, updates credentials, revokes older sessions, and issues a new session |
 
-Readiness is checked on a separate read-only SQLite connection that waits at most 500 ms for lock contention, so a library scan or other write holding the writer lock never turns it into a `503`. A missing, unreadable or incompatible database still returns `503 {"status":"unavailable"}`. The response is `Cache-Control: no-store`.
+Readiness uses a separate read-only SQLite connection that waits at most 500 ms on a lock, so a library scan or other writer never turns it into a `503`. A missing, unreadable or incompatible database returns `503 {"status":"unavailable"}`. Responses carry `Cache-Control: no-store`.
 
-Initial bootstrap allows temporary credentials (`admin/admin`). The response marks `must_change_credentials: true`, and all protected endpoints return `403 credentials_change_required` until the password is changed.
+First start may create temporary credentials (`admin/admin`), and only when the server listens on a loopback address. The response then has `must_change_credentials: true`, and every protected endpoint returns `403 credentials_change_required` until the password changes. A non-loopback listener requires explicit bootstrap credentials, and a persisted administrator still marked for a credential change blocks network startup.
 
-Temporary credentials are created only when the server listens on a loopback address. A non-loopback listener requires explicit bootstrap credentials; a persisted administrator still marked for credential change also prevents network startup. Login rate limiting is keyed on the resolved client address: the socket peer by default, or the address resolved from `X-Forwarded-For` when that peer is listed in `TRUSTED_PROXY_IPS`. `X-Real-IP` is ignored. The server walks the `X-Forwarded-For` chain from right to left, skips addresses listed in `TRUSTED_PROXY_IPS`, and uses the first untrusted address; if none is available, it uses the socket peer. Configure every trusted proxy to append the address it observed and list every trusted hop, so client supplied entries to the left cannot select a limiter key.
+Login attempts are limited to 5 per 60 seconds per client address. The address is the socket peer or, when that peer is listed in `TRUSTED_PROXY_IPS`, the first untrusted address in `X-Forwarded-For` read right to left. `X-Real-IP` is ignored. Proxy setup is in [Distribution & Operations](../operations/distribution.md#reverse-proxy-and-login-rate-limiting).
 
 ## Database Compatibility & Migration
 
-The Rust server detects legacy database signatures (`users`, `sessions`, `schema_migrations`) before bootstrapping or running migrations. If detected, it exits with the message:
-`legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server`.
-It never creates `admin/admin` or overwrites existing data in this scenario. The `learnvault-server migrate-go` subcommand converts legacy databases with backup-first verification.
+Before bootstrapping or running migrations, the server checks for legacy Go database signatures (`users`, `sessions`, `schema_migrations`). If it finds them, it exits with `legacy_go_database_requires_migration: back up the database and migrate it before using the Rust server`. It does not create `admin/admin` or overwrite data. `learnvault-server migrate-go` converts a legacy database and takes a backup first (see [the migration guide](../operations/migration-go-to-rust.md)).
 
 ## Catalog, Courses & Media
 
@@ -51,30 +49,29 @@ It never creates `admin/admin` or overwrites existing data in this scenario. The
 
 ### Catalog Organization
 
-Module directories containing video files are presented as collapsible modules with one lesson per video. Complementary materials remain available in the module and matching subtitles remain associated with the lesson video. Natural sorting is applied to course paths (`2` precedes `10`).
+A module directory that contains videos becomes a collapsible module with one lesson per video. Other files in it stay available as materials, and matching subtitles stay with the lesson video. Course paths use natural sorting (`2` before `10`).
 
-Without registered courses, the catalog returns empty. `LIBRARY_DIR`/`--library-root` is the initial deployment seed: when no registry exists, each top-level folder under it is registered as a course, so a directory that holds one folder per course needs no manual import. A root that keeps media directly inside it is registered as a single course with the historical ID `library-1`. Seeding happens once; folders added later are imported by the administrator.
+With no registered courses, the catalog is empty. `LIBRARY_DIR` / `--library-root` seeds a new deployment once: when no registry exists, each top-level folder under it is registered as a course. A root that holds media directly is registered as one course with the historical ID `library-1`, and an empty root registers nothing. Administrators import folders added later.
 
-The scanner inspects directory metadata without traversing symbolic links. It ignores temporary download directories, detects media, subtitles, and documents, and only treats `.ts` files as video if their size exceeds 1 MiB (preventing collision with TypeScript files).
+The scanner reads directory metadata and does not follow symbolic links. It skips temporary download directories, detects media, subtitles and documents, and treats a `.ts` file as video only if it is larger than 1 MiB, so TypeScript files are not mistaken for video.
 
 ### Automatic Indexing
 
-The server indexes registered courses in the background, outside the request path. A filesystem watcher coalesces event bursts with a debounce, and a periodic reconciliation (five minutes) remains the portable fallback for network mounts where events are unreliable. Only one job runs at a time, and a manual rescan is deferred or rejected with `409` while it runs.
+The server indexes registered courses in the background, outside the request path. A filesystem watcher debounces bursts of events, and a reconciliation every five minutes covers network mounts where events are unreliable. One job runs at a time; a manual rescan is deferred or rejected with `409` while it runs.
 
-Each course is scanned without holding the database and applied in its own transaction; the database lock and the heavy-work permit are released between courses, so ordinary API requests are not blocked for the duration of the library. The job tracks idle/running/done/cancelled/error, file counts, course progress, timestamps, and a stable error code, exposed by `GET /api/indexing`. Cancellation stops before the next course and leaves the already committed courses intact.
+Each course is scanned without holding the database and applied in its own transaction. The database lock and the heavy-work permit are released between courses, so API requests are not blocked for the length of the library scan. `GET /api/indexing` exposes the job state, file counts, course progress, timestamps and a stable error code. Cancelling stops before the next course and keeps the courses already committed.
 
 Detection is incremental: a known path is compared by size and mtime, and a sampled SHA-256 (both ends plus the length) separates a real content change from a mere timestamp touch. A file that appears at an unknown path matches a missing row by content hash (or by size and mtime when the hash is unavailable) and keeps its `media_id`, notes, bookmarks, and progress; ambiguous matches are refused instead of guessed. Files that disappear are marked `availability: missing`; no scan deletes rows, notes, bookmarks, or progress history. The read-only guarantee is unchanged: the scanner and the hash only read course files.
 
-The desktop application does not run a background indexer; it keeps the explicit rescan command.
+The desktop app has no background indexer; it keeps the explicit rescan command.
 
-
-In the desktop app, `learnvault-media://localhost/<media-id>` delivers media and subtitle files using only opaque IDs. `GET` and `HEAD` support single ranges. On Windows, the SPA uses `http://learnvault-media.localhost/<media-id>`.
+In the desktop app, `learnvault-media://localhost/<media-id>` serves media and subtitle files by opaque ID. `GET` and `HEAD` support single ranges. On Windows the SPA uses `http://learnvault-media.localhost/<media-id>`.
 
 ### Custom Covers
 
-A custom cover is stored by the application—on the server in `covers/<id>.cover` (next to `courses.json`), and on desktop in the application data directory. Course folders remain read-only. Accepted formats are PNG, JPEG, and WebP, validated via magic bytes. Covers are written atomically via temporary files and `rename`.
+The application stores a custom cover itself: on the server in `covers/<id>.cover` next to `courses.json`, on desktop in the application data directory. Course folders stay read-only. PNG, JPEG and WebP are accepted, checked by magic bytes, and written atomically through a temporary file and `rename`.
 
-Top-level course nodes include `cover_version` when a cover exists, prompting the SPA to bust client cache via `?v=`. Missing covers or unknown course IDs return `404` with an empty body.
+Top-level course nodes carry `cover_version` when a cover exists, and the SPA appends it as `?v=` to bust its cache. A missing cover or unknown course ID returns `404` with an empty body.
 
 ## Remote Course Sources (WebDAV and SMB)
 
@@ -87,11 +84,12 @@ the `Authorization` header never reaches another host. `dav://` and `http://` se
 credentials without transport encryption, so use them only on a trusted private network; prefer
 `davs://`/`https://`. Link-local, multicast, broadcast and unspecified addresses
 (`169.254.0.0/16`, the IPv4 and IPv6 link-local ranges, `224.0.0.0/4`, `0.0.0.0/8`) are refused
-with `unsafe_source_target`, so a source can never point at a cloud metadata endpoint. Loopback and
-private LAN addresses stay usable, because a source on the same network is the normal deployment.
-WebDAV connections go directly to the validated source address; the server ignores `HTTP_PROXY`,
-`HTTPS_PROXY` and `ALL_PROXY` for these requests so a proxy cannot resolve the source hostname
-outside the address policy.
+with `unsafe_source_target`, so a source cannot point at a cloud metadata endpoint. The check
+applies to the addresses a hostname resolves to, not only to literal IPs. Loopback and private LAN
+addresses stay usable, because a source on the same network is the normal deployment. WebDAV
+connections go directly to the validated address, and the server ignores `HTTP_PROXY`,
+`HTTPS_PROXY` and `ALL_PROXY` for these requests, so a proxy cannot resolve the hostname outside
+the address policy.
 
 SMB sources use `smb://host[:port]/share/path`. The share is mandatory; `.`/`..` segments, encoded
 separators and control characters are rejected before they become a UNC path. The server is
@@ -179,36 +177,44 @@ the others are still applied and the request reports the failure, and the next s
 | --- | --- | --- | --- |
 | `GET` | `/api/study/capabilities` | Session | Returns supported study capabilities |
 | `GET` | `/api/study/recent` | Session | Returns recently studied lessons |
-| `GET` | `/api/study/progress/{course}/{lesson}` | Session | Returns `{ position_seconds, completed, updated_at }` |
-| `PUT` | `/api/study/progress/{course}/{lesson}` | Session | Updates playback position and completion status |
-| `GET` | `/api/study/summary` | Session | Returns daily study minutes, active streak, and weekly totals |
-| `POST` | `/api/study/focus` | Session | Records an idempotent focus session |
-| `POST` | `/api/study/rewards/claim` | Session | Claims daily mission or weekly goal XP rewards |
-| `GET` | `/api/study/rewards` | Session | Returns gamification state (XP ledger, level, streak, forest trees) |
-| `GET` | `/api/study/favorites` | Session | Lists bookmarked courses and lessons |
-| `PUT` | `/api/study/favorites/courses/{id}` | Session | Bookmarks a course |
-| `DELETE` | `/api/study/favorites/courses/{id}` | Session | Removes course bookmark |
-| `PUT` | `/api/study/favorites/lessons/{course}/{lesson}` | Session | Bookmarks a lesson |
-| `DELETE` | `/api/study/favorites/lessons/{course}/{lesson}` | Session | Removes lesson bookmark |
+| `GET` | `/api/study/progress?media_id=<id>` | Session | Returns the user's progress for one lesson; absent progress is returned as such, not as `404` |
+| `POST` | `/api/study/position` | Session | Records the resume position `{ "media_id", "position_seconds" }`; completion is preserved |
+| `POST` | `/api/study/completed` | Session | Sets completion `{ "media_id", "completed" }` |
+| `GET` | `/api/study/summary` | Session | Daily study minutes, active streak, and weekly totals |
+| `GET` | `/api/focus/sessions` | Session | Lists the user's focus sessions |
+| `POST` | `/api/focus/sessions` | Session | Records a focus session `{ id, kind, planned_seconds, actual_seconds, completed, started_at, ended_at }` |
+| `GET` | `/api/focus/summary` | Session | Focus totals, completion rate, best day, and per-day minutes |
+| `GET` | `/api/rewards/summary` | Session | XP, completed lessons, weekly goal, and daily missions |
+| `POST` | `/api/rewards/missions/{mission_id}/claim` | Session | Claims a daily mission reward; returns `{ "claimed": <bool> }` |
+| `GET`, `PUT` | `/api/rewards/weekly-goal` | Session | Reads the weekly goal, or sets it with `{ "weekly_goal": <n> }` |
+| `GET` | `/api/study/favorites` | Session | Lists favorite courses and lessons |
+| `POST` | `/api/study/favorites/course` | Session | Sets or clears a course favorite `{ "course_id", "favorite" }` |
+| `POST` | `/api/study/favorites/lesson` | Session | Sets or clears a lesson favorite `{ "media_id", "favorite" }` |
+| `GET`, `PUT` | `/api/player/preferences` | Session | Reads or writes the user's playback preferences |
 
 ## Notes & Flashcards
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
-| `GET` | `/api/study/notes` | Session | Lists study notes with optional course or lesson filters |
-| `POST` | `/api/study/notes` | Session | Creates a timestamped study note |
-| `PUT` | `/api/study/notes/{id}` | Session | Updates note text |
+| `GET` | `/api/study/notes` | Session | Lists the user's notes; `?media_id=` filters one lesson |
+| `POST` | `/api/study/notes` | Session | Creates a timestamped note `{ media_id, position_seconds, content }` |
+| `PUT` | `/api/study/notes/{id}` | Session | Updates note text `{ content }` |
 | `DELETE` | `/api/study/notes/{id}` | Session | Deletes a note |
-| `GET` | `/api/study/flashcards` | Session | Lists flashcard review deck |
-| `POST` | `/api/study/flashcards` | Session | Creates a spaced repetition flashcard |
+| `GET`, `POST` | `/api/study/bookmarks` | Session | Lists lesson bookmarks (`?media_id=`) or creates one `{ media_id, position_seconds, label }` |
+| `DELETE` | `/api/study/bookmarks/{id}` | Session | Deletes a bookmark |
+| `GET`, `POST` | `/api/study/pdf-annotations` | Session | Lists (`?media_id=`) or creates PDF highlights, underlines and notes `{ media_id, page, kind, color, rects, quote?, ... }` |
+| `PUT`, `DELETE` | `/api/study/pdf-annotations/{id}` | Session | Changes the color or note of an annotation, or deletes it |
+| `GET` | `/api/study/flashcards` | Session | Lists the user's flashcards; `?media_id=` filters one lesson |
+| `POST` | `/api/study/flashcards` | Session | Creates a spaced repetition flashcard `{ media_id, front, back, position_seconds? }` |
+| `PUT` | `/api/study/flashcards/{id}` | Session | Edits `{ front, back }`; the review schedule is kept |
 | `GET` | `/api/study/flashcards/due` | Session | Returns `{ "due": <n> }` for the session user's cards due now |
 | `GET` | `/api/study/flashcards/{id}/reviews?limit=<n>` | Session | Returns the card's recent reviews, newest first |
 | `POST` | `/api/study/flashcards/{id}/review` | Session | Records flashcard review grade and calculates next interval |
 | `DELETE` | `/api/study/flashcards/{id}` | Session | Deletes a flashcard |
 
-Creating a card accepts an optional `position_seconds` (the lesson moment it came from), returned on every card as `position_seconds`. A card stays linked to its lesson through `media_id`. Each review appends a row to the review history with the rating, the previous interval and the next due date, so the schedule and its history change in one transaction.
+A card may carry `position_seconds` (the lesson moment it came from), returned on every card, and stays linked to its lesson through `media_id`. Each review appends a history row with the rating, the previous interval and the next due date, in the same transaction that updates the schedule.
 
-The history endpoint is owner-scoped and read-only: `limit` defaults to 20 and is capped at `MAX_FLASHCARD_REVIEWS` (100). The response is `{ "items": [{ "review_id", "card_id", "rating", "previous_interval_days", "next_due", "reviewed_at" }], "total": <n> }`, where `total` counts the whole append-only log. The due count uses the same predicate as the review queue (`next_due <= now`) and only counts lessons the session user may still open; cards that were never reviewed are included.
+The history endpoint is owner-scoped and read-only. `limit` defaults to 20 and is capped at `MAX_FLASHCARD_REVIEWS` (100). The response is `{ "items": [{ "review_id", "card_id", "rating", "previous_interval_days", "next_due", "reviewed_at" }], "total": <n> }`, where `total` counts the whole append-only log. The due count uses the same predicate as the review queue (`next_due <= now`) and only counts lessons the session user may still open; cards that were never reviewed are included.
 
 ## Offline Sync
 
@@ -281,6 +287,21 @@ one device is not resurrected by an older operation that arrives later.
 An operation that references media the server does not know is still recorded in the log
 and applied when the media appears; media that exists but is outside the user's course access
 is refused as `404 media_not_found`. The push body accepts up to 200 operations and 4 MiB.
+
+## Users, Avatars, Backup & Updates
+
+| Method | Path | Auth | Purpose |
+| --- | --- | --- | --- |
+| `GET`, `POST` | `/api/admin/users` | Admin Session | Lists users, or creates one `{ username, password, allowed_course_ids? }` |
+| `PUT` | `/api/admin/users/{id}/courses` | Admin Session | Sets the courses a student may open |
+| `DELETE` | `/api/admin/users/{id}` | Admin Session | Deletes a user |
+| `GET`, `PUT`, `DELETE` | `/api/user/avatar` | Session | Reads, replaces (raw image body up to 2 MiB) or removes the user's avatar |
+| `PUT`, `DELETE` | `/api/admin/courses/{id}/order` | Admin Session | Saves or resets a manual lesson order for a course |
+| `GET` | `/api/admin/backup` | Admin Session | Downloads a transactional backup of the database |
+| `GET` | `/api/update` | Session | Update check result `{ current, enabled, available, latest, released_at, url, changelog, checked_at, error }`; `?force=1` bypasses the cache for administrators |
+| `GET` | `/api/update/history` | Admin Session | Entries the Compose updater wrote to `update-history.json` on the data volume |
+| `GET` | `/api/media/capabilities` | Session | Reports whether on-demand transcoding is available (`ffmpeg` found) |
+| `GET`, `HEAD` | `/api/media/transcode?course=...&path=...` | Session | Streams a transcoded lesson video; `start` seeks |
 
 ## Search
 
