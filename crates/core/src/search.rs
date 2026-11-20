@@ -25,6 +25,12 @@ pub const MAX_SEARCH_RESULTS: usize = 50;
 /// Most terms taken from one query. Extra terms are ignored.
 const MAX_QUERY_TERMS: usize = 8;
 
+const LESSON_CANDIDATE_PAGE_SIZE: usize = 200;
+
+/// Bounds classification when most FTS matches are non-media.
+/// Lessons ranked beyond this many candidates may be omitted.
+const MAX_LESSON_CANDIDATES: usize = 2_000;
+
 /// A note matched by the query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchNoteHit {
@@ -144,12 +150,7 @@ pub fn search(
 
     let mut lessons = Vec::new();
     {
-        // Over-fetch before classifying so non-media rows (markdown, subtitles, small .ts,
-        // showcase videos) do not starve the requested lesson limit.
-        const LESSON_OVERFETCH_FACTOR: usize = 4;
-        let fetch_limit = limit
-            .saturating_mul(LESSON_OVERFETCH_FACTOR)
-            .min(MAX_SEARCH_RESULTS * LESSON_OVERFETCH_FACTOR);
+        // Break rank ties by row ID so each page visits a distinct set of candidates.
         let mut statement = conn.prepare(&format!(
             "SELECT m.media_id, m.library_id, m.relative_path, m.size
              FROM media_fts
@@ -160,38 +161,52 @@ pub fn search(
                                 WHERE r.library_id = m.library_id
                                   AND r.media_id = m.media_id)
                AND {access_predicate}
-             ORDER BY rank
-             LIMIT ?4",
+             ORDER BY rank, media_fts.rowid
+             LIMIT ?4 OFFSET ?5",
             access_predicate = access_predicate("m.library_id"),
         ))?;
-        let rows = statement.query_map(
-            rusqlite::params![match_query, owner_id, is_admin, fetch_limit as i64],
-            |row| {
-                Ok((
-                    SearchLessonHit {
-                        media_id: row.get(0)?,
-                        course_id: row.get(1)?,
-                        relative_path: row.get(2)?,
-                    },
-                    row.get::<_, i64>(3)?,
-                ))
-            },
-        )?;
-        for row in rows {
-            let (hit, raw_size) = row?;
-            let Ok(size) = u64::try_from(raw_size) else {
-                continue;
-            };
-            let file_name = hit
-                .relative_path
-                .rsplit('/')
-                .next()
-                .unwrap_or(&hit.relative_path);
-            if crate::scanner::classify(file_name, size) == crate::scanner::MediaKind::Media {
-                lessons.push(hit);
-                if lessons.len() >= limit {
-                    break;
+        'pages: for offset in (0..MAX_LESSON_CANDIDATES).step_by(LESSON_CANDIDATE_PAGE_SIZE) {
+            let page_size = LESSON_CANDIDATE_PAGE_SIZE.min(MAX_LESSON_CANDIDATES - offset);
+            let rows = statement.query_map(
+                rusqlite::params![
+                    match_query,
+                    owner_id,
+                    is_admin,
+                    page_size as i64,
+                    offset as i64,
+                ],
+                |row| {
+                    Ok((
+                        SearchLessonHit {
+                            media_id: row.get(0)?,
+                            course_id: row.get(1)?,
+                            relative_path: row.get(2)?,
+                        },
+                        row.get::<_, i64>(3)?,
+                    ))
+                },
+            )?;
+            let mut candidates = 0;
+            for row in rows {
+                candidates += 1;
+                let (hit, raw_size) = row?;
+                let Ok(size) = u64::try_from(raw_size) else {
+                    continue;
+                };
+                let file_name = hit
+                    .relative_path
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&hit.relative_path);
+                if crate::scanner::classify(file_name, size) == crate::scanner::MediaKind::Media {
+                    lessons.push(hit);
+                    if lessons.len() == limit {
+                        break 'pages;
+                    }
                 }
+            }
+            if candidates < page_size {
+                break;
             }
         }
     }

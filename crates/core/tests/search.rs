@@ -343,3 +343,21 @@ fn lesson_search_respects_limit_after_filtering_non_media() -> TestResult {
     );
     Ok(())
 }
+
+#[test]
+fn lesson_search_finds_video_beyond_higher_ranked_markdown() -> TestResult {
+    let db = database()?;
+    insert_media(&db, "lesson", "Course/01 - Rust Basics.mp4")?;
+    for index in 0..201 {
+        insert_media(
+            &db,
+            &format!("doc-{index}"),
+            &format!("Rust Rust/{index}.md"),
+        )?;
+    }
+
+    let results = search(&db, "teacher", false, "rust", 1)?;
+    assert_eq!(results.lessons.len(), 1);
+    assert_eq!(results.lessons[0].media_id, "lesson");
+    Ok(())
+}
