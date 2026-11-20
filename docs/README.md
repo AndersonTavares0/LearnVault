@@ -7,10 +7,10 @@ The repository is the canonical source for all reviewed project documentation. S
 | [`architecture/`](architecture/) | System boundaries, data flow, IPC contracts, and ADRs |
 | [`design/`](design/) | Design system, visual tokens, and brand identity |
 | [`governance/`](governance/) | Repository policies, ownership, code conventions, and CI gates |
-| [`operations/`](operations/) | Deployment, container adapters, and release distribution targets |
+| [`operations/`](operations/) | Distribution, configuration, container adapters, Flatpak, rollback, and Go-to-Rust migration |
 | [`product/`](product/) | Product roadmap, requirements, and design philosophies |
-| [`releases/`](releases/) | Versioning schemes, changelog, and release procedures |
-| [`reference/`](reference/) | Stable API specifications and schemas |
+| [`releases/`](releases/) | Release process, published assets, changelog, and release notes template |
+| [`reference/`](reference/) | HTTP API reference |
 
 ## Contribution & Language Standards
 
