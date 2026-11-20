@@ -92,11 +92,14 @@ described below. The desktop application is single-user and has no accounts.
 - A sync pull applies the user's current course grants when it is served: operations on media of a
   course the user can no longer open are skipped, the cursor still advances past them, and a later
   re-grant makes them visible again to devices whose cursor has not passed them. Copies already pulled
-  to a device are not purged. Administrators see the whole journal (`crates/core`, `pull_operations_for_user`).
+  to a device are not purged. Administrators bypass the course filter, but a pull is still limited to the
+  caller's own journal and never returns the requesting device's own operations
+  (`crates/core`, `pull_operations_for_user`).
 - Admin-only operations: listing, creating, and deleting users, setting course access, catalog
   rescan, course import and removal, covers, manual ordering, media impact and removal, and database
   backup download. These check the admin role in the handler.
-- The update check requires a valid session. The SPA hides the update surface from non-admins.
+- The update status requires a valid session. Only administrators can force a refresh or read the update
+  history, and the SPA hides the update surface from non-admins.
 
 ## 5. Media and the course library
 
@@ -119,14 +122,12 @@ described below. The desktop application is single-user and has no accounts.
 - Remote sources (WebDAV, SMB) keep this contract: read-only access, credentials encrypted at
   rest, never logged, and never echoed back in API responses. WebDAV refuses cross-host redirects
   and SMB disables DFS referrals for the same reason: credentials must not follow a server-chosen
-  redirect to another host. Source URLs with a link-local, multicast, broadcast or unspecified
-  host are rejected (`unsafe_source_target`), and so are host names that resolve to such an address:
-  every returned address is checked, one denied address rejects the whole answer, and the connection
-  goes only to a validated address (IPv4 and IPv6, WebDAV and SMB). WebDAV keeps the URL host name for
-  TLS and `Host`, and ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY`, so a proxy cannot resolve the
-  name outside the policy. This keeps a source away from cloud metadata and
-  other non-library endpoints; private LAN and loopback addresses remain allowed by design, and
-  plain `http://`/`dav://` credentials are accepted with a warning in the admin UI.
+  redirect to another host. WebDAV and SMB reject IPv4 addresses in 0.0.0.0/8 and link-local, multicast,
+  broadcast, or unspecified addresses (`unsafe_source_target`). A host name is rejected if any address it
+  resolves to violates the policy, and the connection goes only to a validated address (IPv4 and IPv6).
+  WebDAV keeps the URL host name for TLS and `Host` and ignores `HTTP_PROXY`, `HTTPS_PROXY` and
+  `ALL_PROXY`, so a proxy cannot resolve the name outside the policy. Private LAN and loopback addresses
+  stay allowed by design, and plain `http://`/`dav://` credentials are accepted with a warning in the admin UI.
 - Course roots of a remote source (ADR 0004) keep the same boundary. Browsing a source and choosing
   its folders as courses is administrator-only (and same-origin for changes), lists one folder
   level per request and never writes to the source. A client path must be a clean relative path
@@ -147,8 +148,9 @@ described below. The desktop application is single-user and has no accounts.
   `apps/web-next/eslint.config.js`). Notes, titles, and file names render as text. Markdown is parsed
   into React elements by `apps/web-next/src/lib/markdown.ts`; there is no raw HTML rendering path.
 - There are no third-party requests: no CDN, web fonts, analytics, or telemetry. Fonts are bundled.
-  The browser makes no outbound request. The server's update check is on by default and is disabled with
-  `--no-update-check` or `LEARNVAULT_UPDATE_CHECK`.
+  The browser makes no outbound request. The server's update check is on by default. Disable it with
+  `--no-update-check` or `LEARNVAULT_UPDATE_CHECK=off` (`false` also works; unset or empty leaves it on).
+  The flag wins over the variable.
 - Browser storage holds preferences and caches only. Session tokens and secrets are never written to
   `localStorage`, `sessionStorage`, or IndexedDB.
 - URLs composed from user or file data are encoded, and external links use
@@ -166,8 +168,9 @@ described below. The desktop application is single-user and has no accounts.
   dialog, store, remote, or direct updater permission.
 - The study owner is fixed in Rust. IPC commands never accept an owner from the webview.
 - "Open in system player" accepts a media id only, never a path or URL.
-- The updater consumes a signed manifest; pre-releases are ignored, so a beta never moves a stable
-  installation.
+- The updater reads `latest.json` from GitHub Releases and verifies the downloaded update payload against
+  the bundled public key and the payload's detached signature. Pre-releases are ignored, so a beta never
+  moves a stable installation. Inside Flatpak the built-in updater is off.
 - The desktop database lives in the application data directory and is not shared with the server.
 - Rust makes two kinds of outbound request: the update manifest check and, if the user links a server,
   sync. The webview makes none. Sync calls one user-configured server over http(s), never disables TLS
@@ -190,12 +193,15 @@ described below. The desktop application is single-user and has no accounts.
 
 - `Cargo.lock` and `pnpm-lock.yaml` are committed and installs use frozen lockfiles. Rust and Node
   versions are pinned by `rust-toolchain.toml` and `packageManager`.
+- GitHub code scanning runs CodeQL for JavaScript and TypeScript through the repository's default setup
+  (no workflow file), on pull requests, pushes to the default branch, and a weekly schedule. The ruleset does
+  not require it.
 - CI runs dependency review on pull requests, `cargo audit --deny unsound`, and
   `pnpm audit --audit-level=low`.
-- Five advisories are accepted with a documented rationale:
+- Five audit exceptions are configured, each with a rationale and a removal condition:
   - `GHSA-g3hv-75wg-m249` (minimatch, dev tooling) is ignored in `pnpm-workspace.yaml`; forcing the
     patched major breaks `eslint-plugin-jsx-a11y`.
-  - `GHSA-gcqx-w48m-w2h4` (deepmerge) is ignored for a different reason: it is reachable only through the
+  - `GHSA-gcqx-w48m-w2h4` (deepmerge) is ignored: it is reachable only through the
     `shadcn` component CLI, no patched release exists, and it never reaches the shipped bundles.
   - `GHSA-fc5q-39xc-vjpf` (picomatch ReDoS, transitive through Vite and test tooling) is ignored in
     `pnpm-workspace.yaml`. `pnpm audit --prod` is clean, so it is not in a shipped bundle, and no patched

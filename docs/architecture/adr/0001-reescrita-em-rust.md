@@ -39,8 +39,8 @@ LearnVault becomes a Rust workspace:
 
 On 2026-10-19, issue #41 recorded the implementation phases as complete. PR #206 removed the Go
 service, and the explicit importer for legacy Go databases remains. The Tauri window and the IPC slices
-described in `docs/architecture/overview.md` are implemented. The Linux Flatpak shipped as a release asset
-in v0.9.5. Pending targets are listed in `docs/product/roadmap.md` and `docs/operations/distribution.md`.
+described in `docs/architecture/overview.md` are implemented. Flatpak bundles for amd64 and arm64
+first appeared in the v0.9.1 pre-release, and v0.9.5 was the first regular release to carry them. Pending targets are listed in `docs/product/roadmap.md` and `docs/operations/distribution.md`.
 
 Domain decisions that the rewrite keeps:
 
@@ -59,8 +59,9 @@ Domain decisions that the rewrite keeps:
 - Study state is identified by an opaque `owner_id`: the desktop uses a fixed local owner and the
   server uses the identifier of the authenticated user.
 
-Distribution: an NSIS installer on Windows; Flatpak as the preferred Linux format; an OCI image
-plus a native binary for self-hosted installation. One version per release.
+Distribution: an NSIS installer on Windows; **Flatpak as the preferred Linux format**, conditional at the
+time on technical validation of permissions, persistent access to libraries and media playback; an OCI
+image plus a native binary for self-hosted installation. One version per release.
 
 Execution happens in phases: governance, `crates/core`, `crates/server`, `apps/web/`,
 `crates/desktop` and distribution, with the removal of the Go service in its own pull request.
@@ -106,8 +107,11 @@ Execution happens in phases: governance, `crates/core`, `crates/server`, `apps/w
 
 ### Risks
 
-- **Flatpak packaging:** the sandbox grants no filesystem access, so the folder picker uses the
-  FileChooser portal and "open in system player" is not expected to work inside it
+- **Flatpak packaging:** treated as the preferred format, not the definitive one. It now ships, and CI
+  builds it, checks its permissions, starts it under a virtual display, and checks that the FileChooser and
+  OpenURI portals answer. CI does not import a course folder through the portal, play a lesson, or reopen the
+  app, so persistent folder access and real playback inside the sandbox are still unvalidated. The sandbox
+  grants no filesystem access, so "open in system player" does not work inside it
   ([details](../../operations/flatpak.md)).
 - **A single version across binaries:** it requires a single source of truth for the version
   number; the server version is already exposed in `--version` and `/api/healthz`.

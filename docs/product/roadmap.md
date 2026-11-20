@@ -27,7 +27,7 @@ Requirements are in [requirements.md](requirements.md); architecture is in
 - **Remote Sources:** WebDAV and SMB sources with administrator-chosen course folders ([ADR 0004](../architecture/adr/0004-remote-course-roots.md)), including automatic course detection.
 - **Desktop Sync:** optional link to a server account with an offline outbox; browser writes reach the desktop on pull, and a pull applies the user's current course grants ([ADR 0005](../architecture/adr/0005-sync-journal-for-browser-writes.md)).
 - **i18n:** runtime switch between English (default) and Brazilian Portuguese (`pt-BR`), remembered across reloads.
-- **Distribution:** Windows NSIS installer with a signed updater, Linux Flatpak desktop bundles (amd64, arm64; since v0.9.5, GitHub Releases only), Linux server tarballs, and OCI images, with verifiable `SHA256SUMS`.
+- **Distribution:** Windows NSIS installer with a signed updater, Linux Flatpak desktop bundles (amd64, arm64; first published in the v0.9.1 pre-release, in a regular release since v0.9.5; GitHub Releases only), Linux server tarballs, and OCI images on GHCR, with verifiable `SHA256SUMS`.
 
 ## In Progress: Polish & Production Quality
 

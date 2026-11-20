@@ -100,7 +100,7 @@ A PDF lesson (or a PDF material) opens in the app and is never written. The page
 
 - page, zoom and fit controls with keyboard shortcuts (arrows, Page Up/Down, Home/End, +/-);
 - search across every page, with previous/next result and a spoken summary;
-- marks on selected text: highlight (`h`), underline (`u`) and note (a button), in four colours chosen with a labelled radio group;
+- marks on selected text: highlight (`h`), underline (`u`) and note (a button), in four colours chosen with a labelled radio group. `n` and `p` move to the next or previous search result, or to a marked page when there is no search;
 - a note is written in a small form before it is saved (the server refuses empty notes);
 - a "Marks in this document" panel: show all or this page, edit each note, change its colour, jump to its page, delete it, or export every mark as Markdown.
 

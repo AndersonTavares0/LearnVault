@@ -24,12 +24,12 @@ LearnVault turns folders of course material into a study space with the structur
 
 ## Positioning
 
-A course platform for courses you already own, with study data kept on your own machine or server. A hosted platform cannot offer a library it never touches, accounts it does not hold, or an offline desktop build with no listening port.
+A course platform for courses you already own. LearnVault reads the folders in place and keeps study data on your own machine or server.
 
 ## Operating Context
 
 - Source material lives on the host filesystem as folders of modules and lessons. LearnVault reads it and never changes it.
-- The catalog is built by an explicit scan. A rescan adds new items, confirms existing ones, and marks vanished ones as missing without erasing study history.
+- The desktop catalog is built by an explicit scan. The server also indexes registered local courses automatically. A rescan adds new items, confirms existing ones, and marks vanished ones as missing without erasing study history.
 - Server: Rust (Axum) with SQLite, cookie sessions, range-request streaming, on-demand FFmpeg transcoding, and WebDAV and SMB sources. Desktop: Tauri 2 with local IPC and custom media schemes.
 - Docker, Podman and Compose are optional deployment adapters, never a runtime requirement.
 - The interface is English by default, with Brazilian Portuguese supported. The language is set in Settings.
@@ -43,7 +43,7 @@ Non-negotiable constraints:
 2. **Independent completion and position.** Marking a lesson complete never depends on where playback stopped.
 3. **No marketplace mechanics.** No prices, ratings, enrolment, certificates, leaderboards, coins or cloud tracking.
 4. **Privacy.** No third-party requests from the SPA, no telemetry, strict content security policy, Argon2id password hashes, random session tokens, nothing sensitive in browser storage.
-5. **Offline desktop.** The desktop webview makes no network requests. Rust makes two: the update check and, only if the user links a server, sync.
+5. **Offline desktop.** The desktop webview makes no network requests. Rust makes two kinds: the update check and, only if the user links a server, sync.
 6. **i18n.** Every user-facing string goes through `tr(en, ptBr)`.
 7. **Light gamification.** Habit and visible progress come first. Badges are quiet achievements.
 
@@ -63,7 +63,7 @@ The learner can customise the accent colour, surface palette, corners, density, 
 
 ## Evidence on Hand
 
-- `docs/design/research.md`, `decision.md` and `final-review.md` record reviews of earlier directions. No user research or user testing exists.
+- No user research or user testing exists.
 - There are no testimonials, customers or benchmarks, and none may be invented.
 - Accessibility has automated coverage (axe on the main routes with every accent preset), but no screen-reader or keyboard audit and no WCAG certification.
 - Demonstration courses are synthetic and generated locally. The repository holds no real course material.

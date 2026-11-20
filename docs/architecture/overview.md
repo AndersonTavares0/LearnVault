@@ -58,16 +58,17 @@ The workspace is `crates/core`, `crates/server` (Axum), `crates/desktop` (Tauri 
 - **Offline desktop:** opens the `main` window from `crates/desktop/tauri.conf.json`, with the SPA
   embedded through `frontendDist` and a custom titlebar. Import, removal, rescan, and study run
   through explicit IPC commands; the webview gets opaque identifiers, never filesystem paths. Course
-  registrations live in `library.json` in the app configuration directory. The webview CSP allows only
-  IPC. Rust makes two kinds of outbound request: the update check against GitHub Releases and, when
+  registrations live in `library.json` in the app configuration directory. The webview CSP allows bundled
+  assets, IPC, and the app's own media and cover schemes, and no remote origin. Rust makes two kinds of outbound request: the update check against GitHub Releases and, when
   the user links a server, sync ([ADR 0005](adr/0005-sync-journal-for-browser-writes.md)).
 - **Sync:** the desktop pushes its outbox and pulls other devices' operations over HTTP. The server
   journals browser writes as device `server`, so they reach desktops too, and a pull applies the
   user's current course grants.
 - **Media:** the desktop serves images, materials, video, audio, and subtitles through
   `learnvault-media://localhost/<media-id>` (`http://learnvault-media.localhost/<media-id>` on
-  Windows WebView2), with a type allowlist, range support, and response limits. Opening a file in the
-  system player goes through the confined opener. The server streams the same content over
+  Windows WebView2), with a type allowlist, range support, and response limits. Outside Flatpak, "open in system
+  player" validates the media with the confined opener and then hands a resolved path to the OS launcher;
+  the action is disabled inside Flatpak. The server streams the same content over
   `/api/media`, with on-demand FFmpeg remux and transcode for extended formats.
 - **Covers:** one image per course, up to 4 MiB, type checked by magic bytes, written atomically
   outside the course folder, versioned by `cover_version`. The desktop serves it through
@@ -83,8 +84,9 @@ The workspace is `crates/core`, `crates/server` (Axum), `crates/desktop` (Tauri 
 ### SPA
 
 Routes (hash router): `/` (My learning), `/course/:courseId/*` (course and lesson), `/progress`,
-`/review`, `/notes`, `/history`, `/settings`, and `/login` (server build only). Old `#/player/...`,
-`#/statistics`, and `#/focus` links redirect. The transport is chosen at compile time: HTTP for the
+`/review`, `/notes`, `/history`, `/settings`, and `/login` (server build only). `#/home` redirects to `#/`.
+Legacy `#/player/<course>/<lesson>` links resolve to the course route, and `#/statistics` and `#/focus` redirect
+to Progress. The transport is chosen at compile time: HTTP for the
 server, Tauri IPC for the desktop. Tailwind 4 and shadcn/ui primitives on Base UI provide the
 components. Design tokens live in `apps/web-next/src/styles/app.css`. Builds never load fonts,
 scripts, or stylesheets from a third party. See [DESIGN.md](../../DESIGN.md).
@@ -131,7 +133,9 @@ Changing an invariant needs a GitHub discussion first, not a code change.
   never resurrect removed media.
 - The path to each course is platform configuration, not catalog content. The registry is stored alongside
   the database on the server or in the desktop app's configuration directory.
-- Administrative actions are explicit. Nothing indexes or imports on its own, except the first-start seeding of an empty registry.
+- Imports and removals are explicit administrator actions. The server also indexes registered local courses
+  automatically (startup, filesystem events, a periodic interval), always with the rescan policy above. The
+  desktop rescans only on request.
 - Cache and derived media are ephemeral and kept strictly separated from durable database state.
 - Custom covers belong to the application. They are stored next to the database on the server or in the
   desktop data directory, limited to 4 MiB, checked by magic bytes, and written atomically. No course
