@@ -14,6 +14,7 @@
     "dev:next": "pnpm --filter learnvault-web-next dev",
     "verify": "node scripts/verify.mjs",
     "release:notes": "node scripts/release-notes.mjs",
+    "hygiene": "node --test scripts/repo-hygiene.test.mjs",
     "test:scripts": "node --test \"scripts/*.test.mjs\" \".opencode/plugins/*.test.mjs\"",
     "e2e:server": "pnpm run build && cargo build -p learnvault-server && pnpm exec playwright test"
   },
