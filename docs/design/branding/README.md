@@ -17,7 +17,7 @@ All brand assets are vector (`.svg`) and live here. The hygiene check refuses ra
 | `learnvault-icon.svg` | The full mark on a warm-ink tile: the app icon, and the source of `crates/desktop/icons/icon.png` and the 48 px and larger sizes of `icon.ico` |
 | `../../../apps/web-next/public/favicon.svg` | The reduced cut on the tile: the favicon, and the source of the 16 px and 32 px sizes of `icon.ico` |
 | `learnvault-seal.svg`, `learnvault-seal-dark.svg` | The mark inside a ring that reads LEARNVAULT · SAPERE AUDE, for large placements: the README, certificates, an About page |
-| `learnvault-banner.svg`, `learnvault-banner-light.svg` | The README header, for dark and light pages |
+| `learnvault-banner.svg`, `learnvault-banner-light.svg` | The README header. The light banner is the default image; the dark one is used when the reader prefers a dark theme |
 
 Text in every file is converted to outlines, so nothing depends on a font being installed. The lettering is Playfair Display, bold for the name and the ring, medium italic for the motto.
 
