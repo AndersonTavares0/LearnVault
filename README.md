@@ -30,9 +30,9 @@ You bought or downloaded a course, and it sits in a folder. A bare media player 
 
 | | |
 | :--- | :--- |
-| **Yours** | A private library on your own machine or home server. No telemetry, no third-party CDNs, no cloud dependency. Everything lives in one local SQLite file. |
+| **Yours** | A private library on your own machine or home server. The app ships its fonts and runs without a cloud account. Server update checks contact GitHub and can be disabled with `LEARNVAULT_UPDATE_CHECK=off`. Study records are stored locally in SQLite. Course files stay in their existing folders. |
 | **Untouched** | The course library is strictly read-only. LearnVault never modifies, renames, copies or moves your media files. |
-| **Moving forward** | Resume exactly where you stopped. A streak, a weekly goal and quiet badges make progress visible without turning study into a game. |
+| **Moving forward** | Resume exactly where you stopped. Set a weekly study goal and see your streak and badges in Progress. |
 | **Self-directed** | Nobody assigns the curriculum. You choose what to learn and when, with notes, search and spaced repetition to make it stick. |
 
 ### One engine, two ways to run it
@@ -50,20 +50,20 @@ Both ship the same React interface, in English (`en`, default) and Brazilian Por
 
 - **Playback controls:** persistent speed, keyboard shortcuts (`J`/`K`/`L`, `0-9`, `M`, `N`, `F`, `P`, `[`/`]`), Picture-in-Picture and automatic lesson advance.
 - **Timeline markers:** pins for your notes directly on the scrubber.
-- **Formats:** native playback, automatic WebVTT conversion for SubRip (`.srt`) subtitles, and on-demand FFmpeg remuxing for extended containers (`.mkv`, `.avi`, `.wmv`) and audio formats.
+- **Formats:** play browser-supported media directly. With FFmpeg installed, the server can convert other files on demand, keeping compatible video streams and encoding audio as AAC, with an H.264 fallback. The desktop app plays browser-supported formats directly and does not transcode. The web player converts `.srt` captions to WebVTT.
 - **PDF reader:** PDF lessons open in the app with search, highlights, underlines and notes. The file itself is never written.
 
 ### Notes and review
 
 - **Timestamped notes:** capture Markdown notes anchored to an exact moment. Clicking a note seeks the player to that instant.
 - **Search:** query lesson titles, module folders and notes across the whole catalog.
-- **Flashcards:** create cards per lesson and review them with spaced repetition. Rating a card Again brings it back in 10 minutes. Good doubles its interval, up to 365 days.
+- **Flashcards:** create flashcards for a lesson. Again schedules the card in 10 minutes. Good schedules it in one day when its interval is zero, then doubles the interval on later Good reviews, up to 365 days.
 
 ### Focus and habit
 
-- **Pomodoro timer:** focus and break sessions are saved with a stable key, so a repeated sync does not count a session twice.
-- **Study analytics:** daily focus minutes, completion streaks and weekly consistency.
-- 
+- **Pomodoro timer:** the timer tracks focus and breaks. Focus sessions keep the same ID when saving is retried, so each one counts once.
+- **Study analytics:** Progress shows focus minutes by day, your study-day streak and active days toward your weekly goal.
+
 ### Accounts and access
 
 - **Separate profiles:** each account keeps its own progress, notes, flashcard decks and focus stats.
@@ -79,17 +79,17 @@ Release assets are built automatically by GitHub Actions.
 | :--- | :--- | :--- | :--- | :--- |
 | **Windows** | Desktop application | Installer (`.exe`) | **Available** | Per-user NSIS package with a signed auto-updater |
 | **Linux** | Self-hosted server | Standalone tarball (`.tar.gz`) | **Available** | `amd64` and `arm64` binaries with the web app included |
-| **Any OS** | Containerized server | OCI image | **Available** | `linux/amd64` and `linux/arm64` on GHCR (`ghcr.io/andersontavares0/learnvault`), signed with cosign |
-| **Linux** | Desktop application | Flatpak bundle (`.flatpak`) | **Available** | `amd64` and `arm64`, attached to each GitHub Release. There is no store listing and the in-app updater is off. See [`docs/operations/flatpak.md`](docs/operations/flatpak.md) |
+| **Linux containers** (amd64 and arm64) | Containerized server | OCI image | **Available** | Published to GHCR (`ghcr.io/andersontavares0/learnvault`) and signed with cosign |
+| **Linux** | Desktop application | Flatpak bundle (`.flatpak`) | **Available** | Available as amd64 and arm64 bundles on GitHub Releases. Install a newer bundle to update. See [`docs/operations/flatpak.md`](docs/operations/flatpak.md) |
 
-Each release includes `SHA256SUMS` and `SHA256SUMS.sigstore.json`, a keyless cosign signature for the checksums. Verify a download with cosign v3 or newer:
+Releases that include `SHA256SUMS.sigstore.json` (v0.9.6 does; v0.9.4 and v0.8.0 do not) carry a keyless cosign signature for `SHA256SUMS`. Download both files and your asset from the same tag, then verify the signed manifest before checking the asset. This needs cosign v3 or newer:
 
 ```sh
 cosign verify-blob SHA256SUMS \
   --bundle SHA256SUMS.sigstore.json \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github[.]com/AndersonTavares0/LearnVault/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+|heads/main)$'
-sha256sum -c SHA256SUMS --ignore-missing
+  --certificate-identity-regexp '^https://github[.]com/AndersonTavares0/LearnVault/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+|heads/main)$' \
+  && sha256sum -c SHA256SUMS --ignore-missing
 ```
 
 Build provenance, the SBOM and the container image check are in [`docs/releases/process.md`](docs/releases/process.md).
@@ -109,15 +109,14 @@ services:
     container_name: learnvault
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8090:8090"
+      - "${BIND_ADDR:-127.0.0.1}:8090:8090"
     environment:
       - DATA_DIR=/data
       - LISTEN_ADDR=0.0.0.0
       - PORT=8090
       - LIBRARY_DIR=/library
-      - COOKIE_SECURE=false
       - ADMIN_USERNAME=admin
-      - ADMIN_PASSWORD=admin-change-me-promptly
+      - ADMIN_PASSWORD=replace-with-your-own-password
     volumes:
       - ./data:/data
       - /path/to/your/courses:/library:ro
@@ -127,9 +126,9 @@ services:
 docker compose up -d
 ```
 
-Open `http://localhost:8090`, sign in with the credentials above and change the administrator password in Account Settings. The library is mounted `:ro`, so the container cannot write to your courses.
+Choose your own administrator password before the first start. You can change it later in Settings > Account. The container runs as UID 10001, so make `./data` writable and the course folder readable by that user. The library is mounted `:ro`, so the container cannot write to your courses.
 
-Session cookies are `Secure` by default. `COOKIE_SECURE=false` lets sign-in work over plain HTTP, so remove it when you put the server behind HTTPS. The port is bound to `127.0.0.1`. Behind a reverse proxy, set `TRUSTED_PROXY_IPS` and make the proxy send `X-Forwarded-For`; see [Distribution and operations](docs/operations/distribution.md#reverse-proxy-and-login-rate-limiting).
+Open `http://localhost:8090` on the server. The port binds to `127.0.0.1` unless you set `BIND_ADDR`. `BIND_ADDR=0.0.0.0` is for LAN access and should sit behind the HTTPS reverse proxy in `deploy/`. Session cookies are `Secure` by default. If your browser rejects the Secure cookie on localhost, set `COOKIE_SECURE=false` for a loopback-only test. For login rate limiting behind a reverse proxy, list the proxy addresses in `TRUSTED_PROXY_IPS` and have each proxy append the address it saw to `X-Forwarded-For`; see [Distribution and operations](docs/operations/distribution.md#reverse-proxy-and-login-rate-limiting).
 
 Hardened Compose files, a reverse proxy with HTTPS and Podman Quadlet units are in [`deploy/`](deploy/README.md).
 
@@ -140,10 +139,12 @@ Hardened Compose files, a reverse proxy with HTTPS and Podman Quadlet units are 
 
 ```sh
 tar -xzf learnvault-linux-amd64.tar.gz
-./learnvault-linux-amd64 --web-root web --library-root /path/to/your/courses --insecure-http
+./learnvault-linux-amd64 --web-root web --library-root /path/to/your/courses
 ```
 
-The server listens on `127.0.0.1:8090`. A loopback-only first start uses the temporary account `admin` / `admin` and requires a new password before anything else. `--insecure-http` allows sign-in without HTTPS. Drop it behind a TLS proxy. Without `--web-root`, the server serves only the JSON API.
+The server listens on `127.0.0.1:8090`. On a fresh database, a loopback-only start with no bootstrap credentials creates a temporary `admin` / `admin` account. Sign in and change the password in Settings > Account to unlock the library. Pass `--web-root web` to serve the bundled interface; without it the server serves only the JSON API. For arm64, use `arm64` in both commands.
+
+For local HTTP testing, `--insecure-http` drops the Secure attribute from the session cookie. Keep Secure cookies enabled behind an HTTPS proxy.
 
 ### Option C: Windows desktop application
 
@@ -153,15 +154,13 @@ The server listens on `127.0.0.1:8090`. A loopback-only first start uses the tem
 
 ### Option D: Linux desktop application
 
-Download `learnvault-linux-desktop-amd64.flatpak` or `learnvault-linux-desktop-arm64.flatpak` from Releases, then run `flatpak install --user <file>`. The GNOME runtime comes from Flathub.
+Download `learnvault-linux-desktop-amd64.flatpak` or `learnvault-linux-desktop-arm64.flatpak` from the [Releases page](https://github.com/AndersonTavares0/LearnVault/releases), then run `flatpak install --user <file>`. The GNOME runtime comes from Flathub.
 
 ---
 
 ## The name and the mark
 
-A **vault** keeps something safe: here, your own library, read-only and private. An **academy** is where people study by their own initiative. Plato's Academy stood on a sacred olive grove outside Athens, and the Pythagoreans before him held a triangle of ten dots, the *tetractys*, as their sacred symbol.
-
-The mark is the **Academy Portico**: a Greek school front with a gold arched door. The motto is *Sapere aude*, "dare to know" (Horace, *Epistles*; Kant made it the motto of the Enlightenment). A few other lines from antiquity appear in the interface, each beside its translation:
+The mark is the **Academy Portico**: a Greek school front with a pediment, four columns and steps, and an arched door that stands for the vault. The door is gold. The motto is *Sapere aude*, "dare to know" (Horace, *Epistles*). A few other lines from antiquity appear in the interface, each beside its translation:
 
 | Where | Line | Meaning |
 | :--- | :--- | :--- |
