@@ -52,8 +52,8 @@ Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 com
   modify, and refactor code. Keep code clean, consistent with existing architecture, and focused on
   surgical changes without unnecessary refactorings or bloat.
 - The course library is strictly read-only: no change may write, move, rename, or copy original course files.
-- Release Please follows Conventional Commit version bumps before `1.0.0`: `feat:` increments the
-  minor version, `fix:` and `perf:` increment patch, and breaking changes increment minor. From
+- Release Please follows Conventional Commit version bumps before `1.0.0`: `feat:`, `fix:` and `perf:`
+  increment patch, and breaking changes increment minor (see `.agents/policies/releases.md`). From
   `1.0.0`, breaking changes increment major. Release tags and names use `vMAJOR.MINOR.PATCH`.
 - Release Please prepares one release PR on the first day of each month (UTC). Merge its
   release PR to publish; urgently needed security releases can prepare the release PR early by
