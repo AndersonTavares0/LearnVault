@@ -1,12 +1,12 @@
 # LearnVault — visual directions
 
-> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+> **Superseded in part (2026-11-11).** [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md) replaced the palette, themes, navigation and gamification described here (light and dark themes, Playfair Display and DM Sans, top navigation, no forest). Where they disagree with this file, they win. The file stays as history; its accessibility and security rules still apply.
 
 ## Scope and evidence
 
-Prototypes A/B/C were started as independent empty documents and compared on Library, Course and Player, desktop and mobile. The Open Design MCP was used to create/retrieve HTML artifacts; the observed integration does not expose a native vector canvas. The captures below are local renders of those artifacts in Chromium, with synthetic data. They prove the composition, not playback, persistence or product behavior.
+Prototypes A, B and C were started as independent empty documents and compared on Library, Course and Player, on desktop and mobile. They were HTML artifacts rendered in Chromium with synthetic data. They show composition, not playback, persistence or product behaviour.
 
-The verifiable research and the functional inventory are in [research.md](research.md). The weighted evaluation and the decision are in [decision.md](decision.md). The three initial concepts did not pass the threshold; K was chosen after later exploration and a documented independent critique.
+Research is in [research.md](research.md) and the weighted evaluation in [decision.md](decision.md). None of the three concepts passed the threshold. K was chosen after further exploration and an independent critique.
 
 ## A — Editorial library
 
@@ -34,11 +34,11 @@ The verifiable research and the functional inventory are in [research.md](resear
 
 ## K — linear course-platform flow
 
-K brings the navigation closer to familiar learning-platform patterns without incorporating a marketplace or cloud: compact topbar, short resume strip, catalog in shelves, a full course page with goals and curriculum, and a Player centred on a 16:9 stage. The identity uses a functional cobalt blue, saffron reserved for state, navy surfaces and a monochrome wordmark. The direction does not reuse the layout of the earlier concepts.
+K follows familiar learning-platform patterns without a marketplace or cloud: compact topbar, short resume strip, catalog in shelves, a full course page with goals and curriculum, and a player on a 16:9 stage. The identity used cobalt blue, saffron reserved for state, navy surfaces, and a monochrome wordmark. It reuses none of the earlier concepts' layouts.
 
 - **Selection:** the independent critique of candidate K v5 scored 4.05/5, above the 4.00 minimum and with no dimension below 3/5. The points and limits are in [decision.md](decision.md); they are not a user-testing result.
-- **Real implementation:** final screens, themes, viewports and states are formalized in [DESIGN.md](DESIGN.md) and [final-review.md](final-review.md).
+- **Implementation:** [final-review.md](final-review.md) records the K screens. K's palette is gone; [`DESIGN.md`](../../DESIGN.md) describes the current design.
 
 ## Completion criterion
 
-The direction is selected and implemented. The final refinement ended when the review of the captures found no visual P0/P1; limits that screenshots do not prove — testing with people, certified accessibility, persistence with real data and real playback — remain explicitly outside the claims.
+K was selected and implemented, and refinement ended when the capture review found no visual P0 or P1. Screenshots do not prove testing with people, certified accessibility, persistence with real data, or real playback, and none of those is claimed.
