@@ -38,6 +38,27 @@ describe('My learning', () => {
 		expect(screen.queryByText('No lessons found')).toBeNull();
 	});
 
+	it('reveals a large library in batches and focuses the first newly shown course', async () => {
+		const nodes = Array.from({ length: 500 }, (_, index) => {
+			const id = String(index).padStart(3, '0');
+			return course(id, `Course ${id}`, []);
+		});
+		renderApp('/', { catalog: { ...catalog, nodes } });
+
+		const courses = await screen.findByRole('region', { name: 'Your library' });
+		expect(within(courses).getAllByRole('heading', { level: 3 })).toHaveLength(60);
+		fireEvent.click(within(courses).getByRole('button', { name: 'Show more courses' }));
+		expect(within(courses).getAllByRole('heading', { level: 3 })).toHaveLength(120);
+		expect(document.activeElement).toBe(within(courses).getByRole('link', { name: 'Course 060' }));
+
+		const search = screen.getByRole('searchbox', { name: 'Search courses' });
+		fireEvent.change(search, { target: { value: 'Course 499' } });
+		expect(within(courses).getByRole('link', { name: 'Course 499' })).toBeTruthy();
+		expect(within(courses).queryByRole('button', { name: 'Show more courses' })).toBeNull();
+		fireEvent.change(search, { target: { value: '' } });
+		expect(within(courses).getAllByRole('heading', { level: 3 })).toHaveLength(60);
+	});
+
 	it('puts the last unfinished lesson first and shows course progress', async () => {
 		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r2', positionSeconds: 95, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		const resume = await screen.findByRole('region', { name: 'Continue learning' });
