@@ -23,7 +23,7 @@ If you are developing or studying the architecture, start with the [README](../.
 
 ### Update Notifications
 
-When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Local builds (`0.0.0`) skip remote checks.
+When enabled in configuration, the server queries the public GitHub Releases API over HTTPS and compares the latest stable tag with the local running version using strict SemVer. The check times out after 5 seconds, consumes at most 64 KiB, and caches results in-process for 1 hour. No binaries or files are ever downloaded or installed automatically. Source builds report the version `dev` (the manifest placeholder `0.0.0` is never shown) and skip remote checks.
 
 ### Desktop Automatic Update Checks
 
@@ -157,6 +157,41 @@ WebDAV remote sources connect directly to the validated NAS address. The server 
 reach each source directly.
 
 Course folders remain external and read-only across all platforms. Installers never copy course folders.
+
+## Reverse proxy and login rate limiting
+
+Login rate limiting is keyed on the client address. Behind a reverse proxy, set `TRUSTED_PROXY_IPS` to the proxy address(es) and make the proxy send `X-Forwarded-For` with the address it observed appended to the chain. The server reads only `X-Forwarded-For`, right to left, skips trusted proxy addresses, and uses the first untrusted one.
+
+> **Warning:** `X-Real-IP` is ignored. If the proxy only sets `X-Real-IP`, every client shares the proxy's rate-limit bucket.
+>
+> **Upgrading:** if you relied on `X-Real-IP` before, add `X-Forwarded-For` to the proxy configuration and keep the proxy address in `TRUSTED_PROXY_IPS`.
+
+nginx, in the `location` that proxies to LearnVault:
+
+```nginx
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+```
+
+Caddy: `reverse_proxy` sends `X-Forwarded-For` by default, so no extra directive is needed for a directly exposed proxy. If another proxy or load balancer sits in front of Caddy, list it in `trusted_proxies` (global `servers` options) so Caddy keeps and appends to the incoming chain instead of replacing it.
+
+```caddyfile
+example.com {
+	reverse_proxy 127.0.0.1:8090
+}
+```
+
+Traefik appends the client address automatically. Only when Traefik itself is behind another trusted proxy, list that proxy under the entry point's forwarded headers (static configuration):
+
+```yaml
+entryPoints:
+  websecure:
+    address: ":443"
+    forwardedHeaders:
+      trustedIPs:
+        - "192.0.2.10/32"
+```
+
+Replace the example addresses with your own, and check your proxy's documentation for the exact options in your version. List every trusted hop in `TRUSTED_PROXY_IPS`.
 
 ## Related Documentation
 

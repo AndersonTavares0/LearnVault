@@ -27,17 +27,19 @@ const ActiveSection = createContext('appearance');
 export function SettingsPage() {
 	const locale = useLocale();
 	const session = useSession();
-	const catalog = useCatalog();
 	const location = useLocation();
 	const user = session.data?.user;
 	const server = transportKind === 'http';
 	const admin = Boolean(user?.isAdmin);
+	// Until the temporary password is replaced every other request answers 403, so only the sign-in details stay open.
+	const locked = server && Boolean(user?.mustChangeCredentials);
+	const catalog = useCatalog(!locked);
 
 	// One section at a time keeps the page short. `#/settings#focus` (from the Pomodoro dialog) opens that section.
 	const [picked, setPicked] = useState({ hash: location.hash, id: '' });
 	const setActive = (id: string) => setPicked({ hash: location.hash, id });
 
-	const sections = [
+	const allSections = [
 		{ id: 'appearance', label: tr('Appearance', 'Aparência'), icon: Palette },
 		{ id: 'profile', label: tr('Profile', 'Perfil'), icon: UserRound },
 		...(studySyncSupported ? [{ id: 'study', label: tr('Study', 'Estudo'), icon: BookOpen }] : []),
@@ -47,8 +49,9 @@ export function SettingsPage() {
 		...(server && admin ? [{ id: 'users', label: tr('Users', 'Usuários'), icon: Users }, { id: 'sources', label: tr('Remote sources', 'Fontes remotas'), icon: Server }, { id: 'backup', label: tr('Backup', 'Backup'), icon: Database }] : []),
 		{ id: 'about', label: tr('About', 'Sobre'), icon: Info }
 	];
+	const sections = locked ? allSections.filter((section) => section.id === 'profile') : allSections;
 	const requested = picked.id && picked.hash === location.hash ? picked.id : location.hash.slice(1) || 'appearance';
-	const active = sections.some((section) => section.id === requested) ? requested : 'appearance';
+	const active = sections.some((section) => section.id === requested) ? requested : sections[0].id;
 
 	return (
 		<ActiveSection.Provider value={active}>
@@ -94,7 +97,7 @@ export function SettingsPage() {
 			</Section>
 			{server && user && (
 				<Section id="profile" title={tr('Profile', 'Perfil')} description={tr(`Signed in as ${user.username}${admin ? ' (administrator)' : ''}.`, `Conectado como ${user.username}${admin ? ' (administrador)' : ''}.`)}>
-					<AvatarSettings user={user} />
+					{!locked && <AvatarSettings user={user} />}
 					<h3 className="pt-2 font-medium">{tr('Sign-in details', 'Dados de acesso')}</h3>
 					<CredentialsForm user={user} />
 				</Section>

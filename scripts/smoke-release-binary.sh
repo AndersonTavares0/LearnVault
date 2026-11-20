@@ -20,7 +20,8 @@ if [[ ! -d "$web_root" ]]; then
 fi
 # Release builds inject LEARNVAULT_BUILD_VERSION="$RELEASE_TAG" verbatim (preserving any leading 'v').
 # Accept either vX.Y.Z or bare X.Y.Z as expected_tag, and require the binary to report that exact string.
-if [[ ! "$expected_tag" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+# The literal "dev" is also accepted: source builds without an injected version report it.
+if [[ "$expected_tag" != "dev" && ! "$expected_tag" =~ ^v?(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
   echo "::error::Unexpected expected_tag format: $expected_tag" >&2
   exit 2
 fi

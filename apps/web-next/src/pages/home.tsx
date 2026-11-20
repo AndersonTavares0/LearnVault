@@ -19,7 +19,7 @@ import { buildLibrary, type CourseEntry, type LibraryFilter, type ResumeEntry } 
 import { LIBRARY_VIEW_STORAGE_KEY, parseLibraryView, persistLibrarySort, persistLibraryView, readLibrarySort, type LibrarySort, type LibraryView } from '@/lib/library-view';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findLessonLocation, href, type LessonLocation } from '@/lib/router';
-import { transportKind, type Catalog, type RewardSummary } from '@/lib/transport';
+import { isCredentialsChange, transportKind, type Catalog, type RewardSummary } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { refreshMessage } from '@/lib/library-refresh';
 import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRewards, useSession } from '@/app/data';
@@ -396,8 +396,7 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 	const [importPath, setImportPath] = useState('');
 	const [importError, setImportError] = useState('');
 	const failure = (error: unknown) => {
-		const code = error instanceof Error ? error.message : '';
-		if (code === 'credentials_change_required') return tr('Change your password on the server before managing courses.', 'Troque sua senha no servidor antes de gerenciar cursos.');
+		if (isCredentialsChange(error)) return tr('Change your password on the server before managing courses.', 'Troque sua senha no servidor antes de gerenciar cursos.');
 		// The transport already worded these two for the user; any other error stays generic.
 		if (error instanceof Error && (error.name === 'NoCoursesError' || error.name === 'RescanBusyError')) return error.message;
 		return tr('The library action failed. Try again.', 'A ação da biblioteca falhou. Tente novamente.');

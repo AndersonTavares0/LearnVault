@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { tr } from '@/lib/i18n';
-import { transport, transportKind } from '@/lib/transport';
+import { isCredentialsChange, transport, transportKind } from '@/lib/transport';
 import { updateMessage, updateOutcome, updateReleaseUrl } from '@/lib/update';
 
 const ERROR_CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
@@ -9,7 +9,7 @@ const ERROR_CODE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$/;
 /** Maps transport error identifiers to localized text; messages already localized pass through. */
 function updateErrorText(error: Error | null): string | null {
 	if (!error) return null;
-	if (error.message === 'credentials_change_required') {
+	if (isCredentialsChange(error)) {
 		return tr('Change your password on the server before checking for updates.', 'Troque sua senha no servidor antes de verificar atualizações.');
 	}
 	if (ERROR_CODE.test(error.message)) {

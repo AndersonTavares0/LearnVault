@@ -165,6 +165,8 @@ jobs:
         run: |
           set -euo pipefail
           expected_version="$(cargo metadata --no-deps --format-version=1 | jq -r '.packages[] | select(.name == "learnvault-server") | .version')"
+          # Source builds report "dev" instead of the manifest placeholder 0.0.0.
+          if [ "$expected_version" = "0.0.0" ]; then expected_version=dev; fi
           ./scripts/smoke-release-binary.sh ./target/debug/learnvault-server "$expected_version" crates/server/web/build
       - name: Install system ffmpeg for transcoding E2E
         timeout-minutes: 4

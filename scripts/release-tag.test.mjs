@@ -190,6 +190,13 @@ test('release binary smoke retries only transient health readiness failures', ()
     assert.match(smoke, /curl -sS -o "\$smoke_dir\/login\.json"/);
 });
 
+test('source builds report dev and only the literal dev bypasses the SemVer check', () => {
+    const smoke = readFileSync(join(root, 'scripts/smoke-release-binary.sh'), 'utf8');
+    assert.match(smoke, /"\$expected_tag" != "dev" && ! "\$expected_tag" =~ \^v\?/);
+    const ci = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
+    assert.match(ci, /if \[ "\$expected_version" = "0\.0\.0" \]; then expected_version=dev; fi/);
+});
+
 test('real-server CI smoke runs after the SPA build and retains Playwright cache and ffmpeg setup', () => {
     const ci = readFileSync(join(root, '.github/workflows/ci.yml'), 'utf8');
     const e2eStart = ci.indexOf('  e2e-server:');
