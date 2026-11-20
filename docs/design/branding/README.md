@@ -32,7 +32,7 @@ Text in every file is converted to outlines, so nothing depends on a font being 
 | Gold on dark | `#E0A83E` | The door and the dot on dark surfaces. 8.3:1 on warm ink |
 | Gold on light | `#A8761F` | The door and the dot on light surfaces. 3.5:1 on cream |
 
-The gold on light surfaces is for graphics. At 3.5:1 it passes as a graphic (3:1) but is too faint for small text, so text is always ink.
+The gold on light surfaces is for graphics. At 3.5:1 it passes as a graphic (3:1) but is too faint for small text, so text is ink. The one exception is the light README banner, where the tagline is muted ink `#5E5143` (6.7:1 on cream) and the motto is dark brass `#795514` (5.8:1, the `reward` text token in `DESIGN.md`). Both pass 4.5:1. The bright gold is never used for text.
 
 In the app, the stone follows the text colour (`text-foreground`) and the door follows the reward colour, which is these same golds. The default accent is the Ink preset. See `DESIGN.md` for the tokens.
 
