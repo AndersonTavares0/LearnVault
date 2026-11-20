@@ -79,6 +79,22 @@ describe('lesson page', () => {
 		expect(Boolean(screen.queryByRole('button', { name: 'Open in system player' }))).toBe(systemPlayer === true);
 	});
 
+	it('hides the system player hint and action while capabilities are loading', async () => {
+		vi.mocked(transport.mediaCapabilities).mockImplementation(() => new Promise(() => {}));
+		vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(null, { status: 200 }));
+		const course = { ...catalog.nodes[0], children: [lesson('One', [media('one.mkv')])] };
+		const { client } = renderApp('/course/c/c%2FOne', { catalog: { ...catalog, nodes: [course] } });
+		const video = await screen.findByLabelText('Lesson player: One');
+
+		Object.defineProperty(video, 'error', { value: { code: 4 }, configurable: true });
+		fireEvent.error(video);
+		const alert = within(await screen.findByRole('alert'));
+		expect(alert.getByText('This media format or codec is not supported here.')).toBeTruthy();
+		expect(client.getQueryState(['media-capabilities'])?.status).toBe('pending');
+		expect(alert.queryByText(/the system player/)).toBeNull();
+		expect(alert.queryByRole('button', { name: 'Open in system player' })).toBeNull();
+	});
+
 	it('opens the module that holds the lesson even when module and lesson paths differ', async () => {
 		// A course picked inside a remote source: the module path is relative to the course, the lesson keeps the source path.
 		const module = (title: string, lessons: CatalogNode[]): CatalogNode => ({ title, path: title, role: 'module', files: [], looseFiles: [], children: lessons });

@@ -243,8 +243,8 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		try {
 			const opened = await transport.openInSystemPlayer(playable);
 			setNotice(opened ? tr('Opened in your system media player.', 'Aberto no player de mídia do sistema.') : '');
-		} catch {
-			setNotice(tr('Could not open the system player.', 'Não foi possível abrir o player do sistema.'));
+		} catch (cause) {
+			setNotice(cause instanceof Error ? cause.message : tr('Could not open the system player.', 'Não foi possível abrir o player do sistema.'));
 		}
 	};
 	const retry = () => {
@@ -285,7 +285,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const errorMessage = useMemo(() => {
 		if (serverBusy) return [tr('The server is busy right now.', 'O servidor está ocupado agora.'), tr('Too many streams are open or the server is under load. Wait a moment and try again; nothing is lost.', 'Há muitas reproduções abertas ou o servidor está sobrecarregado. Espere um momento e tente de novo; nada foi perdido.')];
 		if (errorCode === 4) {
-			const suggestSystemPlayer = capabilities.data?.systemPlayer !== false && requiresTranscodingProbe(playable?.name ?? '');
+			const suggestSystemPlayer = capabilities.data?.systemPlayer === true && requiresTranscodingProbe(playable?.name ?? '');
 			return [
 				tr('This media format or codec is not supported here.', 'Este formato ou codec de mídia não é suportado aqui.'),
 				suggestSystemPlayer

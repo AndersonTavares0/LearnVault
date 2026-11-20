@@ -18,6 +18,16 @@ describe('transport contract', () => {
 		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'search', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'syncState', 'syncConfigure', 'syncSignIn', 'syncSignOut', 'syncNow', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'downloadUpdate', 'restartToUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
 		expect(methods).toHaveLength(59);
 	});
+	it('does not advertise the system player over HTTP', async () => {
+		const fetchMock = vi.fn().mockResolvedValue(Response.json({ transcoding: true, systemPlayer: true }));
+		vi.stubGlobal('fetch', fetchMock);
+		try {
+			await expect(new HttpTransport().mediaCapabilities()).resolves.toEqual({ transcoding: true, supportedCodecs: [] });
+			expect(fetchMock).toHaveBeenCalledWith('/api/media/capabilities');
+		} finally {
+			vi.unstubAllGlobals();
+		}
+	});
 	it('tells a rate-limited sign-in apart from wrong credentials', async () => {
 		vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 429 })));
 		await expect(new HttpTransport().login('admin', 'x')).rejects.toThrow(/(Too many sign-in attempts|Muitas tentativas)/);
@@ -896,6 +906,17 @@ describe('desktop transport over IPC', () => {
 		vi.mocked(invoke).mockResolvedValue({ video_speed: 100, audio_speed: 100, subtitle_language: '', updated_at: 11 });
 		await expect(new DesktopStub().getPlaybackPreferences()).resolves.toEqual({ videoSpeed: 1, audioSpeed: 1, subtitleLanguage: '' });
 		expect(invoke).toHaveBeenLastCalledWith('desktop_playback_preferences');
+	});
+
+	it.each([
+		['en', 'Opening media in the system player is unavailable in Flatpak.'],
+		['pt-BR', 'Não é possível abrir a mídia no player do sistema no Flatpak.']
+	] as const)('translates the Flatpak system player error (%s)', async (locale, message) => {
+		setLocale(locale);
+		vi.mocked(invoke).mockRejectedValueOnce({ code: 'system_player_unavailable', message: 'system_player_unavailable' });
+
+		await expect(new DesktopStub().openInSystemPlayer({ name: 'lesson.mp4', path: 'lesson.mp4', size: 1, mediaId: 'm1' })).rejects.toMatchObject({ message });
+		expect(invoke).toHaveBeenLastCalledWith('desktop_open_in_system_player', { mediaId: 'm1' });
 	});
 
 	it('maps each stable desktop study error code to a sanitized message', async () => {

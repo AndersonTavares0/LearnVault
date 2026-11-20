@@ -1612,6 +1612,7 @@ function desktopErrorMessage(code: string): string | null {
 		case 'rescan_unavailable': return tr('Could not index courses.', 'Não foi possível indexar os cursos.');
 		case 'study_unavailable': return tr('Could not synchronize study progress.', 'Não foi possível sincronizar o progresso de estudo.');
 		case 'media_not_found': return tr('Media not found.', 'Mídia não encontrada.');
+		case 'system_player_unavailable': return tr('Opening media in the system player is unavailable in Flatpak.', 'Não é possível abrir a mídia no player do sistema no Flatpak.');
 		case 'invalid_position': return tr('Invalid position.', 'Posição inválida.');
 		case 'course_not_found': return tr('Course not found.', 'Curso não encontrado.');
 		case 'invalid_cover': return tr('The cover must be PNG, JPEG or WebP up to 4 MiB.', 'A capa precisa ser PNG, JPEG ou WebP de até 4 MiB.');
@@ -1969,7 +1970,11 @@ export class DesktopStub implements Transport {
 		if (!file.mediaId) return false;
 		try {
 			return await invoke<boolean>('desktop_open_in_system_player', { mediaId: file.mediaId });
-		} catch {
+		} catch (cause) {
+			const payload = cause as { code?: unknown } | null;
+			if (payload?.code === 'system_player_unavailable') {
+				throw desktopError(cause, tr('Could not open the system player.', 'Não foi possível abrir o player do sistema.'));
+			}
 			return false;
 		}
 	}
