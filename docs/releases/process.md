@@ -100,7 +100,7 @@ Verify an image before deploying it:
 ```sh
 cosign verify ghcr.io/andersontavares0/learnvault:<tag> \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github[.]com/AndersonTavares0/LearnVault/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+(-rc[.](0|[1-9][0-9]*))?|heads/main)$'
+  --certificate-identity-regexp '^https://github[.]com/AndersonTavares0/LearnVault/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+|heads/main)$'
 ```
 
 Provenance and the SBOM are attached to the same digest; inspect them with `docker buildx imagetools inspect ghcr.io/andersontavares0/learnvault:<tag>`.
