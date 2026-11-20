@@ -1,8 +1,8 @@
 # Visual direction decision
 
-> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+> **Superseded in part (2026-11-11).** [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md) replaced the palette, themes, navigation and gamification described here (light and dark themes, Playfair Display and DM Sans, top navigation, no forest). Where they disagree with this file, they win. The file stays as history; its accessibility and security rules still apply.
 
-> **Brand superseded (2026-11).** The LV monogram mentioned below was replaced by the Academy Portico mark and the *Sapere aude* motto; see the Brand section of [`DESIGN.md`](../../DESIGN.md) and [`branding/`](branding/).
+> **Brand superseded (2026-11).** The Academy Portico mark and the *Sapere aude* motto replaced the LV monogram mentioned below. See the Brand section of [`DESIGN.md`](../../DESIGN.md) and [`branding/`](branding/).
 
 ## Criterion
 
@@ -45,10 +45,10 @@ The independent critique of candidate K v5 scored:
 
 ## Reasons for the selection
 
-- It balances familiarity with a course platform and an identity of its own, without importing marketplace affordances that do not belong to the local library.
+- It is familiar from course platforms but has its own identity, and it leaves out marketplace features that do not fit a local library.
 - It puts the next step and resuming before metrics, preserves the course → lesson → progress context and keeps the 16:9 stage as the Player's main area.
 - Cobalt indicates action; saffron indicates position/state. The LV wordmark is monochrome and discreet.
-- The interface is in pt-BR; titles and descriptions supplied by the files keep their original language and receive a contextual label.
+- The interface was in pt-BR at the time. Titles and descriptions from the files keep their original language.
 - The K v7 implementation and the token system are formalized in [DESIGN.md](DESIGN.md); the evidence of the final review is recorded in [final-review.md](final-review.md).
 
 ## Accepted risks and limits
@@ -72,11 +72,11 @@ records above stay as history.
 
 L keeps K's product stance (local-first, no marketplace, ratings, or enrollment). It changes:
 
-- **Navigation.** A topbar holds the four global destinations: My learning, Progress, Notes, and the account menu. A curriculum sidebar appears only inside the course page and the player. Mobile uses a bottom tab bar. Research behind this choice: course platforms keep curriculum and completion next to the lesson, and Open edX is restoring the course sidebar it removed in 2017.
-- **Palette.** We use ready-made shadcn/ui themes built on the Tailwind palette instead of custom tokens. The default is **Stone + Emerald**; users can switch to **Zinc + Teal** or **Zinc + Indigo** under Settings → Appearance. Pure blue and purple accents are avoided because they read as other platforms' brands.
+- **Navigation.** A topbar holds the global destinations (today My learning, Review, Progress, and Notes) and the account menu. A curriculum sidebar appears only inside the course page and the player. Mobile uses a bottom tab bar. Research behind this choice: course platforms keep curriculum and completion next to the lesson, and Open edX is restoring the course sidebar it removed in 2017.
+- **Palette (superseded).** L started from shadcn/ui themes (Stone + Emerald by default, Zinc + Teal, Zinc + Indigo). The shipped palette is the warm one in [`DESIGN.md`](../../DESIGN.md), with eight surfaces and nine accent presets.
 - **Gamification.** Habit and visible progress come first: a forgiving streak, the weekly goal, per-course progress, and the next lesson one click away. XP, levels, and achievements stay on the Progress screen. The forest, island, and nursery are removed.
 - **Accessibility and security** are written requirements. See [accessibility.md](accessibility.md) and [security.md](security.md).
 
-The screen-level spec lives in [redesign.md](redesign.md). It becomes `DESIGN.md` at cutover.
+The screen-level spec is in [redesign.md](redesign.md); `DESIGN.md` replaced it at cutover.
 
-**Gate.** L is scored with the same rubric and threshold (weighted ≥ 4.00, no dimension below 3). The scoring is done by a blind critique of the implemented React screens before cutover (#340), not of mockups. Until then L is the approved working direction, and `DESIGN.md` describes what currently ships.
+**Gate.** L was to be scored with the same rubric and threshold (weighted ≥ 4.00, no dimension below 3), by a blind critique of the implemented React screens before cutover (#340). No L score is recorded in this repository. The cutover is complete and `DESIGN.md` describes what ships.

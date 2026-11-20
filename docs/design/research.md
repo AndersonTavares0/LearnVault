@@ -1,12 +1,12 @@
 # Design research: reworking LearnVault
 
-> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+> **Superseded in part (2026-11-11).** [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md) replaced the palette, themes, navigation and gamification described here (light and dark themes, Playfair Display and DM Sans, top navigation, no forest). Where they disagree with this file, they win. The file stays as history; its accessibility and security rules still apply.
 
 This document is a summary of references, not an interface specification. The LearnVault requirements below describe the truth of the product; product/vendor documentation supports the claims about those products; gallery pages are only visual examples and do not establish interaction behavior. No screenshot was copied, and no testing or evaluation by users was carried out. Access was verified on public pages/material indexed by search engines on 2026-10-29; some screens may require an account, subscription, application or region-specific access.
 
 ## Product constraints (with sources)
 
-LearnVault indexes, in read-only mode, course folders that belong to the user, keeps a catalog tree and only scans when the user explicitly asks; a new scan marks missing media without deleting records or study progress. Study progress includes a resume position, completion independent of position and recent history. Desktop mode is for a single user and works offline, with folder selection through a native picker and no login/network ports; server mode has a local-account login. The study interface includes course/lesson navigation, playback, resume, empty/error states, focus/Pomodoro, statistics and settings as product features to keep. These are product requirements, not references to the legacy interface: [requirements RF-01–10, RNF-01–09](../product/requirements.md#requisitos-funcionais), [roadmap](../product/roadmap.md). The requirements also demand keyboard navigation, visible focus, contrast, reduced motion and screen-reader labels [RNF-08](../product/requirements.md#requisitos-n%C3%A3o-funcionais). Do not use existing LearnVault screens, old design files or earlier prototypes as a model for the new visual direction.
+LearnVault indexes, in read-only mode, course folders that belong to the user, keeps a catalog tree and only scans when the user explicitly asks; a new scan marks missing media without deleting records or study progress. Study progress includes a resume position, completion independent of position and recent history. Desktop mode is for a single user and works offline, with folder selection through a native picker and no login/network ports; server mode has a local-account login. The study interface includes course/lesson navigation, playback, resume, empty/error states, focus/Pomodoro, statistics and settings as product features to keep. These are product requirements, not references to the legacy interface: [requirements FR-01 to FR-10, NFR-01 to NFR-09](../product/requirements.md#functional-requirements), [roadmap](../product/roadmap.md). The requirements also demand keyboard navigation, visible focus, contrast, reduced motion and screen-reader labels [NFR-08](../product/requirements.md#non-functional-requirements). Do not use existing LearnVault screens, old design files or earlier prototypes as a model for the new visual direction.
 
 ### Functional inventory
 
@@ -73,43 +73,10 @@ Design for a resizable desktop window: keep a useful hierarchy between catalog a
 
 ### Accessibility
 
-Use WCAG 2.2 AA as the baseline: keyboard operation and visible focus, sufficient text contrast and target size subject to the criterion's exceptions ([WCAG 2.2](https://www.w3.org/TR/WCAG22/), [focus visible](https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html), [minimum contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html), [minimum target size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum)). Use semantic labels and a predictable focus order; make sure focus is not hidden behind a persistent player/navigation interface. Respect the reduced-motion preference and keep state indications that do not depend on colour, since LearnVault explicitly requires reduced motion and screen-reader labels ([RNF-08](../product/requirements.md#requisitos-n%C3%A3o-funcionais)). The WAI-ARIA APG guides the keyboard behavior of widgets, but does not replace semantic controls nor WCAG conformance ([WAI keyboard interface](https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/)).
+Use WCAG 2.2 AA as the baseline: keyboard operation and visible focus, sufficient text contrast and target size subject to the criterion's exceptions ([WCAG 2.2](https://www.w3.org/TR/WCAG22/), [focus visible](https://www.w3.org/WAI/WCAG22/Understanding/focus-visible.html), [minimum contrast](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html), [minimum target size](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum)). Use semantic labels and a predictable focus order; make sure focus is not hidden behind a persistent player/navigation interface. Respect the reduced-motion preference and keep state indications that do not depend on colour, since LearnVault explicitly requires reduced motion and screen-reader labels ([NFR-08](../product/requirements.md#non-functional-requirements)). The WAI-ARIA APG guides the keyboard behavior of widgets, but does not replace semantic controls nor WCAG conformance ([WAI keyboard interface](https://www.w3.org/WAI/ARIA/apg/practices/keyboard-interface/)).
 
 ## Sources and treatment of resources
 
 Each reference above is linked to its public source. In future design work, use links to the public pages; do not copy copyrighted screenshots or promotional art into project documents. If a screenshot is needed later, take it only under the terms the source permits and record the page, the date and the context of access. Gallery observations remain inspiration; behavioral claims must come from primary product documentation or from LearnVault's requirements, and conformance claims from the standards themselves.
 
-## Evidence from the current application
-
-Captures of the real application were taken in Chromium on 2026-10-29, with CSS viewports of 1440×900 and 390×844. The browser recorded PNGs at DPR 1.25 (1800×1125 and 488×1055); the names record the CSS viewport, not the dimensions of the recorded pixels. All captures use a synthetic temporary library and database; no real data was opened or changed.
-
-| Screen/state assessed | Desktop (1440×900) | Mobile (390×844) | Observed context |
-|---|---|---|---|
-| Server-mode sign-in | Assessed | Assessed | Server-mode authentication screen; offline desktop mode does not require login. |
-| Library | Assessed | Assessed | Synthetic folder/course from the fixture; list mode; catalog refreshed with lessons and materials. |
-| Course | Assessed | Assessed | Synthetic course with lesson structure and local material. |
-| Player | Assessed | Assessed | Validation of the stage, timeline and media controls. |
-| Statistics | Assessed | Assessed | Initial state of progress and goals. |
-| Settings | Assessed | Assessed | Server-mode settings and theme controls. |
-
-These captures document the current state and its test data; they are not visual references for the redesign. The final implementation will be assessed with valid synthetic media and equivalent states, without confusing fixture artifacts with product defects.
-
-### Verified visual observations
-
-- At 390 px, the set of top destinations takes two lines before the content; the responsive hierarchy must keep access to Library, Statistics and Settings without sacrificing reading space.
-- The desktop Library capture predates the scan and the mobile one contains a single synthetic course in list mode; they document distinct states, they do not prove the density or scale of a real library.
-- Course presents a generated cover, title/count and a CTA before the module tree; Player keeps native controls and a contextual curriculum at the side. The 12-byte fixture is invalid, so the spinner is not treated as a playback defect.
-- Statistics is in the empty state with no history; Settings exposes theme, Pomodoro, account and update in server mode; Sign-in is a server flow, not an offline desktop one.
-- The current screens use dark surfaces, a coral accent, serif titles and horizontal navigation. These are characteristics observed for before/after comparison, not tokens, layout or identity to reuse.
-
-## Inventory of the existing interface (code inspection)
-
-This reading complements the captures; it describes features found in the code, not flows re-run in this round. The main structure is in `apps/web/src/App.svelte`, with routes in `router.ts`, the player in `Player.svelte` and statistics in `Statistics.svelte`.
-
-- **Modes and global states:** loading and error; login/credentials only on the HTTP server; Tauri desktop without a login screen; System/Light/Dark theme; session and logout on the server; navigation to library, statistics and settings; Pomodoro/focus at the top.
-- **Library:** search by course/lesson, recents with position/completion, selectable views, import through the native picker on the desktop or a path on the server, explicit catalog refresh, states with no courses/results, loose files and administrative management of cover/order/record removal. The removal does not delete files.
-- **Course:** cover, metadata and availability, content and materials in tabs, module/lesson tree, recent resume and administrative order/removal tools. The study action opens the available lesson; it must not point to missing media.
-- **Player:** native HTML video and audio, file/subtitle selection, SRT conversion in HTTP mode when supported, materials, a persisted position for resuming, separate and reversible completion, configurable autoplay, previous/next navigation, curriculum and focus mode.
-- **Statistics:** loading/error/empty states; completed lessons, focus and study days; persisted weekly goal, missions and gamification. **Settings:** theme, account credentials, logout and update only on HTTP; Pomodoro includes durations and the focus/break cycle, sound/volume/repetitions, automatic start, alarms/notifications, test/restore/discard.
-
-The redesign may replace the whole presentation, but must not remove these actions nor confuse import/refresh with file deletion. The local test fixture remains synthetic and disposable; reading the code did not access a real library, database or media.
+Captures and the code inventory of the old Svelte interface (2026-10-29) were removed from this file with the app they described.
