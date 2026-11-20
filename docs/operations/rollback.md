@@ -59,6 +59,7 @@ Anything other than a clean digest or a clear `not found` (timeouts, auth errors
    - `bad_version`: the bad tag, for example `v0.9.5`
    - `recorded_aliases`: the JSON recorded above
    - `staging_run`: optional, the Release run id whose `staging-<run>` image should be removed
+   - `allow_unsigned_legacy`: `false`, except for a release `v0.8.0` or older (see "Unsigned legacy images")
    - `dry_run`: `true`
 
    Read the plan in the job summary: one line per alias (`keep`, `<old> -> <digest>`, or `-> absent (delete)`), the GitHub release changes, and the staging cleanup note. Any failure here (missing signature, unknown platform, uncertain lookup) is a stop: fix or choose another target.
@@ -95,5 +96,5 @@ The Release workflow pushes `staging-<run id>` before applying release tags. The
 
 - The tombstone (`imagetools create --annotation` to give an alias its own digest, then delete that one version) was **not verified against GHCR** because no mutation is allowed in review. The script refuses to delete unless the new digest differs from every known digest, and only a version whose tags are exactly `[alias]` is removed, but the post-apply check above is the real confirmation. If an alias remains, do not retry blindly: inspect the package versions first.
 
-- Images published before cosign signing was introduced cannot be verified; the workflow then fails closed and the alias change must be a maintainer decision made outside the workflow.
+- Images published before cosign signing was introduced cannot pass signature verification. Only a target `v0.8.0` or older can be accepted, through `allow_unsigned_legacy` and the conditions in "Unsigned legacy images"; an unsigned image newer than `v0.8.0`, and any other verification failure, fails closed.
 - Users who already installed the bad release are not downgraded; publish a fixed higher version.

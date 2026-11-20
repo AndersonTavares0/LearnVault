@@ -1,6 +1,6 @@
 # Flatpak desktop plan (Linux)
 
-**Status:** implemented in CI, shipped as a release asset with the next release. The bundle is distributed only through GitHub Releases; there is no store submission (no Flathub). The desktop updater is off inside the Flatpak.
+**Status:** implemented in CI and shipped as a release asset since v0.9.5. The bundle is distributed only through GitHub Releases; there is no store submission (no Flathub). The desktop updater is off inside the Flatpak.
 
 ## Scope across systems
 
@@ -15,22 +15,28 @@ The Flatpak is the desktop app only. The server keeps its tarball and container 
 
 ## What exists
 
-- `deploy/packages/app.learnvault.desktop.yml`: manifest on `org.gnome.Platform` 48, installs a prebuilt `target/release/learnvault-desktop`, the `.desktop` file, the metainfo and the icon. Grants IPC, Wayland, X11 fallback and DRI only, and sets `WEBKIT_DISABLE_DMABUF_RENDERER=1`: without it the app exits immediately with `Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display` on NVIDIA + Wayland sessions (reproduced on an RTX 3060 Ti with the GNOME 51 runtime).
+- `deploy/packages/app.learnvault.desktop.yml`: manifest on `org.gnome.Platform` 51, installs a prebuilt `target/release/learnvault-desktop`, the `.desktop` file, the metainfo and the icon. Grants IPC, Wayland, X11 fallback, PulseAudio and DRI only, and sets `WEBKIT_DISABLE_DMABUF_RENDERER=1`: without it the app exits immediately with `Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display` on NVIDIA + Wayland sessions (reproduced on an RTX 3060 Ti with the GNOME 51 runtime). The sandbox check in CI asserts that this variable and the audio socket are present.
+- `.github/workflows/flatpak.yml`: builds the release binary with the release version injected into the Tauri config (`tauri.release.json`, from `.github/release-please/version.txt`, as the Windows job does; the workspace version is `0.0.0`, which would show as the installed version in Settings > Updates), then builds, installs and permission-checks the bundle, starts it under a virtual display and checks that the FileChooser and OpenURI portals answer.
 - `crates/desktop/tests/foundation.rs`: fails if the manifest grants broad `home` or `host` filesystem access.
-- `crates/desktop/tauri.conf.json`: `bundle.targets` is `["nsis"]`, so no Linux bundle is produced.
-- The folder picker uses `tauri-plugin-dialog`. Under Flatpak it must go through `xdg-desktop-portal` (FileChooser).
-- `crates/desktop/src/command.rs` opens external URLs with `xdg-open`. Inside the sandbox that must use the OpenURI portal.
+- `crates/desktop/tauri.conf.json`: `bundle.targets` is `["nsis"]`, so no Tauri Linux bundle is produced (the Flatpak is built from the release binary by `flatpak.yml`).
+- The folder picker uses `tauri-plugin-dialog`. Under Flatpak it goes through `xdg-desktop-portal` (FileChooser; the `xdg-portal` feature of the plugin).
+- `crates/desktop/src/command.rs` opens the media file in the system player with `xdg-open`. The sandbox grants no filesystem access, so this action is not expected to work inside the Flatpak; whether to route it through the OpenURI portal is open.
 
-## Gaps to close
+## Delivered
 
-1. **Linux desktop build in CI.** A job on `ubuntu-latest` (and `ubuntu-24.04-arm`) that installs the WebKitGTK and GTK development packages, runs `pnpm run build:desktop`, and builds `learnvault-desktop` in release mode.
-2. **Flatpak build in CI.** `flatpak-builder` on the GNOME 48 runtime, using `deploy/packages/app.learnvault.desktop.yml`, for both architectures.
-3. **Audio and media.** Add `--socket=pulseaudio` (PipeWire goes through it). Lesson playback needs it; the current manifest does not grant it.
-4. **Portals instead of host calls.** FileChooser for importing a course folder. OpenURI instead of `xdg-open`. No direct filesystem grant.
-5. **Updater off in Flatpak.** The in-app updater would replace the binary, which a Flatpak must not do. Updates arrive as a new bundle from the next release. The updater is gated on `FLATPAK_ID` (done in `crates/desktop/src/command.rs`).
-6. **Metainfo.** Validated with `appstreamcli` in CI. No store screenshots or age rating are required, since nothing is submitted to a store.
-7. **Smoke test in a sandbox.** Install the built bundle with `flatpak install --user`, start it, import a synthetic course folder through the portal, play a lesson, close and reopen. This is a CI job, not a manual step, and it runs on both architectures.
-8. **Release asset.** Add `learnvault-linux-desktop-<arch>.flatpak` and its checksum to `SHA256SUMS`, and update the asset table in `docs/releases/process.md`.
+1. **Linux desktop build in CI** on `ubuntu-latest` and `ubuntu-24.04-arm` (`flatpak.yml`).
+2. **Flatpak build in CI** with `flatpak-builder` on the GNOME 51 runtime, both architectures.
+3. **Audio.** `--socket=pulseaudio` (PipeWire goes through it).
+4. **Folder picker through the FileChooser portal**, with no direct filesystem grant.
+5. **Updater off in Flatpak**, gated on `FLATPAK_ID` (`crates/desktop/src/command.rs`). Updates arrive as a new bundle from the next release.
+6. **Metainfo** validated with `appstreamcli` in CI. No store screenshots or age rating are required, since nothing is submitted to a store.
+7. **Sandbox checks in CI**, both architectures: install the bundle, assert permissions (no `home`/`host`, PulseAudio, DMA-BUF variable), start it under a virtual display, and check that the FileChooser and OpenURI portals answer.
+8. **Release asset.** `learnvault-linux-desktop-<arch>.flatpak` is in `SHA256SUMS` and the asset table in `docs/releases/process.md`.
+
+## Remaining
+
+- The sandbox job does not yet import a synthetic course folder through the portal, play a lesson, or close and reopen the app.
+- "Open in system player" (see above) is not portal-aware.
 
 ## Decisions (resolved)
 
@@ -44,17 +50,9 @@ None blocking. Whether to add a Flathub submission later is a separate decision 
 
 ## Acceptance
 
-- The bundle installs and starts on both architectures in the CI sandbox job.
-- The folder picker works through the portal; no path is sent from the webview.
-- Lesson playback has sound.
-- The updater does not run inside the Flatpak.
-- `foundation.rs` and the `SHA256SUMS` check pass with the new asset.
-- `docs/operations/distribution.md` and the README table list the Flatpak as available.
-
-## Order of work
-
-1. Linux desktop build job (no packaging yet). Proves the binary builds on both architectures.
-2. Portals (FileChooser, OpenURI) and the pulseaudio socket, tested with a local Flatpak build.
-3. `flatpak-builder` job and the sandbox smoke test.
-4. Updater disabled in Flatpak, metainfo validation (both done).
-5. Release asset wiring, then the docs switch from planned to available.
+- The bundle installs and starts on both architectures in the CI sandbox job (met).
+- The folder picker works through the portal; no path is sent from the webview (portal reachability is checked in CI; the full import flow is not).
+- Lesson playback has sound (the socket is granted; playback itself is not exercised in CI).
+- The updater does not run inside the Flatpak (met).
+- `foundation.rs` and the `SHA256SUMS` check pass with the new asset (met).
+- `docs/operations/distribution.md` and the README table list the Flatpak as available (met).
