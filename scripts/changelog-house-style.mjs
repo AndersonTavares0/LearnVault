@@ -8,6 +8,8 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { MIGRATIONS_FILE, hasMigrationChanges, previousTag, splitHighlights } from './release-notes.mjs';
 
+const STRICT_VERSION = /^\d+\.\d+\.\d+$/;
+
 export function renderDatabaseItem(changed) {
 	return changed
 		? `- **Database:** this release changes the schema migrations (\`${MIGRATIONS_FILE}\`). They run automatically on startup. Back up the data directory before upgrading.`
@@ -17,9 +19,12 @@ export function renderDatabaseItem(changed) {
 /** Inserts summary and Highlights under the heading of `version`; returns the text unchanged when already styled or not applicable. */
 export function applyHouseStyle(changelog, version, { summary, highlights, migrationsChanged }) {
 	const text = changelog.replace(/\r\n/g, '\n');
-	const heading = new RegExp(`^## \\[${version.replaceAll('.', '\\.')}\\][^\\n]*\\n`, 'm').exec(text);
-	if (!heading || !highlights) return text;
-	const start = heading.index + heading[0].length;
+	if (!STRICT_VERSION.test(version)) throw new Error(`Not a strict MAJOR.MINOR.PATCH version: ${version}`);
+	const marker = `\n## [${version}]`;
+	const found = `\n${text}`.indexOf(marker);
+	if (found === -1 || !highlights) return text;
+	const headingEnd = text.indexOf('\n', found);
+	const start = headingEnd === -1 ? text.length : headingEnd + 1;
 	const next = text.indexOf('\n## [', start);
 	const section = text.slice(start, next === -1 ? text.length : next);
 	if (/^### Highlights$/m.test(section)) return text;

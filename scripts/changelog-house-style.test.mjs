@@ -25,3 +25,8 @@ test('does nothing without highlights or for an unknown version', () => {
 test('states changed migrations', () => {
 	assert.match(renderDatabaseItem(true), /changes the schema migrations/);
 });
+
+test('rejects versions that are not strict MAJOR.MINOR.PATCH', () => {
+	assert.throws(() => applyHouseStyle(changelog, '0.9.*', input), /strict/);
+	assert.throws(() => applyHouseStyle(changelog, '(.+)', input), /strict/);
+});
