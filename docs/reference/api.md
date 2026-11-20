@@ -4,7 +4,7 @@ The Rust server (`crates/server`) exposes the HTTP endpoints below. The React SP
 
 The course registry is stored in `courses.json` next to the database. Catalog responses never include the absolute path of a course root: courses have opaque IDs, and files are listed by relative path with their metadata. Rescans revalidate each root and reject detected tampering.
 
-The session cookie has the `Secure` flag by default and travels only over HTTPS. For local development without TLS, pass `--insecure-http`; never use it in production. Guarded write endpoints require an HTTP(S) `Origin` that matches `Host` or, when `Origin` is absent, an HTTP(S) `Referer` whose origin matches. A failed check returns `403 csrf_failed`.
+The session cookie has the `Secure` flag by default and travels only over HTTPS. For local development without TLS, pass `--insecure-http`; never use it in production. Guarded writes accept an HTTP(S) `Origin` matching `Host`. If `Origin` is missing or unreadable as header text, the server checks the HTTP(S) `Referer` origin instead. `Host` defaults to `localhost` when absent. A failed check returns `403 csrf_failed`.
 
 ## SPA Delivery in Rust Server
 
@@ -16,7 +16,7 @@ Static serving is off by default. Pass `--web-root` with the web build directory
 | --- | --- | --- | --- |
 | `GET` | `/api/healthz` | Public | Database readiness and running version: `{"status":"ok","version":"..."}` (`dev` on source builds) |
 | `POST` | `/api/login` | Public (same origin) | Authenticates `{ "username": "...", "password": "..." }`; returns `{ user_id, username, is_admin, must_change_credentials }` and sets the session cookie. Throttled attempts return `429` |
-| `POST` | `/api/logout` | Public (same origin) | Clears the cookie and returns an empty `204`; revokes the session when one is present |
+| `POST` | `/api/logout` | Public (same origin) | Clears the cookie and returns an empty `204`, revoking the session if present. Returns `503` if session revocation runs out of blocking capacity |
 | `GET` | `/api/me` | Session | Returns `{ user_id, username, is_admin, must_change_credentials }`; `401` without a valid session |
 | `POST` | `/api/account/credentials` | Session (same origin) | Accepts `{ "current_password": "...", "username": "...", "password": "..." }`, updates credentials, revokes older sessions, and returns the account with a new session cookie; `422 invalid_credentials_format` for a rejected value |
 
@@ -51,7 +51,7 @@ Before bootstrapping or running migrations, the server checks for legacy Go data
 
 A module directory that contains videos becomes a collapsible module with one lesson per video. Other files in it stay available as materials, and matching subtitles stay with the lesson video. Course paths use natural sorting (`2` before `10`).
 
-With no registered courses, the catalog is empty. `LIBRARY_DIR` / `--library-root` seeds a new deployment once, when no registry exists. Each top-level folder becomes a course, except that a folder containing 2 to 100 nested courses is split into those courses when they register. If no folder registers and a media or material file sits directly in the root, the root becomes one course with the historical ID `library-1`; otherwise an empty root registers nothing. Administrators import folders added later.
+With no registered courses, the catalog is empty. `LIBRARY_DIR` / `--library-root` seeds a new deployment once, when no registry exists. Courses come from eligible top-level directories; hidden and system folders (`.*`, `@eaDir`, `$RECYCLE.BIN`, `System Volume Information`) and folders that cannot be opened as a course root are skipped. If a folder has 2 to 100 detected nested courses and at least one registers, the registered nested courses replace the parent. If no folder registers, a recognized media or material file directly in the root triggers the legacy `library-1` course, and the server also tries that legacy seed if it cannot list the root. Otherwise an empty root registers nothing. Administrators import folders added later.
 
 The scanner reads directory metadata and does not follow symbolic links. It skips temporary download directories, detects media, subtitles and documents, and treats a `.ts` file as video only if it is at least 1 MiB, so TypeScript files are not mistaken for video.
 
@@ -82,15 +82,14 @@ source URL is limited to 2048 characters. A WebDAV base path always ends in `/`.
 are always verified; there is no option to accept an invalid certificate. Redirects are refused so
 the `Authorization` header never reaches another host. `dav://` and `http://` send Basic
 credentials without transport encryption, so use them only on a trusted private network; prefer
-`davs://`/`https://`. Link-local, multicast, broadcast and unspecified addresses
-(`169.254.0.0/16`, the IPv4 and IPv6 link-local ranges, `224.0.0.0/4`, `0.0.0.0/8`) are not allowed,
-so a source cannot point at a cloud metadata endpoint. A URL whose host is such a literal address is
-rejected with `unsafe_source_target`. A hostname is resolved before every connection, and if any
-returned address is disallowed the operation fails with the sanitized `denied` code. Loopback and private LAN
-addresses stay usable, because a source on the same network is the normal deployment. WebDAV
-connections go directly to the validated address, and the server ignores `HTTP_PROXY`,
-`HTTPS_PROXY` and `ALL_PROXY` for these requests, so a proxy cannot resolve the hostname outside
-the address policy.
+`davs://`/`https://`. WebDAV and SMB reject IPv4 addresses in `0.0.0.0/8`, link-local
+(`169.254.0.0/16`) and multicast addresses, and the limited broadcast address. They also reject IPv6
+link-local, multicast and unspecified addresses, and apply the IPv4 rules to IPv4-mapped IPv6
+addresses. A rejected literal host in the URL produces `unsafe_source_target`. A hostname lookup
+with any rejected address fails the connection and is reported as `unreachable` for WebDAV or
+`denied` for SMB. Loopback and private LAN addresses are allowed, because a source on the same
+network is the normal deployment. WebDAV connects directly to a validated address and ignores
+`HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY`.
 
 SMB sources use `smb://host[:port]/share/path`. The share is mandatory; `.`/`..` segments, encoded
 separators and control characters are rejected before they become a UNC path. The server is
@@ -218,10 +217,11 @@ The history endpoint is owner-scoped and read-only. `limit` defaults to 20 and i
 
 ## Offline Sync
 
-The desktop keeps an offline queue and reconciles it with the server through an
-append-only operation log. The owner is the authenticated session user; no endpoint accepts
-an `owner_id`. Media files are never synchronized: only progress, notes, bookmarks,
-flashcards (with their reviews) and playback preferences travel.
+The desktop keeps an offline queue and reconciles it with the server through an operation
+journal with a monotonic cursor. Superseded progress and preference operations are coalesced.
+The authenticated session determines the owner, and no endpoint accepts an `owner_id`. Sync
+transfers progress, notes, bookmarks, flashcards and their reviews, and playback preferences.
+Media files stay in the course library.
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |

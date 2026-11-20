@@ -7,16 +7,14 @@ Before `1.0.0`, Release Please bumps the patch version for `feat:`, `fix:` and `
 1. Merge approved changes using Conventional Commits into `main`; these changes accumulate for the next monthly release.
 2. At 12:00 UTC on the first day of each month, Release Please opens or updates one release PR with the version files and the generated `docs/releases/CHANGELOG.md` section.
 3. Merging the release PR creates the tag and the GitHub Release; ordinary code PRs never publish. For an urgent security release outside the schedule, run the `Release Please` workflow manually on `main` to prepare the release PR early.
-4. The release workflow builds the Linux server tarballs, the Flatpak bundles ([`flatpak.md`](../operations/flatpak.md)), the Windows NSIS installer and the container image. It then generates the SBOM and `SHA256SUMS`, signs the checksums, attests the assets, and appends the contributors list.
+4. The release workflow builds the Linux server tarballs, the Flatpak bundles ([`flatpak.md`](../operations/flatpak.md)), the Windows NSIS installer and the container image. It then generates the SBOM and `SHA256SUMS`, signs the checksums, and attests the assets. On a release event, the workflow appends the Contributors section after uploading assets.
 5. Check the assets, the checksums and the Contributors section before general distribution.
 
 The workflow validates the published tag: it must match `vMAJOR.MINOR.PATCH` with no leading zeros, and a pre-release suffix such as `-rc.1` is refused. A GitHub pre-release of a plain `vX.Y.Z` tag is accepted but is built and published under its exact version only; it never moves `:stable`, `:latest` or the `<major>.<minor>` image tags.
 
 ## How releases are prepared
 
-Release Please runs with `versioning: default` and `prerelease: false`, so a release is a normal GitHub release: it becomes `releases/latest`, the desktop updater serves it, and it moves the `latest`, `stable` and minor-line container tags. `v0.9.1` to `v0.9.4` were published as pre-releases and `v0.9.5` resumed stable publication; the policy records the change. Preparing the release PR publishes nothing.
-
-`0.9.0` was pinned once with `release-as` to leave `0.9.0-rc.5` behind without carrying its suffix; the override was removed in the release PR that published it. Editing a pre-release into a stable release does not trigger the publication workflow; publish a later non-pre-release instead. Keep a generated release PR unmerged until the final review and the maintainer's explicit authorization to publish. Routine code and configuration PRs are not that authorization.
+`v0.9.1` through `v0.9.4` were GitHub pre-releases. Stable publication resumed with `v0.9.5`. The earlier `release-as` pin to `0.9.0` dropped the `-rc.5` suffix. Editing a pre-release into a stable release does not trigger the publication workflow; promote by publishing a later version. Keep the generated release PR unmerged until the maintainer authorizes publication. Routine code and configuration PRs are not that authorization.
 
 ## Release notes
 
@@ -49,14 +47,14 @@ To return to a known-good release, follow the [rollback runbook](../operations/r
 On a GitHub `release` event, Actions runs the workflow definition from the **tagged commit**, not `main`. If a release was tagged before a workflow fix reached `main`, a maintainer can run the workflow by hand:
 
 1. Run the `Release` workflow from `main` (Actions → `Release` → `Run workflow`).
-2. Enter the exact tag (for example `v0.9.6`). It must belong to an existing, published, non-draft release.
+2. Enter the exact release tag (for example `v0.9.6`) in the `tag` input. It must identify an existing, published, non-draft release and match the version metadata in the tagged source.
 3. The workflow validates the tag, rebuilds every platform asset from it, checks that the tag has not moved, and uploads the assets with `--clobber`.
 
 The workflow never moves or recreates tags. The contributors step runs only on `release` events, so a manual run does not touch the Contributors section, which `<!-- learnvault:contributors -->` otherwise keeps from being appended twice. Image tags: `stable` and `latest` move only on `release` events, while a manual run of a stable release can still update the `<major>.<minor>` tag.
 
 ## Published Release Assets
 
-Each release publishes eleven files on GitHub Releases, plus the OCI image on GHCR (`ghcr.io/andersontavares0/learnvault`):
+The current workflow publishes the following eleven assets to GitHub Releases and the OCI image to GHCR (`ghcr.io/andersontavares0/learnvault`):
 
 | Asset | File Name |
 | --- | --- |
@@ -79,7 +77,7 @@ Naming rules:
 - Windows files carry the version because users download them standalone.
 - `SHA256SUMS` is generated with `sha256sum` over every other asset except its own signature bundle.
 
-Release Please is the only source of `docs/releases/CHANGELOG.md`; write Conventional Commits in English. After the assets upload, the release workflow appends the Contributors section (Dependabot excluded). Release Please reads `.github/release-please/release-please-config.json` and `.github/release-please/release-please-manifest.json`.
+Release Please reads `.github/release-please/release-please-config.json` and `.github/release-please/release-please-manifest.json`.
 
 Release notes must document database schema migrations. Releases must never contain course files, local databases, secrets, or cache artifacts.
 
@@ -90,10 +88,10 @@ The image is built for `linux/amd64` and `linux/arm64`, each on its own native r
 | Tag | When it is applied |
 | --- | --- |
 | `<version>` (e.g. `0.9.0`) | Always. Points at the exact release. |
-| `<major>.<minor>` (e.g. `0.9`) | Only for stable (not pre-release) releases; moves within the minor line. |
-| `stable`, `latest` | Only for stable (not pre-release) releases. |
+| `<major>.<minor>` (e.g. `0.9`) | Only for stable (not pre-release) releases, including manual runs; moves within the minor line. |
+| `stable`, `latest` | Only on stable release events. |
 
-Every tag points at a digest that was scanned for HIGH and CRITICAL vulnerabilities, signed with keyless cosign, and verified before tagging. To fix a build, pin the exact version (see `deploy/README.md`).
+Trivy scans each platform digest for HIGH and CRITICAL findings. The workflow signs and verifies the combined index with keyless Cosign before applying release tags. To fix a build, pin the exact version (see `deploy/README.md`).
 
 Verify an image before deploying it:
 
@@ -103,13 +101,13 @@ cosign verify ghcr.io/andersontavares0/learnvault:<tag> \
   --certificate-identity-regexp '^https://github[.]com/AndersonTavares0/LearnVault/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+|heads/main)$'
 ```
 
-Provenance and the SBOM are attached to the same digest; inspect them with `docker buildx imagetools inspect ghcr.io/andersontavares0/learnvault:<tag>`.
+Buildx attaches provenance and the SBOM to each platform digest. Inspect the index with `docker buildx imagetools inspect ghcr.io/andersontavares0/learnvault:<tag>`.
 
 ## Verifying Release Binaries
 
-Each release publishes a keyless Sigstore bundle for `SHA256SUMS`, a CycloneDX SBOM generated from the tagged source and lockfiles with `trivy fs .`, and GitHub Artifact Attestations. The SBOM lists source and dependency metadata; it is not a scan of the compiled binaries. Build provenance covers every file in the release asset directory. The SBOM attestation covers each Linux server archive, Windows installer and updater bundle, and Flatpak bundle.
+The current workflow publishes a keyless Sigstore bundle for `SHA256SUMS`, a CycloneDX SBOM generated from the tagged source and lockfiles with `trivy fs .`, and GitHub Artifact Attestations. The SBOM lists source and dependency metadata; it is not a scan of the compiled binaries. Build provenance covers every file in the release asset directory. The SBOM attestation covers each Linux server archive, Windows installer and updater bundle, and Flatpak bundle.
 
-Download the assets with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum signature. The release workflow signs and verifies with `sigstore/cosign-installer` v4.1.2; use Cosign v3 or newer:
+Download the assets with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum signature. The release workflow installs Cosign with `sigstore/cosign-installer` v4.1.2 and does not pin a Cosign version; use a current Cosign release:
 
 ```sh
 cosign verify-blob SHA256SUMS \
@@ -140,6 +138,7 @@ gh attestation verify learnvault-linux-amd64.tar.gz \
 
 - **Desktop update is not offered after a release.** The release must be published, not a draft and not a pre-release, and `latest.json` must carry a version above the installed app. Check with `gh release view <tag> --json isDraft,isPrerelease`. The Flatpak never offers updates.
 - **The release workflow refuses the tag.** The tag must match `vX.Y.Z` exactly and belong to a published, non-draft release.
-- **Signature verification fails in the updater or in `update.sh`.** The image or update file was not signed by this repository's release workflow on a release tag or `main`. Re-run the release workflow for the tag instead of editing assets by hand.
-- **The container image has no version tag.** Each architecture is pushed by digest and scanned before anything names it. The combined index gets a temporary `staging-<run id>` tag, which no deployment uses, and release tags are applied only after the signature check passes. If the scan fails, no release tag is applied. Staging tags stay in GHCR and can be removed by hand.
-- **A platform build fails.** The Windows, Linux and Flatpak jobs all run before the publish job, so a failure in any of them publishes nothing. Check that job's log.
+- **An OCI verification fails.** Check the digest and the keyless signature from `release.yml`. Re-run the release workflow for the tag instead of editing assets by hand.
+- **A desktop verification fails.** Check that `latest.json` and the updater payload carry the matching Tauri signature.
+- **The container image has no version tag.** The workflow pushes each architecture by digest, scans and smoke-tests it, then signs and verifies the staged index (`staging-<run id>`, used by no deployment) before applying release tags. If the scan or the signature check fails, no release tag is applied. Staging tags stay in GHCR and can be removed by hand.
+- **A platform build fails.** A Windows or native Linux build failure blocks the container approval and the asset upload. A Flatpak build failure blocks the asset upload, while the independent container jobs may still publish to GHCR.

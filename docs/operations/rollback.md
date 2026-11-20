@@ -12,7 +12,7 @@ Steps, in order:
 4. Only when `dry_run=false` and the `release` environment is approved: re-checks that the registry did not change since the plan, restores each alias to the recorded state, marks the bad release as a pre-release, marks the known-good release as GitHub latest, and confirms `releases/latest` returns it.
 
 It never deletes, moves or recreates a git tag, never changes a `vX.Y.Z` image tag, and never deletes a GitHub release.
-Rollback has its own concurrency group (`rollback`, never cancelled); `Release` keeps per-tag groups. Step 0 keeps them apart with `gh run list --workflow release.yml --status in_progress|queued|waiting`. A release that starts after that check is not blocked, so do not publish while a rollback runs, and re-run the dry run if anything changed.
+Rollback has its own concurrency group (`rollback`, never cancelled); `Release` keeps per-tag groups. Step 0 keeps them apart with separate `gh run list --workflow release.yml --status` calls for `in_progress`, `queued` and `waiting`. A release that starts after that check is not blocked, so do not publish while a rollback runs, and re-run the dry run if anything changed.
 
 ## Absent aliases
 
@@ -35,16 +35,23 @@ Run these read-only commands and keep the output in the release PR or issue.
 
 ```sh
 IMAGE=ghcr.io/andersontavares0/learnvault
+TARGET_TAG=v0.8.0   # the known-good release to roll back to
+BAD_TAG=v0.9.5      # the release being published
+target=${TARGET_TAG#v}; bad=${BAD_TAG#v}
 gh api repos/AndersonTavares0/LearnVault/releases/latest --jq .tag_name
 gh release list --repo AndersonTavares0/LearnVault --limit 10
-for alias in latest stable 0.8 0.9; do   # latest, stable, and the minor tags of the rollback target and of the release being published
+for alias in latest stable "${target%.*}" "${bad%.*}"; do
   printf '%s ' "$alias"
   docker buildx imagetools inspect "$IMAGE:$alias" --format '{{.Manifest.Digest}}' 2>&1 | tail -n1
 done
-docker buildx imagetools inspect --raw "$IMAGE:<current-version>" | jq '.manifests[].platform'
+printf '%s ' "$target"
+docker buildx imagetools inspect "$IMAGE:$target" --format '{{.Manifest.Digest}}' 2>&1 | tail -n1   # exact-version digest of the target
+docker buildx imagetools inspect --raw "$IMAGE:$target" | jq '.manifests[].platform'
 ```
 
-Write the result as the `recorded_aliases` JSON: a `sha256:` digest if the alias resolved, `null` if the command reported `not found`. The aliases are exactly `latest`, `stable`, the minor tag of `target_version` and the minor tag of `bad_version` (one entry when both share a minor line); a missing or extra key is rejected. The sample below suits a rollback from `v0.9.5` to `v0.8.0`. Replace every angle-bracket placeholder with a real value before running a command or submitting the JSON.
+Record the digest of `$IMAGE:$bad` too, once the new release is published and before any rollback.
+
+Write the result as the `recorded_aliases` JSON: a `sha256:` digest if the alias resolved, `null` if the command reported `not found`. The aliases are exactly `latest`, `stable`, the minor tag of `target_version` and the minor tag of `bad_version` (one entry when both share a minor line); a missing or extra key is rejected. The sample below suits a rollback from `v0.9.5` to `v0.8.0`. Use a verified digest, or `null` only for an alias confirmed absent. Add the exact target version as an extra key (`"0.8.0"` here) only for the unsigned-legacy exception, with the recorded target digest as its value. Replace every angle-bracket placeholder with a real value before running a command or submitting the JSON.
 
 ```json
 {"latest":"sha256:<digest>","stable":null,"0.8":null,"0.9":null,"0.8.0":"sha256:<digest, only for allow_unsigned_legacy>"}
@@ -64,20 +71,16 @@ A timeout, an auth error or any other output that is neither a clean digest nor 
 
    Read the plan in the job summary: one line per alias (`keep`, `<old> -> <digest>`, or `-> absent (delete)`), the GitHub release changes, and the staging cleanup note. Any failure here (missing signature, unknown platform, uncertain lookup) is a stop: fix or choose another target.
 2. Dispatch it again from `main` with `dry_run=false` and approve the `release` environment. This run makes a fresh plan, and the apply job refuses to continue if any alias differs from that run's snapshot.
-3. Verify afterwards (read-only). Check the registry yourself: the script verifies its own outcome, but this step confirms it independently.
+3. Verify GitHub latest, the recorded aliases and both exact-version digests. If the target published `latest.json`, also confirm that the download from GitHub latest matches the target version.
 
    ```sh
    gh api repos/AndersonTavares0/LearnVault/releases/latest --jq .tag_name   # the known-good tag
    curl -fsSL https://github.com/AndersonTavares0/LearnVault/releases/latest/download/latest.json | jq .version
-   docker buildx imagetools inspect "$IMAGE:latest" --format '{{.Manifest.Digest}}'
-   ```
-
-   `latest.json` must come from the known-good release. Compare every alias with `recorded_aliases` (an alias recorded as `null` must report `not found`), and confirm that both exact-version tags, the known-good and the bad one, still resolve to their original digests:
-
-   ```sh
-   for alias in stable 0.8 0.9; do docker buildx imagetools inspect "$IMAGE:$alias" --format '{{.Manifest.Digest}}'; done
-   docker buildx imagetools inspect "$IMAGE:<bad-version>" --format '{{.Manifest.Digest}}'   # unchanged
-   docker buildx imagetools inspect "$IMAGE:<target-version>" --format '{{.Manifest.Digest}}'   # unchanged
+   for alias in latest stable "${target%.*}" "${bad%.*}"; do   # compare with recorded_aliases; null must report not found
+     docker buildx imagetools inspect "$IMAGE:$alias" --format '{{.Manifest.Digest}}'
+   done
+   docker buildx imagetools inspect "$IMAGE:$bad" --format '{{.Manifest.Digest}}'      # unchanged
+   docker buildx imagetools inspect "$IMAGE:$target" --format '{{.Manifest.Digest}}'   # unchanged
    ```
 4. Follow up with a fix release with a higher patch version; the bad release stays as a pre-release for traceability under the [release policy](../../.agents/policies/releases.md).
 
@@ -95,6 +98,6 @@ The Release workflow pushes `staging-<run id>` before applying release tags. The
 
 ## Limits
 
-- The tombstone step (`imagetools create --annotation` to give an alias its own digest, then delete that one version) is covered by the repository tests against a simulated registry in `scripts/rollback.test.mjs`. The script refuses to delete unless the new digest differs from every known digest, and it removes only a version whose tags are exactly `[alias]`. If an alias remains after apply, inspect the package versions before retrying.
+- The tombstone step (`imagetools create --annotation` to give an alias its own digest, then delete that one version) is covered by the repository tests against a simulated registry in `scripts/rollback.test.mjs`. The script checks that the tombstone digest differs from the target digest and from every digest in the alias snapshot and record. It removes only a version whose tags are exactly `[alias]`. If an alias remains after apply, inspect the package versions before retrying.
 - Images published before cosign signing was introduced cannot pass signature verification. Only a target `v0.8.0` or older can be accepted, through `allow_unsigned_legacy` and the conditions in "Unsigned legacy images"; an unsigned image newer than `v0.8.0`, and any other verification failure, fails closed.
 - Users who already installed the bad release are not downgraded; publish a fixed higher version.

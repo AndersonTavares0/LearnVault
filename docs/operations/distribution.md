@@ -3,7 +3,7 @@
 **Audience:** operators who publish, install, or deploy LearnVault.
 Developers should start with the [README](../../README.md) and the [Architecture Overview](../architecture/overview.md).
 
-Each release attaches a Windows NSIS installer, Linux server tarballs and Linux desktop Flatpak bundles ([`flatpak.md`](flatpak.md)) to the GitHub Release and pushes an OCI image to GHCR. Docker and Podman are optional: the same server binary runs natively, and the container only starts it with the SPA in `/app/web`.
+The current release workflow attaches the Windows NSIS installer, Linux server tarballs and Linux desktop Flatpak bundles ([`flatpak.md`](flatpak.md)) to GitHub Releases and pushes an OCI image to GHCR. The container runs the same server binary as a native install and serves the SPA from `/app/web`. Docker and Podman are optional.
 
 ## Release Targets
 
@@ -12,7 +12,7 @@ Each release attaches a Windows NSIS installer, Linux server tarballs and Linux 
 | Linux Server | `learnvault-linux-<arch>.tar.gz` (amd64, arm64) | Primary Linux server deployment | Available |
 | Self-hosted | OCI image via Compose or Quadlet (Docker/Podman) | Containerized server | Local or published image |
 | Windows Desktop | NSIS installer (`.exe`) | Per-user install in `%LOCALAPPDATA%\LearnVault`, no admin rights | Available, listed in `SHA256SUMS` |
-| Linux Desktop | `learnvault-linux-desktop-<arch>.flatpak` (amd64, arm64) | Desktop app | Attached to each release, built and sandbox-checked in CI |
+| Linux Desktop | `learnvault-linux-desktop-<arch>.flatpak` (amd64, arm64) | Desktop app | First published in the v0.9.1 pre-release; first regular release v0.9.5. Built and sandbox-checked in CI |
 
 The full asset list is in [Published Release Assets](../releases/process.md#published-release-assets).
 
@@ -25,7 +25,7 @@ The full asset list is in [Published Release Assets](../releases/process.md#publ
 
 ### Update Notifications
 
-The server asks the GitHub Releases API over HTTPS for the latest stable tag and compares it with the running version using strict SemVer. The request times out after 5 seconds and reads at most 64 KiB; a successful result is reused for 1 hour. The check is on by default; turn it off with `--no-update-check` or `LEARNVAULT_UPDATE_CHECK=off`. Nothing is downloaded or installed automatically. Source builds report the version `dev` (the manifest placeholder `0.0.0` is never shown) and skip the remote check.
+The server checks the latest stable GitHub release over HTTPS and compares it with the running version using strict SemVer. The request times out after 5 seconds, reads at most 64 KiB, and normally reuses a cached result for an hour. Checks are enabled by default. Set `LEARNVAULT_UPDATE_CHECK=off` or `false`, or pass `--no-update-check`, to disable them. Source builds display `dev` and use `0.0.0` for version comparisons. The server reports availability without downloading or installing the release.
 
 ### Desktop Update Checks
 
@@ -41,7 +41,7 @@ When the schema of the installed version is newer than the database file, the de
 
 ### Verify the Container Image
 
-The release workflow signs each release image digest with keyless cosign, so there is no key to manage and the signature is tied to the workflow run. To check an image:
+The release workflow signs the combined image index with keyless cosign, so there is no key to manage and the signature is tied to the workflow run. To check an image:
 
 ```sh
 cosign verify ghcr.io/andersontavares0/learnvault:0.9.6 \
@@ -58,10 +58,10 @@ Limits of the check:
 - The updater verifies the tag, then pulls and starts the verified digest (`repo@sha256:…`), so retagging the registry between check and pull has no effect.
 - A signature proves the image came from `release.yml` in this repository, run for a version tag or for `main`. A manual run on `main` can re-sign a rebuilt tag, and the signature cannot tell that apart from the original.
 - The workflow first pushes the image index under a temporary `staging-<run id>` tag, then signs and verifies it. Version, minor-line, `stable` and `latest` tags are applied only after verification, so a signing failure can leave an unsigned staging image but moves no release tag.
-- The updater installs `cosign` from the Alpine mirror at startup, unpinned. Bake a pinned `cosign` into the updater image if your threat model needs that.
-- `LEARNVAULT_CHANNEL` selects which releases may be installed. `stable` (the default) accepts final versions and reads the server's update endpoint or the repository's latest release. `rc` also accepts release candidates and reads the release list, newest first, because candidates are never marked "latest". Both channels run the signature check and refuse a candidate tag that is not shaped like `X.Y.Z-rc.N`.
-- The updater never moves backwards. If the discovered or requested version is not newer than the installed one, it logs the comparison and exits without touching the containers.
-- `LEARNVAULT_GITHUB_REPO` must look like `owner/name`, and `LEARNVAULT_VERIFY_SIGNATURE` must be exactly `true` or `false`. Anything else stops the update.
+- If verification is enabled and `cosign` is missing, the updater installs it from the Alpine mirror, unpinned. Bake a pinned `cosign` into the updater image if your threat model needs that.
+- `LEARNVAULT_CHANNEL` selects which releases may be installed. The `stable` channel (the default) accepts `X.Y.Z`, tries the server update endpoint and falls back to GitHub's latest release. The `rc` channel also accepts `X.Y.Z-rc.N` and reads the first entry in the GitHub release list. Both channels verify signatures by default.
+- When the installed version matches the channel's version format, the updater installs only newer versions; otherwise it logs the comparison and exits without touching the containers.
+- `LEARNVAULT_GITHUB_REPO` must use `owner/name`. `LEARNVAULT_VERIFY_SIGNATURE` defaults to `true` when unset or empty and otherwise accepts only `true` or `false`. Any other value stops the update.
 
 ### Automatic Updates with Podman Quadlet
 
@@ -144,7 +144,7 @@ It checks:
 - Non-root execution (UID 10001), `no-new-privileges`, and all capabilities dropped.
 - A read-only root filesystem and a read-only, readable `/library` mount that the container cannot write to.
 - A writable `/data` whose database and directory survive a restart.
-- `/api/healthz` returns `{"status":"ok"}` with `no-store`, the image `HEALTHCHECK` becomes healthy, and health returns after a restart. Under Podman the script may skip the check of the image healthcheck command.
+- `/api/healthz` returns JSON with `status: ok` and the running `version`, with `Cache-Control: no-store`, the image `HEALTHCHECK` becomes healthy, and health returns after a restart. Under Podman the script may skip the check of the image healthcheck command.
 - `/api/catalog` and `/api/media` return `401` without a session.
 - The packaged binary reports its version, and the script's validation container is removed afterwards.
 
@@ -154,17 +154,17 @@ Environment variables and CLI flags (a flag overrides its variable):
 
 | Variable | Flag | Default | Purpose |
 | --- | --- | --- | --- |
-| `LISTEN_ADDR`, `PORT` | `--listen-addr <ip:port>` | `127.0.0.1`, `8090` | Listening address |
+| `LISTEN_ADDR`, `PORT` | `--listen-addr <ip:port>` | `127.0.0.1`, `8090` | `LISTEN_ADDR` accepts a literal IP or a full socket address; a full socket address ignores `PORT`. The flag takes a full socket address and overrides both. |
 | `DATA_DIR` | `--database <file>` | `data` (database `data/learnvault.sqlite`) | Database and course registry location |
 | `LIBRARY_DIR` | `--library-root <dir>` | unset | Initial library seed (see [API reference](../reference/api.md#catalog-organization)) |
 | | `--web-root <dir>` | unset | Serve the SPA from this directory |
 | `ADMIN_USERNAME` or `ADMIN_USERNAME_FILE` | `--admin-username` | unset | Initial admin username; the `_FILE` variable reads it from a file. Setting both forms is an error. |
-| `ADMIN_PASSWORD` or `ADMIN_PASSWORD_FILE` | none | unset | Initial admin password; there is no password flag |
+| `ADMIN_PASSWORD` or `ADMIN_PASSWORD_FILE` | none | unset | Initial admin password. The `_FILE` form reads the password from a file. Setting both forms is an error. There is no password flag. |
 | `COOKIE_SECURE` | `--insecure-http` | `true` | Session cookie `Secure` flag; the flag sets it to `false` for local HTTP only |
-| `LEARNVAULT_UPDATE_CHECK` | `--no-update-check` | on | Remote update check; the variable accepts `on`, `off`, `true`, `false` in any case |
+| `LEARNVAULT_UPDATE_CHECK` | `--no-update-check` | on | Unset or blank enables checks. After trimming, `on` and `true` enable and `off` and `false` disable, case-insensitively. Other values fail startup unless the CLI flag disables checks. |
 | `TRUSTED_PROXY_IPS` | none | empty | Comma-separated literal IP addresses of trusted reverse proxies, used only for login throttling (see below) |
 
-Creating the first administrator on a network listener requires explicit credentials. A loopback-only first start may use the temporary `admin/admin` account, which must change its password before reaching protected endpoints.
+Creating the first administrator on a network listener requires explicit credentials. A loopback-only first start may create temporary `admin/admin` credentials. A session with a pending credential change can read `/api/me` and update credentials at `/api/account/credentials`.
 
 The server ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY` for WebDAV remote sources and connects directly to the validated address, so the server must be able to reach each source without a proxy (see [Remote Course Sources](../reference/api.md#remote-course-sources-webdav-and-smb)).
 

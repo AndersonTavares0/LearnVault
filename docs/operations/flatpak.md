@@ -7,9 +7,9 @@
 | System | Desktop app | Plan |
 | :--- | :--- | :--- |
 | Windows | NSIS installer with signed updater | Available. |
-| Linux (x86_64, aarch64) | Flatpak bundle attached to each GitHub Release | Built by `.github/workflows/flatpak.yml`. |
+| Linux (x86_64, aarch64) | Flatpak bundle from GitHub Releases | Built by `.github/workflows/flatpak.yml`. |
 | macOS | none | Not planned. No build job exists and the Tauri config targets `nsis` only. |
-| Any OS (server) | Linux tarball and OCI image | Available. The Flatpak does not replace them. |
+| Linux (server) | Linux tarball and OCI image | Available. The Flatpak does not replace them. |
 
 The Flatpak contains the desktop app only.
 
@@ -21,13 +21,13 @@ The Flatpak contains the desktop app only.
 - `crates/desktop/tauri.conf.json`: `bundle.targets` is `["nsis"]`, so Tauri produces no Linux bundle; `flatpak.yml` builds the Flatpak from the release binary.
 - The folder picker uses `tauri-plugin-dialog` with its `xdg-portal` feature, so inside the Flatpak it goes through the FileChooser portal.
 - The updater is gated on `FLATPAK_ID` (`crates/desktop/src/command.rs`).
-- "Open in system player" returns `false` inside the Flatpak (`crates/desktop/src/command.rs`) without trying to open the file, because the file path belongs to the host and the manifest grants no broad `home` or `host` access.
+- Inside Flatpak, the Open in system player command returns `false` before attempting to open the file (`crates/desktop/src/command.rs`). The sandbox grants no broad `home` or `host` access.
 - The metainfo is validated with `appstreamcli` in CI. No store screenshots or age rating are needed because nothing is submitted to a store.
 - The bundle is published as `learnvault-linux-desktop-<arch>.flatpak`, listed in `SHA256SUMS` and in the asset table in [`process.md`](../releases/process.md#published-release-assets).
 
 ## CI sandbox checks
 
-Both architectures (`ubuntu-latest`, `ubuntu-24.04-arm`) build with `flatpak-builder` on the GNOME 51 runtime, then:
+The amd64 job runs on `ubuntu-24.04` and the arm64 job on `ubuntu-24.04-arm`. Both build on GNOME 51 with `flatpak-builder`, then:
 
 1. Install the bundle.
 2. Assert its permissions: no `home` or `host` filesystem, PulseAudio present, DMA-BUF variable present.
