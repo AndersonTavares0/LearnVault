@@ -1,10 +1,10 @@
 # Feature parity checklist
 
-> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. The cutover (#340) is complete and the Svelte app was removed; this checklist is kept as history, and its accessibility and security rules still apply.
+> **Historical.** The cutover (#340) is complete and the Svelte app (`apps/web`) was removed. This checklist is kept as a record. Where it names a palette, theme, or layout, [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md) win. Its accessibility and security rules still apply.
 
-Every capability of the current Svelte SPA (`apps/web`) must exist in the React app (`apps/web-next`)
-before the cutover (#340), unless it is listed under **Intentionally removed**. Tick an item when it
-works in both builds where it applies. The builds are **S** (server, HTTP) and **D** (desktop, IPC).
+Every capability of the Svelte SPA (`apps/web`) had to exist in the React app (`apps/web-next`) before the
+cutover (#340), unless it is listed under **Intentionally removed**. The builds are **S** (server, HTTP)
+and **D** (desktop, IPC). The boxes stay unticked; this file does not record the cutover outcome.
 
 ## Shell
 
