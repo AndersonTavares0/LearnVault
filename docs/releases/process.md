@@ -107,7 +107,7 @@ Buildx attaches provenance and the SBOM to each platform digest. Inspect the ind
 
 The current workflow publishes a keyless Sigstore bundle for `SHA256SUMS`, a CycloneDX SBOM generated from the tagged source and lockfiles with `trivy fs .`, and GitHub Artifact Attestations. The SBOM lists source and dependency metadata; it is not a scan of the compiled binaries. Build provenance covers every file in the release asset directory. The SBOM attestation covers each Linux server archive, Windows installer and updater bundle, and Flatpak bundle.
 
-Download the assets with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum signature. The release workflow installs Cosign with `sigstore/cosign-installer` v4.1.2 and does not pin a Cosign version; use a current Cosign release:
+Download the assets with `gh release download <tag> --repo AndersonTavares0/LearnVault`, then verify the checksum signature. The release workflow installs Cosign with `sigstore/cosign-installer` v4.1.2 and does not pin a Cosign version. Verifying `SHA256SUMS.sigstore.json` needs Cosign v3 or newer:
 
 ```sh
 cosign verify-blob SHA256SUMS \
