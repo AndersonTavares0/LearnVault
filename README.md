@@ -12,7 +12,7 @@
   Self-hosted or fully offline. LearnVault organizes your videos, audio and materials into a study space without moving, renaming or modifying a single file.
 
   [![CI Status](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml/badge.svg)](https://github.com/AndersonTavares0/LearnVault/actions/workflows/ci.yml)
-  [![Latest Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?include_prereleases&color=1C1815&label=release)](https://github.com/AndersonTavares0/LearnVault/releases)
+  [![Latest Release](https://img.shields.io/github/v/release/AndersonTavares0/LearnVault?color=1C1815&label=release)](https://github.com/AndersonTavares0/LearnVault/releases)
   [![License](https://img.shields.io/badge/license-MIT-A8761F.svg)](LICENSE)
   [![Rust](https://img.shields.io/badge/rust-1.99.0-black?logo=rust)](https://www.rust-lang.org)
   [![React 19](https://img.shields.io/badge/react-19-149eca?logo=react)](https://react.dev)
@@ -57,14 +57,13 @@ Both ship the same React interface, in English (`en`, default) and Brazilian Por
 
 - **Timestamped notes:** capture Markdown notes anchored to an exact moment. Clicking a note seeks the player to that instant.
 - **Search:** query lesson titles, module folders and notes across the whole catalog.
-- **Flashcards (SM-2):** generate and drill cards per lesson, scheduled by the SuperMemo-2 spaced repetition algorithm.
+- **Flashcards:** create cards per lesson and review them with spaced repetition. Rating a card Again brings it back in 10 minutes. Good doubles its interval, up to 365 days.
 
 ### Focus and habit
 
-- **Offline-safe Pomodoro:** a focus timer with local queuing and conflict-free synchronization.
+- **Pomodoro timer:** focus and break sessions are saved with a stable key, so a repeated sync does not count a session twice.
 - **Study analytics:** daily focus minutes, completion streaks and weekly consistency.
-- **Habit first:** a forgiving streak, a weekly goal and quiet badges instead of a virtual garden.
-
+- 
 ### Accounts and access
 
 - **Separate profiles:** each account keeps its own progress, notes, flashcard decks and focus stats.
@@ -79,11 +78,21 @@ Release assets are built automatically by GitHub Actions.
 | Platform | Target | Format | Status | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | **Windows** | Desktop application | Installer (`.exe`) | **Available** | Per-user NSIS package with a signed auto-updater |
-| **Linux** | Self-hosted server | Standalone tarball (`.tar.gz`) | **Available** | `x86_64` and `aarch64` binaries with the web app embedded |
-| **Any OS** | Containerized server | OCI image | **Available** | Published on GHCR (`ghcr.io/andersontavares0/learnvault`) |
-| **Linux** | Desktop application | Flatpak bundle (`.flatpak`, amd64 and arm64) | **Available** from the release that ships it | Attached to each GitHub Release, no store. Built and sandbox-checked in CI. See [`docs/operations/flatpak.md`](docs/operations/flatpak.md) |
+| **Linux** | Self-hosted server | Standalone tarball (`.tar.gz`) | **Available** | `amd64` and `arm64` binaries with the web app included |
+| **Any OS** | Containerized server | OCI image | **Available** | `linux/amd64` and `linux/arm64` on GHCR (`ghcr.io/andersontavares0/learnvault`), signed with cosign |
+| **Linux** | Desktop application | Flatpak bundle (`.flatpak`) | **Available** | `amd64` and `arm64`, attached to each GitHub Release. There is no store listing and the in-app updater is off. See [`docs/operations/flatpak.md`](docs/operations/flatpak.md) |
 
-Checksums are in the `SHA256SUMS` file attached to each [GitHub Release](https://github.com/AndersonTavares0/LearnVault/releases).
+Each release includes `SHA256SUMS` and `SHA256SUMS.sigstore.json`, a keyless cosign signature for the checksums. Verify a download with cosign v3 or newer:
+
+```sh
+cosign verify-blob SHA256SUMS \
+  --bundle SHA256SUMS.sigstore.json \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github[.]com/AndersonTavares0/LearnVault/[.]github/workflows/release[.]yml@refs/(tags/v[0-9]+[.][0-9]+[.][0-9]+|heads/main)$'
+sha256sum -c SHA256SUMS --ignore-missing
+```
+
+Build provenance, the SBOM and the container image check are in [`docs/releases/process.md`](docs/releases/process.md).
 
 ---
 
@@ -100,11 +109,13 @@ services:
     container_name: learnvault
     restart: unless-stopped
     ports:
-      - "8090:8090"
+      - "127.0.0.1:8090:8090"
     environment:
       - DATA_DIR=/data
       - LISTEN_ADDR=0.0.0.0
       - PORT=8090
+      - LIBRARY_DIR=/library
+      - COOKIE_SECURE=false
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admin-change-me-promptly
     volumes:
@@ -116,25 +127,33 @@ services:
 docker compose up -d
 ```
 
-Open `http://localhost:8090`, sign in with the credentials above and change the administrator password in Account Settings. The library is mounted `:ro`, so the container cannot write to your courses even by mistake.
+Open `http://localhost:8090`, sign in with the credentials above and change the administrator password in Account Settings. The library is mounted `:ro`, so the container cannot write to your courses.
 
-Hardened Compose files, a reverse proxy with HTTPS and Podman Quadlet units live in [`deploy/`](deploy/README.md).
+Session cookies are `Secure` by default. `COOKIE_SECURE=false` lets sign-in work over plain HTTP, so remove it when you put the server behind HTTPS. The port is bound to `127.0.0.1`. Behind a reverse proxy, set `TRUSTED_PROXY_IPS` and make the proxy send `X-Forwarded-For`; see [Distribution and operations](docs/operations/distribution.md#reverse-proxy-and-login-rate-limiting).
+
+Hardened Compose files, a reverse proxy with HTTPS and Podman Quadlet units are in [`deploy/`](deploy/README.md).
 
 ### Option B: Linux standalone server
 
-1. Download the latest `learnvault-linux-amd64.tar.gz` from the [Releases page](https://github.com/AndersonTavares0/LearnVault/releases).
+1. Download the latest `learnvault-linux-amd64.tar.gz` (or `learnvault-linux-arm64.tar.gz`) from the [Releases page](https://github.com/AndersonTavares0/LearnVault/releases).
 2. Extract it and start the server:
 
 ```sh
 tar -xzf learnvault-linux-amd64.tar.gz
-./learnvault-linux-amd64 --web-root web --library-root /path/to/your/courses
+./learnvault-linux-amd64 --web-root web --library-root /path/to/your/courses --insecure-http
 ```
+
+The server listens on `127.0.0.1:8090`. A loopback-only first start uses the temporary account `admin` / `admin` and requires a new password before anything else. `--insecure-http` allows sign-in without HTTPS. Drop it behind a TLS proxy. Without `--web-root`, the server serves only the JSON API.
 
 ### Option C: Windows desktop application
 
 1. Download `learnvault-windows-vX.Y.Z.exe` from [Releases](https://github.com/AndersonTavares0/LearnVault/releases).
 2. Run the installer. It installs per user into `%LOCALAPPDATA%\LearnVault` and needs no administrator privileges.
 3. Pick your course folder in the native dialog and study offline.
+
+### Option D: Linux desktop application
+
+Download `learnvault-linux-desktop-amd64.flatpak` or `learnvault-linux-desktop-arm64.flatpak` from Releases, then run `flatpak install --user <file>`. The GNOME runtime comes from Flathub.
 
 ---
 
@@ -167,7 +186,7 @@ LearnVault is a Rust workspace with a React frontend:
 ### Prerequisites
 
 - **Rust:** 1.99.0 (pinned by `rust-toolchain.toml`)
-- **Node.js:** 24+
+- **Node.js:** 24 (used by CI)
 - **pnpm:** 11.28.5 (set by `packageManager` in `package.json`)
 
 ### Setup
@@ -183,9 +202,9 @@ pnpm install --frozen-lockfile
 ### Common commands
 
 ```sh
-pnpm dev                     # Rust API (8090) and Vite app (5173) with live reload
+pnpm dev                     # Rust API (8090) and Vite app (5174) with live reload
 pnpm dev:tauri               # Tauri desktop application in development mode
-pnpm verify --fast           # Fast verification: app checks, Vitest, Cargo check and tests
+pnpm verify --fast           # Type check, lint, Vitest, script tests, rustfmt, Clippy and Cargo tests
 pnpm exec playwright test    # Playwright end-to-end browser tests
 pnpm run build               # Production web assets
 pnpm run build:desktop       # Embedded desktop bundle
