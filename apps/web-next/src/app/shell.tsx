@@ -1,4 +1,4 @@
-import { BookOpen, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
+import { BookOpen, KeyRound, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
@@ -119,6 +119,9 @@ export function AppShell() {
 	if (!session.data?.user) return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
 
 	const user = session.data.user;
+	// A temporary password only unlocks the account page: every other route would answer 403.
+	const locked = transportKind === 'http' && user.mustChangeCredentials;
+	if (locked && location.pathname !== '/settings') return <Navigate to="/settings#profile" replace />;
 	return (
 		// The bar and the banners stay put and the content region owns the scroll, so the page
 		// scrollbar starts below the top bar instead of crossing it (issue #607).
@@ -129,25 +132,42 @@ export function AppShell() {
 			<header className="shrink-0 border-b print:hidden">
 				<div className="mx-auto flex h-[4.5rem] max-w-[var(--container-max,88rem)] items-center gap-x-3 px-4 sm:gap-x-8 sm:px-10">
 					<Link to="/" className="inline-flex items-center gap-2 rounded-md font-heading text-xl font-bold tracking-tight sm:gap-2.5 sm:text-2xl" aria-label={tr('LearnVault home', 'Início do LearnVault')}><BrandMark className="size-7 text-foreground sm:size-8" />LearnVault</Link>
-					<nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
+					{!locked && <nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
 						{navItems().map((item) => (
 							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-150 hover:bg-brand-tint hover:text-foreground', isActive && 'bg-brand-soft font-semibold text-brand-ink')}>
 								{item.label}
 							</NavLink>
 						))}
-					</nav>
+					</nav>}
 					<div className="ml-auto flex items-center gap-1 lg:ml-0">
-						<GlobalSearch />
-						<FocusMenu />
+						{!locked && <GlobalSearch />}
+						{!locked && <FocusMenu />}
 						<ThemeToggle />
 						<AccountMenu username={user.username} userId={user.userId} />
 					</div>
 				</div>
 			</header>
-			<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
-			<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
+			{locked ? <CredentialsBanner /> : (
+				<>
+					<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
+					<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
+				</>
+			)}
 			<MainContent pathname={location.pathname} />
-			<MobileTabs />
+			{!locked && <MobileTabs />}
+		</div>
+	);
+}
+
+/** Explains why the library is closed until the temporary password has been replaced. */
+function CredentialsBanner() {
+	useLocale();
+	return (
+		<div role="alert" className="shrink-0 border-b border-warning/40 bg-warning-tint print:hidden">
+			<div className="mx-auto flex max-w-[var(--container-max,88rem)] items-start gap-3 px-4 py-3 text-sm sm:px-10">
+				<KeyRound className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+				<p className="text-pretty"><strong className="font-semibold">{tr('Change your temporary password first.', 'Troque primeiro a senha temporária.')}</strong> {tr('This account still uses the temporary sign-in. Choose a new username and password below to open your library.', 'Esta conta ainda usa o acesso temporário. Escolha abaixo um novo usuário e uma nova senha para abrir sua biblioteca.')}</p>
+			</div>
 		</div>
 	);
 }
