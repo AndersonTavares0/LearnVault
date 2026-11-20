@@ -1,5 +1,6 @@
 import { Award, ChevronRight, Flame, FolderPlus, Play, RefreshCw, Search, Sparkles, Star, Target } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { BrandMark, Motto } from '@/components/brand';
 import { CourseCover } from '@/components/course-cover';
@@ -29,6 +30,7 @@ import { PageHeader } from '@/app/shell';
 // Four views share one filter and sort state (docs/design/parity.md).
 
 const LIBRARY_RETURN_KEY = 'learnvault-library-return';
+const COURSE_BATCH_SIZE = 60;
 
 export function HomePage() {
 	useLocale();
@@ -90,6 +92,7 @@ export function HomePage() {
 	const profile = user?.userId ?? '';
 	const filtered = Boolean(query || filter !== 'all' || category);
 	const wide = view === 'list' || view === 'compact';
+	const resultsKey = JSON.stringify([view, query, filter, category, sort]);
 
 	const completedCourses = library.entries.filter((entry) => entry.status === 'completed').length;
 	const resume = !filtered && studySyncSupported && library.entries.length > 0 ? <ResumeCard items={library.resume} entries={library.entries} profile={profile} compact={wide} /> : null;
@@ -131,7 +134,7 @@ export function HomePage() {
 						) : library.visible.length === 0 ? (
 							<EmptyResults filter={query || category ? 'all' : filter} onClear={() => setParams({}, { replace: true })} />
 						) : view === 'shelf' ? (
-							<Shelf entries={sorted} profile={profile} canManage={Boolean(user?.isAdmin)} />
+							<Shelf key={resultsKey} entries={sorted} profile={profile} canManage={Boolean(user?.isAdmin)} />
 						) : (
 							<div>
 								{view === 'list' && (
@@ -144,9 +147,14 @@ export function HomePage() {
 										{user?.isAdmin && <div className="w-11 shrink-0" />}
 									</div>
 								)}
-								<ul className={view === 'covers' ? 'grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3' : view === 'compact' ? 'divide-y border-y' : ''}>
-									{sorted.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} canManage={Boolean(user?.isAdmin)} variant={view === 'covers' ? 'grid' : view} />)}
-								</ul>
+								<CourseList
+									key={resultsKey}
+									entries={sorted}
+									profile={profile}
+									canManage={Boolean(user?.isAdmin)}
+									variant={view === 'covers' ? 'grid' : view}
+									className={view === 'covers' ? 'grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-3' : view === 'compact' ? 'divide-y border-y' : ''}
+								/>
 							</div>
 						)}
 					</section>
@@ -220,6 +228,35 @@ function ResumeCard({ items, entries, profile, compact = false }: { items: Resum
 	);
 }
 
+function CourseList({ entries, profile, canManage, variant, className }: {
+	entries: CourseEntry[];
+	profile: string;
+	canManage: boolean;
+	variant: 'grid' | 'list' | 'compact' | 'shelf';
+	className: string;
+}) {
+	const [limit, setLimit] = useState(COURSE_BATCH_SIZE);
+	const list = useRef<HTMLUListElement>(null);
+
+	const showMore = () => {
+		flushSync(() => setLimit(limit + COURSE_BATCH_SIZE));
+		list.current?.children[limit]?.querySelector('a')?.focus();
+	};
+
+	return (
+		<>
+			<ul ref={list} className={className}>
+				{entries.slice(0, limit).map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} canManage={canManage} variant={variant} />)}
+			</ul>
+			{entries.length > limit && (
+				<Button type="button" variant="outline" className="mt-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground" onClick={showMore}>
+					{tr('Show more courses', 'Mostrar mais cursos')}
+				</Button>
+			)}
+		</>
+	);
+}
+
 /** Courses as horizontal shelves, grouped by how far the reader has got. */
 function Shelf({ entries, profile, canManage }: { entries: CourseEntry[]; profile: string; canManage: boolean }) {
 	const groups = [
@@ -238,9 +275,7 @@ function Shelf({ entries, profile, canManage }: { entries: CourseEntry[]; profil
 							<h3 className="text-lg font-bold">{label}</h3>
 							<span className="text-sm text-muted-foreground tabular-nums">{items.length}</span>
 						</div>
-						<ul className="flex snap-x gap-5 overflow-x-auto pb-2">
-							{items.map((entry) => <CourseCard key={entry.courseId} entry={entry} profile={profile} canManage={canManage} variant="shelf" />)}
-						</ul>
+						<CourseList entries={items} profile={profile} canManage={canManage} variant="shelf" className="flex snap-x gap-5 overflow-x-auto pb-2" />
 					</section>
 				);
 			})}

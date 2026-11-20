@@ -18,6 +18,20 @@ describe('ActivityHeatmap', () => {
 		expect(screen.getByText('1 day with study in the last year')).toBeTruthy();
 	});
 
+	it('offers a keyboard-accessible table of daily study details', async () => {
+		render(<ActivityHeatmap today="2026-11-01" activeDays={['2026-11-01']} activity={{ '2026-11-01': { score: 3, lessons: 2, focusMinutes: 25 } }} />);
+
+		const disclosure = screen.getByText('View daily study activity');
+		disclosure.focus();
+		expect(document.activeElement).toBe(disclosure);
+		expect(screen.queryByRole('table')).toBeNull();
+		fireEvent.click(disclosure);
+		expect(await screen.findByRole('table', { name: 'Daily study activity' })).toBeTruthy();
+		expect(screen.getByRole('row', { name: /Nov 1, 2026 2 lessons, 25 min focus/ })).toBeTruthy();
+		expect(screen.getByRole('row', { name: /Oct 31, 2026 No study recorded/ })).toBeTruthy();
+		expect(screen.queryByRole('row', { name: /Nov 2, 2026/ })).toBeNull();
+	});
+
 	it('scales cell intensity across levels and shows details in a hover tooltip', () => {
 		const { container } = render(
 			<ActivityHeatmap

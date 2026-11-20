@@ -33,15 +33,17 @@ function levelStyle(level: 0 | 1 | 2 | 3 | 4): React.CSSProperties | undefined {
 	return undefined;
 }
 
-function describeDay(day: string, level: 0 | 1 | 2 | 3 | 4, info?: DayActivity): string {
-	const date = new Date(`${day}T12:00:00Z`).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' });
-	if (level === 0) return `${date} · ${tr('No study recorded', 'Sem estudo registrado')}`;
+function formatDay(day: string): string {
+	return new Date(`${day}T12:00:00Z`).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function describeActivity(level: 0 | 1 | 2 | 3 | 4, info?: DayActivity): string {
+	if (level === 0) return tr('No study recorded', 'Sem estudo registrado');
 	const parts: string[] = [];
 	if (info?.lessons) parts.push(formatCount(info.lessons, tr('lesson', 'aula'), tr('lessons', 'aulas')));
 	if (info?.focusMinutes) parts.push(tr(`${info.focusMinutes} min focus`, `${info.focusMinutes} min de foco`));
-	if (parts.length > 0) return `${date} · ${parts.join(', ')}`;
-	const intensity = level >= 4 ? tr('Deep study', 'Estudo intenso') : level === 3 ? tr('Strong study', 'Bom ritmo') : level === 2 ? tr('Moderate study', 'Estudo moderado') : tr('Studied', 'Estudado');
-	return `${date} · ${intensity}`;
+	if (parts.length > 0) return parts.join(', ');
+	return level >= 4 ? tr('Deep study', 'Estudo intenso') : level === 3 ? tr('Strong study', 'Bom ritmo') : level === 2 ? tr('Moderate study', 'Estudo moderado') : tr('Studied', 'Estudado');
 }
 
 /**
@@ -57,13 +59,14 @@ function lastWeeks(today: string): string[] {
 
 /**
  * Study days over the last year, read like a contribution graph: months across the top,
- * weekdays down the side, and one cell per day. The grid is decorative: the sentence above
- * it carries the same information.
+ * weekdays down the side, and one cell per day. The table provides the same daily details
+ * as the pointer tooltip.
  */
 export function ActivityHeatmap({ today, activeDays, activity }: { today: string; activeDays: string[]; activity?: Record<string, DayActivity> }) {
 	const active = useMemo(() => new Set(activeDays), [activeDays]);
 	const days = useMemo(() => lastWeeks(today), [today]);
 	const containerRef = useRef<HTMLDivElement>(null);
+	const [showDetails, setShowDetails] = useState(false);
 	const [hovered, setHovered] = useState<{ day: string; x: number; y: number; width: number } | null>(null);
 	const months = useMemo(() => {
 		const found: { key: string; label: string; week: number }[] = [];
@@ -130,13 +133,11 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 							{days.map((day) => {
 								const info = activity?.[day];
 								const level = dayLevel(active.has(day), info);
-								const label = describeDay(day, level, info);
 								return (
 									<span
 										key={day}
 										data-day={day}
 										data-level={level}
-										aria-label={label}
 										style={levelStyle(level)}
 										onMouseEnter={(event) => {
 											const box = containerRef.current?.getBoundingClientRect();
@@ -160,7 +161,7 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 				</div>
 				{hovered && (
 					<div role="tooltip" className="pointer-events-none absolute z-20 rounded-lg bg-foreground px-2.5 py-1.5 text-xs font-medium whitespace-nowrap text-background shadow-md" style={{ left: tipLeft, top: hovered.y, transform: tipTransform }}>
-						{describeDay(hovered.day, hoveredLevel, hoveredInfo)}
+						{formatDay(hovered.day)} · {describeActivity(hoveredLevel, hoveredInfo)}
 					</div>
 				)}
 			</div>
@@ -172,6 +173,33 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 				))}
 				<span>{tr('More', 'Mais')}</span>
 			</div>
+			<details onToggle={(event) => setShowDetails(event.currentTarget.open)}>
+				<summary className="w-fit min-h-11 cursor-pointer rounded-md px-2 py-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground">
+					{tr('View daily study activity', 'Ver atividade diária de estudo')}
+				</summary>
+				{showDetails && (
+					<table className="w-full text-left text-sm text-foreground">
+						<caption className="sr-only">{tr('Daily study activity', 'Atividade diária de estudo')}</caption>
+						<thead>
+							<tr className="border-b">
+								<th scope="col" className="px-2 py-1.5">{tr('Date', 'Data')}</th>
+								<th scope="col" className="px-2 py-1.5">{tr('Activity', 'Atividade')}</th>
+							</tr>
+						</thead>
+						<tbody>
+							{days.filter((day) => day <= today).reverse().map((day) => {
+								const info = activity?.[day];
+								return (
+									<tr key={day} className="border-b">
+										<th scope="row" className="px-2 py-1.5 font-normal">{formatDay(day)}</th>
+										<td className="px-2 py-1.5">{describeActivity(dayLevel(active.has(day), info), info)}</td>
+									</tr>
+								);
+							})}
+						</tbody>
+					</table>
+				)}
+			</details>
 		</section>
 	);
 }
