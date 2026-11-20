@@ -21,7 +21,7 @@ The Flatpak contains the desktop app only.
 - `crates/desktop/tauri.conf.json`: `bundle.targets` is `["nsis"]`, so Tauri produces no Linux bundle; `flatpak.yml` builds the Flatpak from the release binary.
 - The folder picker uses `tauri-plugin-dialog` with its `xdg-portal` feature, so inside the Flatpak it goes through the FileChooser portal.
 - The updater is gated on `FLATPAK_ID` (`crates/desktop/src/command.rs`).
-- Inside Flatpak, the Open in system player command returns `false` before attempting to open the file (`crates/desktop/src/command.rs`). The sandbox grants no broad `home` or `host` access.
+- Inside Flatpak, the player hides the “Open in system player” controls. A direct IPC call returns the `system_player_unavailable` error before attempting to open the file. The sandbox grants no broad `home` or `host` access.
 - The metainfo is validated with `appstreamcli` in CI. No store screenshots or age rating are needed because nothing is submitted to a store.
 - The bundle is published as `learnvault-linux-desktop-<arch>.flatpak`, listed in `SHA256SUMS` and in the asset table in [`process.md`](../releases/process.md#published-release-assets).
 

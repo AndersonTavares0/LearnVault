@@ -67,9 +67,10 @@ The workspace is `crates/core`, `crates/server` (Axum), `crates/desktop` (Tauri 
   user's current course grants.
 - **Media:** the desktop serves images, materials, video, audio, and subtitles through
   `learnvault-media://localhost/<media-id>` (`http://learnvault-media.localhost/<media-id>` on
-  Windows WebView2), with a type allowlist, range support, and response limits. Outside Flatpak, "open in system
-  player" validates the media with the confined opener and then hands a resolved path to the OS launcher;
-  the action is disabled inside Flatpak. The server streams the same content over
+  Windows WebView2), with a type allowlist, range support, and response limits. Outside Flatpak,
+  “Open in system player” validates the media with the confined opener and passes the resolved
+  path to the OS launcher. Inside Flatpak, the player hides the controls and direct IPC calls
+  return `system_player_unavailable`. The server streams the same content over
   `/api/media`, with on-demand FFmpeg remux and transcode for extended formats.
 - **Covers:** one image per course, up to 4 MiB, type checked by magic bytes, written atomically
   outside the course folder, versioned by `cover_version`. The desktop serves it through

@@ -38,6 +38,13 @@
   artifacts belong in PR comments and descriptions. Branding is kept strictly vector (`.svg`) under
   `docs/design/branding/`. Every PR runs automated repository hygiene checks in CI (`scripts/repo-hygiene.mjs`).
 
+Run `pnpm run hygiene` locally or add it to your executable pre-commit hook. The command scans
+tracked files in the working tree, including unstaged edits.
+
+Keep `SECRET_FIXTURE_ALLOWLIST` in `scripts/repo-hygiene.mjs` small. Each reviewed exception
+must name the exact repository-relative path and detection rule and match only the synthetic
+fixture line.
+
 ## Branch names
 
 Use `<type>/<slug>`, where `<type>` is a Conventional Commit type (`feat`, `fix`, `docs`, `ci`,
