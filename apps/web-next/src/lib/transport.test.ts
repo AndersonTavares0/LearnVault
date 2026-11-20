@@ -599,7 +599,7 @@ describe('transport contract', () => {
 		vi.stubGlobal('fetch', fetchMock);
 		const file = new File([new Uint8Array([0x89])], 'capa.png', { type: 'image/png' });
 
-		for (const [status, message] of [[413, 'A imagem é maior que 4 MiB.'], [415, 'A capa precisa ser PNG, JPEG ou WebP.'], [404, 'Curso não encontrado.'], [503, 'O servidor está ocupado; tente de novo em instantes.'], [500, 'Não foi possível salvar a capa do curso.'], [403, 'credentials_change_required']] as const) {
+		for (const [status, message] of [[413, 'A imagem é maior que 4 MiB.'], [415, 'A capa precisa ser PNG, JPEG ou WebP.'], [404, 'Curso não encontrado.'], [503, 'O servidor está ocupado; tente de novo em instantes.'], [500, 'Não foi possível salvar a capa do curso.'], [403, 'Troque sua senha temporária em Ajustes antes de continuar.']] as const) {
 			fetchMock.mockResolvedValue(new Response(null, { status }));
 			await expect(new HttpTransport().importCourseCover('course-1', file)).rejects.toThrow(message);
 		}
@@ -630,7 +630,7 @@ describe('transport contract', () => {
 		await expect(new HttpTransport().removeCourseCover('course one')).resolves.toBe(false);
 
 		fetchMock.mockResolvedValue(new Response(null, { status: 403 }));
-		await expect(new HttpTransport().removeCourseCover('course one')).rejects.toThrow('credentials_change_required');
+		await expect(new HttpTransport().removeCourseCover('course one')).rejects.toThrow('Troque sua senha temporária em Ajustes antes de continuar.');
 		fetchMock.mockResolvedValue(new Response(null, { status: 404 }));
 		await expect(new HttpTransport().removeCourseCover('course one')).rejects.toThrow('Curso não encontrado.');
 		vi.unstubAllGlobals();
@@ -690,7 +690,7 @@ describe('transport contract', () => {
 	it('maps a rejected update check to an actionable message', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 403 }));
 		vi.stubGlobal('fetch', fetchMock);
-		await expect(new HttpTransport().checkUpdate()).rejects.toThrow('credentials_change_required');
+		await expect(new HttpTransport().checkUpdate()).rejects.toThrow('Troque sua senha temporária em Ajustes antes de continuar.');
 		vi.unstubAllGlobals();
 	});
 	it('performs study notes CRUD operations over HTTP', async () => {

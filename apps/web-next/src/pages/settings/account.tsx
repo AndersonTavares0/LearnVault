@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CircleUser } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 import { PasswordField } from '@/components/password-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -108,6 +109,7 @@ export function AvatarSettings({ user }: { user: User }) {
 /** Username and password change; the server issues a new session and ends the others. */
 export function CredentialsForm({ user }: { user: User }) {
 	const client = useQueryClient();
+	const navigate = useNavigate();
 	const [current, setCurrent] = useState('');
 	const [username, setUsername] = useState(user.username);
 	const [password, setPassword] = useState('');
@@ -117,6 +119,8 @@ export function CredentialsForm({ user }: { user: User }) {
 			client.setQueryData(keys.session, { user: updated, error: '' });
 			setCurrent('');
 			setPassword('');
+			// Replacing the temporary password opens the library the banner kept shut.
+			if (user.mustChangeCredentials && !updated.mustChangeCredentials) navigate('/', { replace: true });
 		}
 	});
 	const tooShort = password.length > 0 && [...password].length < MIN_PASSWORD;
