@@ -402,6 +402,9 @@ async fn admin_rescan_populates_the_authenticated_catalog() {
 #[tokio::test]
 async fn catalog_reports_database_errors_without_caching_or_leaking_paths() {
     let temp = tempfile::tempdir().unwrap();
+    let course = temp.path().join("course");
+    fs::create_dir(&course).unwrap();
+    fs::write(course.join("lesson.mp4"), b"video").unwrap();
     let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
     let cookie = login(&app).await;
     Database::open(temp.path().join("catalog.sqlite"))
@@ -594,6 +597,9 @@ async fn rescan_preserves_media_if_the_course_root_has_no_read_permissions() {
 #[tokio::test]
 async fn rescan_returns_conflict_while_another_process_holds_its_lock() {
     let temp = tempfile::tempdir().unwrap();
+    let course = temp.path().join("course");
+    fs::create_dir(&course).unwrap();
+    fs::write(course.join("lesson.mp4"), b"video").unwrap();
     let lock_path = temp.path().join("catalog.sqlite.rescan.lock");
     let ready_path = temp.path().join("lock-ready");
 
