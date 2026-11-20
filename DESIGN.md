@@ -4,7 +4,7 @@ The design record for the app in `apps/web-next`, as built. This file replaces e
 
 ## Intent
 
-An editorial study room: warm paper, generous space and a serif voice, around the familiar structure of a course platform (library, course, lesson, progress). The next lesson and the learner's own habit carry the page, with no decorative graphics. The direction comes from the maintainer's reference, a warm off-white study dashboard with a tinted "next up" card, outlined pills and small stat cards. Course platforms are a structural reference only.
+Use warm off-white surfaces, generous spacing and serif headings around the familiar structure of a course platform (library, course, lesson, progress). The library puts the next lesson in a tinted card and uses outlined pills and compact study statistics, with no decorative graphics. The direction comes from the maintainer's reference dashboard. Course platforms are a structural reference only.
 
 **Light, dark and surface palettes.** Light is the default (`warm` surface). Dark uses tinted charcoal (`#0B0A09` base on `warm`). The header has a sun/moon button. Settings offers Light, Dark and Follow the system, plus eight surface palettes (`warm`, `stone`, `crisp`, `sepia`, `sage`, `nord`, `rose`, `solarized`) with light and dark pairs shown as dual-tone swatches. `<html data-theme>` and `<html data-surface>` carry the active mode and palette while `color-scheme` follows the resolved theme; `dark:` utilities read `data-theme`.
 
@@ -43,7 +43,7 @@ Tokens live once in `src/styles/app.css` as shadcn variables, mapped by Tailwind
 
 ## Brand
 
-LearnVault is a private academy kept in a vault: the learner's own course library, read-only and untouched.
+The identity is the Academy Portico mark and the *Sapere aude* motto.
 
 **Mark.** The Academy Portico: a Greek school front (pediment, four columns, steps) with a gold arched door, the vault. The stone is one neutral colour and the door and the pediment dot are the single accent, so the mark never competes with the learner's own accent colour. In the app `BrandMark` (`components/brand.tsx`) draws the stone in `currentColor` (always pass `text-foreground`: cream on the dark page, ink on the light one) and the door in `--reward-fill`. `compact` is the reduced cut (two columns, a wider door) for 24 px and below; the full mark is for 32 px and up.
 
@@ -100,7 +100,7 @@ A PDF lesson (or a PDF material) opens in the app and is never written. The page
 
 - page, zoom and fit controls with keyboard shortcuts (arrows, Page Up/Down, Home/End, +/-);
 - search across every page, with previous/next result and a spoken summary;
-- marks on selected text: highlight (`h`), underline (`u`) and note (a button), in four colours chosen with a labelled radio group. `n` and `p` move to the next or previous search result, or to a marked page when there is no search;
+- marks on selected text: `h` highlights, `u` underlines, and the Note button adds a note. A labelled radio group offers four colours. `n` and `p` move between search results, or between marked pages when there are no results;
 - a note is written in a small form before it is saved (the server refuses empty notes);
 - a "Marks in this document" panel: show all or this page, edit each note, change its colour, jump to its page, delete it, or export every mark as Markdown.
 

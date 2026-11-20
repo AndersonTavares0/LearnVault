@@ -59,7 +59,7 @@ The learner can customise the accent colour, surface palette, corners, density, 
 - **Light and dark**: a warm off-white page, cream and white cards, warm-ink actions, Playfair Display titles and DM Sans text; a warm-black dark theme switched from the header or followed from the system. The learner can change the accent colour and other details. The maintainer chose this direction on 2026-11-11 from their reference dashboard; see `DESIGN.md`.
 - Udemy, Coursera and similar platforms are a **structural reference only**. No code, assets, brand, text or pixel-level layout is copied.
 - The language switch lives in Settings, not in the navigation bar.
-- The result should read as a calm study room. It should not look like a SaaS dashboard, a course store, a children's game or a wall of metrics.
+- Use warm neutral surfaces, serif headings and compact study statistics.
 
 ## Evidence on Hand
 

@@ -107,14 +107,13 @@ Execution happens in phases: governance, `crates/core`, `crates/server`, `apps/w
 
 ### Risks
 
-- **Flatpak packaging:** treated as the preferred format, not the definitive one. It now ships, and CI
-  builds it, checks its permissions, starts it under a virtual display, and checks that the FileChooser and
-  OpenURI portals answer. CI does not import a course folder through the portal, play a lesson, or reopen the
-  app, so persistent folder access and real playback inside the sandbox are still unvalidated. The sandbox
-  grants no filesystem access, so "open in system player" does not work inside it
-  ([details](../../operations/flatpak.md)).
-- **A single version across binaries:** it requires a single source of truth for the version
-  number; the server version is already exposed in `--version` and `/api/healthz`.
+- **Flatpak packaging:** treated as the preferred format, not the definitive one. Flatpak CI builds the
+  bundle, checks permissions, starts it under a virtual display, and checks that the FileChooser and OpenURI
+  portals respond. The job does not test persistent folder access or playback. The sandbox reaches selected
+  folders through the portal and has no broad host or home grant. The system player command returns `false`
+  inside Flatpak. See [Flatpak packaging](../../operations/flatpak.md).
+- **A single version across binaries:** all packaged binaries use the Release Please version. The server
+  version is exposed in `--version` and `/api/healthz`.
 
 ## Validation and rollback
 

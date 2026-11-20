@@ -1,9 +1,6 @@
 # Redesign spec (direction L)
 
-> **Superseded in part (2026-11-11).** [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md) replaced the palette, themes, navigation and gamification described here (light and dark themes, Playfair Display and DM Sans, top navigation, no forest). Where they disagree with this file, they win. The file stays as history; its accessibility and security rules still apply.
-
-This was the target design for the React app (`apps/web-next`, epic #347). The cutover (#340) is
-complete, [DESIGN.md](DESIGN.md) describes what ships, and this file is kept as history.
+> This is the original direction L proposal for the React cutover (#347 and #340). See [DESIGN.md](../../DESIGN.md) for current behavior and [the archived Svelte research](https://github.com/AndersonTavares0/LearnVault/blob/e1434ab41f4fc5056c5d8519cd6a7583d74b5fff/docs/design/research.md) for the earlier design record.
 
 Course platforms are a structural reference only. Do not copy their code, assets, brand, proprietary text,
 or pixel-level layout.
@@ -22,11 +19,11 @@ or pixel-level layout.
 
 | Viewport | Global navigation | Course context |
 | --- | --- | --- |
-| Desktop (≥ 1024px) | Topbar with logo, search (`/`), My learning, Review, Progress, Notes, Pomodoro, theme, account menu | Curriculum sidebar on the course page and in the player, collapsible |
-| Below `lg` (< 1024px) | Bottom tab bar with the destinations and Search; the account menu stays in the topbar | Course content stacks below the player |
+| Desktop (≥ 1024px) | Topbar with logo, search (`/`), My learning, Progress, Notes, Pomodoro, language, account menu | Curriculum sidebar on the course page and in the player, collapsible |
+| Below `lg` (< 1024px) | Bottom tab bar with the four destinations and Search (full-screen palette); the account menu stays in the topbar | Course content stacks below the player |
 
-The account menu holds Settings, Watch history, and Sign out. The desktop build has no
-Sign out and adds the custom titlebar. The language switch moved to Settings.
+The account menu holds Settings, Admin (admins only), and Sign out. The desktop build has no
+Sign out and adds the custom titlebar.
 
 Every page starts with a skip link and uses `header`, `nav`, `main`, and `aside` landmarks.
 
@@ -83,15 +80,15 @@ Notes are searchable across courses and lessons. Each note links back to its tim
 
 ### Settings (`#/settings`)
 
-- **Appearance.** Theme, surface palette, accent, and layout preferences (see `DESIGN.md`).
+- **Appearance.** Theme (System, Light, Dark) and palette (Stone + Emerald, Zinc + Teal,
+  Zinc + Indigo).
 - **Language.** English, Português (Brasil).
 - **Profile.** Avatar and password (server only).
 - **Focus.** Pomodoro durations and sounds, weekly goal.
 - **Updates.** Admins see version, release notes, channel, history, and upgrade instructions (#345).
   The desktop app shows the restart-to-update flow (#346).
-- **Admin (server).** Users and per-course access, remote sources, and backup download. Course covers and
-  order (with move up/down buttons) are managed from the course page.
-- **Sync (desktop).** Optional link to a server account.
+- **Admin.** Users and per-course access, course covers, course order (with move up/down buttons),
+  and backup.
 
 ### Login (`#/login`, server only)
 
@@ -102,7 +99,7 @@ error message, and rate-limit feedback. See [security.md](security.md).
 
 Kept: streak, weekly goal, daily missions, XP and level, achievements, Pomodoro, flashcards, notes, favourites.
 
-Added without backend changes:
+Added without backend changes (Phase 5):
 
 - Course milestones
 - Course-completion badges
@@ -111,7 +108,7 @@ Added without backend changes:
 - Today's review
 - Focus-block summary
 
-Proposed with backend changes (#341, not built):
+Added with backend changes (Phase 7, #341):
 
 - Weekly rest day that protects the streak
 - Personal deadline per course
@@ -125,7 +122,23 @@ aggressive notifications.
 
 ## Color
 
-This spec proposed three shadcn/ui palettes (Stone + Emerald, Zinc + Teal, Zinc + Indigo). They were replaced by the warm palette, eight surfaces, and nine accent presets in [`DESIGN.md`](../../DESIGN.md#colour). The rules that carried over: one accent for actions and progress, separate semantic tokens for success, warning, and destructive states, and button-label and muted-text contrast checked end to end in both modes.
+The palettes are shadcn/ui themes on the Tailwind palette, in OKLCH, with light and dark variants. Each
+palette is a `data-palette` value on `<html>`, stored per device under `learnvault-palette`.
+
+| Palette | Neutral base | Accent (light / dark) | Default |
+| --- | --- | --- | --- |
+| Stone + Emerald | stone | emerald-700 / emerald-400 | yes |
+| Zinc + Teal | zinc | teal-700 / teal-400 | |
+| Zinc + Indigo | zinc | indigo-600 / indigo-400 | |
+
+Rules:
+
+- One accent color for actions and progress. Success, warning, and destructive colors are
+  separate semantic tokens.
+- In light mode, muted text uses the 600 step of the neutral scale, not the theme default, to keep a
+  safe margin above 4.5:1.
+- Measured button-label contrast. Light: 5.5 (emerald), 5.5 (teal), 6.3 (indigo). Dark: 10.3, 10.7,
+  6.7. End-to-end tests check every palette in both modes.
 
 ## Type and spacing
 

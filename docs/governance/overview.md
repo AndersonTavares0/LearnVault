@@ -3,10 +3,6 @@
 **Target audience:** anyone opening an issue, pull request, release, or modifying CI.
 If you just want to run the project, start with the [README](../../README.md).
 
-**Summary:** LearnVault follows GitHub Flow. Feature work starts in an issue or Discussion, all code
-enters through topic branches and pull requests, and `main` takes squash merges only, after the required
-checks pass and review threads are resolved.
-
 ## Contribution Workflow
 
 1. Open a Discussion when design questions or alternative solutions need consensus.
@@ -80,10 +76,6 @@ Community health files (`CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`) 
 root `CONTRIBUTING.md` only points there. The changelog is `docs/releases/CHANGELOG.md`, and Release Please
 configuration is in `.github/release-please/`.
 
-The tracked root files are `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `DESIGN.md`, `PRODUCT.md`, `LICENSE`,
-`.dockerignore`, `.gitignore`, `Cargo.toml`, `Cargo.lock`, `rust-toolchain.toml`, `package.json`,
-`pnpm-lock.yaml`, `pnpm-workspace.yaml`, and `playwright.config.ts`.
-
 Generated output (`crates/server/web/build`, `crates/desktop/frontend-dist`, `target`, `node_modules`, and
 local data and cache directories) is gitignored and is never committed.
 
@@ -96,7 +88,7 @@ local data and cache directories) is gitignored and is never committed.
 
 ## Documentation Standards
 
-The repository is the source of truth; [`docs/README.md`](../README.md) indexes it.
+See [the documentation index](../README.md).
 
 `README.md`, `AGENTS.md`, everything under `docs/`, `CHANGELOG.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and
 `SECURITY.md` are in English. The app itself switches between English (default) and Brazilian Portuguese
@@ -131,10 +123,9 @@ apply.
 Required check names are stable: `SPA checks`, `Rust tests and lints`, `Windows core tests`,
 `Desktop crate compile and guards`, `Container build (Rust)`, `Dependency review`, and `CI gate`.
 
-CI runs on pull requests, cancels superseded runs, builds the SPA once for the container and the desktop app,
-caches dependencies, and uses short timeouts. For documentation-only or release-metadata changes the heavy jobs
-(E2E, Rust, desktop, container, dependency audit) skip. The `CI gate` fails on unexpected skips, cancellations,
-or test failures.
+CI runs on pull requests, cancels superseded runs, and builds separate server and desktop SPA variants. For
+documentation-only or release-metadata changes, browser E2E, Rust, Windows core, desktop, container, and Rust
+dependency audit jobs skip. The `CI gate` fails on unexpected skips, cancellations, or test failures.
 
 - `Rust tests and lints`: formatting, clippy, `cargo nextest` for the workspace except the desktop crate, doc tests,
   and an 80% line-coverage floor for `crates/core`.
@@ -156,7 +147,7 @@ Labels are informational and never block a merge. Work type (`bug`, `enhancement
 
 ## Release identity and recovery
 
-Stable builds resolve the requested `refs/tags/vX.Y.Z` to a commit SHA. The workflow builds the container image locally, refreshes and checks the tag, and only then pushes the image. Asset publication checks the tag again right before upload. A manual rebuild uses the tagged source, not the dispatch branch, and a manual repair does not move the mutable `latest` tag. Do not change release tags during publication.
+The workflow resolves the release Git tag to a commit and builds from that commit. It pushes platform images by digest for scanning and smoke tests, then rechecks the Git tag before staging the combined image index. It checks the Git tag again immediately before uploading assets. Manual rebuilds use the tagged source and leave the `latest` image alias in place.
 
 Database backup and restore stage SQLite files and sidecars in a private directory on the destination filesystem. Exports keep private Unix file permissions, rollback copies fail if the filename exists, and replacing the destination never deletes a valid database first. Pick a destination with trusted ancestors or a protected shared directory. On Windows, confidentiality depends on the directory's inherited ACLs.
 

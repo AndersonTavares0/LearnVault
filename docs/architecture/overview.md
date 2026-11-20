@@ -57,11 +57,12 @@ The workspace is `crates/core`, `crates/server` (Axum), `crates/desktop` (Tauri 
   Source hostnames are resolved and every address is checked before connecting.
 - **Offline desktop:** opens the `main` window from `crates/desktop/tauri.conf.json`, with the SPA
   embedded through `frontendDist` and a custom titlebar. Import, removal, rescan, and study run
-  through explicit IPC commands; the webview gets opaque identifiers, never filesystem paths. Course
-  registrations live in `library.json` in the app configuration directory. The webview CSP allows bundled
+  through explicit IPC commands. The webview uses opaque IDs for media playback and receives relative paths
+  for catalog navigation. Rust keeps absolute course roots in `library.json` in the app configuration directory
+  and opens the native folder picker. The webview CSP allows bundled
   assets, IPC, and the app's own media and cover schemes, and no remote origin. Rust makes two kinds of outbound request: the update check against GitHub Releases and, when
   the user links a server, sync ([ADR 0005](adr/0005-sync-journal-for-browser-writes.md)).
-- **Sync:** the desktop pushes its outbox and pulls other devices' operations over HTTP. The server
+- **Sync:** the desktop pushes its outbox and pulls other devices' operations over HTTP(S). The server
   journals browser writes as device `server`, so they reach desktops too, and a pull applies the
   user's current course grants.
 - **Media:** the desktop serves images, materials, video, audio, and subtitles through

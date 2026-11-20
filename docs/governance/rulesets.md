@@ -35,8 +35,8 @@ The ruleset requires these 7 checks to pass before a pull request can merge (`.g
 1. **`SPA checks`:** `tsc --noEmit`, `eslint --max-warnings 0`, the script tests (`test:scripts`), Vitest, and `pnpm audit`.
 2. **`Rust tests and lints`:** `cargo fmt`, Clippy (`-D warnings`), the workspace tests with `nextest`, and the `crates/core` coverage floor.
 3. **`Windows core tests`:** formatting, Clippy, and tests for `crates/core` on Windows.
-4. **`Desktop crate compile and guards`:** Tauri 2 desktop build, Clippy, and the desktop integration tests.
-5. **`Container build (Rust)`:** rootless Containerfile build and a Trivy scan.
+4. **`Desktop crate compile and guards`:** compiles the desktop crate, runs Clippy, and runs the desktop integration tests.
+5. **`Container build (Rust)`:** builds the OCI image with Docker Buildx, validates it, and scans it with Trivy.
 6. **`Dependency review`:** GitHub's dependency review on the pull request.
 7. **`CI gate`:** confirms the required jobs ran and none was cancelled or unexpectedly skipped.
 
