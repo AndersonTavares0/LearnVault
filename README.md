@@ -1,8 +1,8 @@
 <div align="center">
 
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/design/branding/learnvault-banner-light.svg">
-    <img src="docs/design/branding/learnvault-banner.svg" alt="LearnVault: your courses, your academy, untouched." width="100%">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/design/branding/learnvault-banner.svg">
+    <img src="docs/design/branding/learnvault-banner-light.svg" alt="LearnVault: your courses, your academy, untouched." width="100%">
   </picture>
 
   <br>
