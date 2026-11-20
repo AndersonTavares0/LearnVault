@@ -1,10 +1,10 @@
 # Migrating SQLite from Go to Rust
 
-The Rust core provides an explicit, scoped database import tool. It never runs automatically on startup and never modifies the original Go database or physical course library.
+The Rust core can import a legacy Go database. The import runs only when requested, never at startup, and never modifies the Go database or the course library.
 
 `learnvault_core::import_go_database(LegacyImportOptions)` takes `input`, `output`, `backup`, and `library_id`. A backup is created first; output is written to a temporary file and promoted only after foreign key checks, integrity checks, and row count validations succeed. Input, output, and backup paths must be distinct and non-overlapping.
 
-Users, sessions, catalog files, valid media removals, and study progress are imported. Paths are normalized to `/`, and Rust-format user and media IDs are generated. Because the Rust schema strictly requires media records for each tombstone, orphan tombstones fail the import safely. Key collisions, unrecognized roles, or invalid timestamps also safely halt execution without promoting corrupted output.
+The import covers users, sessions, catalog files, valid media removals, and study progress. Paths are normalized to `/`, and Rust-format user and media IDs are generated. The Rust schema requires a media record for each tombstone, so an orphan tombstone fails the import. Key collisions, unrecognized roles and invalid timestamps also stop it before any output is promoted.
 
 Run the migration via the server CLI:
 
@@ -12,13 +12,13 @@ Run the migration via the server CLI:
 learnvault-server migrate-go --input <go.sqlite> --output <rust.sqlite> --backup <go.sqlite.backup> --library-id <id>
 ```
 
-This command does not start the HTTP listener and does not require library, network, or admin configuration. For a stable database snapshot, run it with the Go service stopped. Preserve the backup and verify the output with `Database::open` before deployment.
+The command does not start the HTTP listener and needs no library, network, or admin configuration. Run it with the Go service stopped so the database snapshot is stable. Keep the backup and open the output with `Database::open` before deploying.
 
 ## Self-Hosted Cutover Gate
 
-Before migrating, verify whether `${DATA_DIR}` contains a legacy Go v8 database or a Rust database. Formats are incompatible and cannot share the same directory volume.
+Before migrating, check whether `${DATA_DIR}` holds a legacy Go v8 database or a Rust database. The formats are incompatible and cannot share a volume.
 
-1. Preserve the legacy Go volume and stop the Go service. Confirm quiescence before building or starting the new service.
-2. Run `learnvault-server migrate-go` providing explicit paths for `--input`, `--backup`, `--output`, and `--library-id`. Prepare the output in a separate Rust volume.
-3. Verify that the input file checksum is unchanged and output files exist and pass integrity checks.
-4. Keep paired backups of both volumes. To roll back, stop Rust and restore the original Go volume.
+1. Keep the legacy Go volume and stop the Go service. Confirm it is idle before building or starting the new service.
+2. Run `learnvault-server migrate-go` with `--input`, `--backup`, `--output`, and `--library-id`, writing the output to a separate Rust volume.
+3. Check that the input checksum is unchanged and that the output exists and passes integrity checks.
+4. Keep backups of both volumes. To roll back, stop the Rust server and restore the original Go volume.
