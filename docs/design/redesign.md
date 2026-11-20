@@ -1,9 +1,6 @@
 # Redesign spec (direction L)
 
-> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
-
-This was the target design for the React app (`apps/web-next`, epic #347). The cutover (#340) is
-complete, [DESIGN.md](DESIGN.md) describes what ships, and this file is kept as history.
+> This is the original direction L proposal for the React cutover (#347 and #340). See [DESIGN.md](../../DESIGN.md) for current behavior and [the archived Svelte research](https://github.com/AndersonTavares0/LearnVault/blob/e1434ab41f4fc5056c5d8519cd6a7583d74b5fff/docs/design/research.md) for the earlier design record.
 
 Course platforms are a structural reference only. Do not copy their code, assets, brand, proprietary text,
 or pixel-level layout.
