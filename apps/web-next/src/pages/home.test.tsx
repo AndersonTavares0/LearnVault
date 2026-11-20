@@ -25,6 +25,19 @@ afterEach(() => {
 });
 
 describe('My learning', () => {
+	it('refreshes lesson counts when the first indexing snapshot is already finished', async () => {
+		vi.spyOn(transport, 'indexingStatus').mockResolvedValue({
+			status: 'done', startedAt: 1, finishedAt: 2, coursesTotal: 1, coursesCompleted: 1, lastError: null,
+			progress: { filesSeen: 1, added: 1, changed: 0, removed: 0, moved: 0 }
+		});
+		vi.spyOn(transport, 'catalog').mockResolvedValue({ ...catalog, nodes: [course('rust', 'Rust from zero', [lesson('r1', 'Ownership')])] });
+		renderApp('/', { catalog: { ...catalog, nodes: [course('rust', 'Rust from zero', [])] } });
+
+		expect(screen.getByText('No lessons found')).toBeTruthy();
+		expect(await screen.findByText('1 lesson')).toBeTruthy();
+		expect(screen.queryByText('No lessons found')).toBeNull();
+	});
+
 	it('puts the last unfinished lesson first and shows course progress', async () => {
 		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r2', positionSeconds: 95, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		const resume = await screen.findByRole('region', { name: 'Continue learning' });

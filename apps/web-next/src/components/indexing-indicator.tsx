@@ -24,12 +24,17 @@ export function IndexingIndicator({ isAdmin }: { isAdmin: boolean }) {
 	const data = status.data;
 
 	// A finished run changed the catalog: refresh every reader once, not on every poll.
-	const lastFinished = useRef<number | null | undefined>(undefined);
+	const lastFinished = useRef<number | null>(null);
 	useEffect(() => {
-		if (!data) return;
-		if (lastFinished.current !== undefined && data.finishedAt !== null && data.finishedAt !== lastFinished.current) void client.invalidateQueries({ queryKey: keys.catalog });
+		if (!enabled || !data || data.finishedAt === lastFinished.current) return;
 		lastFinished.current = data.finishedAt;
-	}, [client, data]);
+		if (data.finishedAt === null) return;
+
+		// The first poll can already be complete while the initial catalog request is still in flight.
+		// Cancel that request in the query cache so invalidation starts a new fetch.
+		if (client.getQueryData(keys.catalog) === undefined) void client.cancelQueries({ queryKey: keys.catalog });
+		void client.invalidateQueries({ queryKey: keys.catalog });
+	}, [client, data, enabled]);
 
 	if (!enabled || !data || (data.status !== 'running' && data.status !== 'error')) return null;
 
