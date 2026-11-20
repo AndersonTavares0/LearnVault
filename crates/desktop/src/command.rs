@@ -783,10 +783,19 @@ fn pick_cover(app: &tauri::AppHandle) -> Option<PathBuf> {
         .and_then(|path| path.into_path().ok())
 }
 
-/// Inside a Flatpak the update is delivered by the store/Flathub and the installed app cannot replace
-/// its own binary. `FLATPAK_ID` is set by the Flatpak runtime.
+/// Flatpak exposes its app ID in the environment and a marker at the sandbox root.
 pub(crate) fn runs_in_flatpak() -> bool {
-    std::env::var_os("FLATPAK_ID").is_some()
+    detect_flatpak(
+        |name| std::env::var_os(name).is_some(),
+        |path| Path::new(path).exists(),
+    )
+}
+
+fn detect_flatpak(
+    env_is_set: impl FnOnce(&str) -> bool,
+    path_exists: impl FnOnce(&str) -> bool,
+) -> bool {
+    env_is_set("FLATPAK_ID") || path_exists("/.flatpak-info")
 }
 
 /// The built-in updater only runs outside Flatpak.
@@ -909,7 +918,7 @@ pub async fn desktop_media_capabilities()
 -> Result<crate::dto::DesktopMediaCapabilitiesDto, IpcError> {
     Ok(crate::dto::DesktopMediaCapabilitiesDto {
         transcoding: false,
-        system_player: true,
+        system_player: !runs_in_flatpak(),
     })
 }
 
@@ -919,9 +928,8 @@ pub fn open_in_system_player(
     courses: &[CourseEntry],
     media_id: &str,
 ) -> Result<bool, IpcError> {
-    // Inside Flatpak the file path belongs to the host and is not in the sandbox: we do not try to open it.
     if runs_in_flatpak() {
-        return Ok(false);
+        return Err(IpcError::system_player_unavailable());
     }
     let Some(library_id) = learnvault_core::find_media_library_id(database, media_id)
         .map_err(|_| IpcError::study_unavailable())?
@@ -1065,7 +1073,14 @@ pub async fn desktop_sync_now(state: State<'_, DesktopState>) -> Result<SyncResu
 
 #[cfg(test)]
 mod flatpak_gate_tests {
-    use super::updater_enabled;
+    use super::{detect_flatpak, updater_enabled};
+
+    #[test]
+    fn detects_flatpak_from_either_runtime_marker() {
+        assert!(detect_flatpak(|name| name == "FLATPAK_ID", |_| false));
+        assert!(detect_flatpak(|_| false, |path| path == "/.flatpak-info"));
+        assert!(!detect_flatpak(|_| false, |_| false));
+    }
 
     #[test]
     fn the_updater_is_off_inside_flatpak_and_on_elsewhere() {

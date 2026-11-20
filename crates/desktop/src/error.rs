@@ -29,6 +29,8 @@ pub enum IpcErrorCode {
     StudyUnavailable,
     /// The queried media does not exist in the local catalog.
     MediaNotFound,
+    /// The Flatpak sandbox blocks opening media in the system player.
+    SystemPlayerUnavailable,
     /// The resume position sent is invalid.
     InvalidPosition,
     /// A Pomodoro session sent is invalid.
@@ -166,6 +168,14 @@ impl IpcError {
         Self {
             code: IpcErrorCode::MediaNotFound,
             message: "mídia não encontrada no catálogo",
+        }
+    }
+
+    /// Opening the system player is unavailable in the Flatpak sandbox.
+    pub fn system_player_unavailable() -> Self {
+        Self {
+            code: IpcErrorCode::SystemPlayerUnavailable,
+            message: "Opening media in the system player is unavailable in Flatpak.",
         }
     }
 
