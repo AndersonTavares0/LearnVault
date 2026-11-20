@@ -176,8 +176,13 @@ described below. The desktop application is single-user and has no accounts.
 
 ## 8. Secrets and configuration
 
-- `.env` files, databases, course data, and generated media stay outside version control. CI runs
-  repository hygiene checks (`scripts/repo-hygiene.mjs`) on every pull request.
+- Keep credentials, databases, course data, and generated media out of version control.
+  Git ignores common local secret and data files. The CI hygiene check on every pull request
+  rejects tracked credential paths and high-confidence secret patterns. GitHub secret scanning
+  and push protection are enabled. Non-provider patterns and validity checks are disabled
+  (2026-11-20).
+- If you commit a secret, revoke or rotate it first, then remove it from the repository.
+  Coordinate any history rewrite with the repository owner.
 - Initial credentials can be supplied through a file instead of a command line, keeping them out of
   process listings and shell history.
 - Passwords are only stored hashed, session tokens only as hashes, and credentials never appear in
