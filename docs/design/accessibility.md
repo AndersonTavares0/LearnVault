@@ -1,17 +1,15 @@
 # Accessibility requirements
 
-> **Superseded in part (2026-11-11).** The palette, themes, navigation and gamification described here were replaced by the direction in [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md): light and dark themes, brown and amber, Playfair Display and DM Sans, top navigation, no forest. Where this file names a palette, a theme or a layout, those two files win. It is kept as history and for the research and the accessibility and security rules, which still apply.
+> **Superseded in part (2026-11-11).** [`DESIGN.md`](../../DESIGN.md) and [`PRODUCT.md`](../../PRODUCT.md) replaced the palette, themes, navigation and gamification described here (light and dark themes, Playfair Display and DM Sans, top navigation, no forest). Where they disagree with this file, they win. The file stays as history; its accessibility and security rules still apply.
 
-LearnVault targets **WCAG 2.2 Level AA**. This checklist applies to the React app (epic #347). Every
-phase PR that changes UI ticks the relevant items. The cutover (#340) requires all of them.
-
-Automated checks find only part of the problems. A manual keyboard and screen reader pass is
-required before cutover.
+LearnVault targets **WCAG 2.2 Level AA**. This checklist applies to the React app. A PR that changes
+the UI checks the items it touches. Automated checks find only part of the problems, so a manual
+keyboard and screen reader pass is still owed (see the end of this file).
 
 ## Automated gates (CI)
 
 - [ ] ESLint `jsx-a11y` (recommended rules) with no warnings.
-- [ ] Playwright + axe on every route, in both themes and all three palettes: zero violations.
+- [ ] Playwright + axe on the main routes, in both themes and with every accent preset: zero violations.
 - [ ] Playwright fails on any `securitypolicyviolation` event. CSP regressions often break styling
       that accessibility depends on.
 
@@ -30,8 +28,8 @@ required before cutover.
 ## Keyboard
 
 - [ ] Every action works with the keyboard alone (2.1.1), with no keyboard traps (2.1.2).
-- [ ] Single-key shortcuts (player, `/` search) are ignored while typing in a field. A
-      shortcuts dialog (`?`) lists them all (2.1.4).
+- [ ] Single-key shortcuts (player, `/` search) are ignored while typing in a field. The PDF reader
+      lists its own in a shortcuts dialog (`?`) (2.1.4).
 - [ ] Menus, dialogs, tabs, and the accordion follow the WAI-ARIA Authoring Practices patterns.
 - [ ] Dialogs trap focus while open and return focus to the trigger on close.
 - [ ] Course order can be changed with Move up and Move down buttons, not only by dragging (2.5.7).
@@ -49,7 +47,7 @@ required before cutover.
 
 - [ ] Text is never set below `text-xs` (12 px) and is sized in `rem`, so it follows the Text size setting; fixed `px` font sizes are not used.
 - [ ] Body text contrast ≥ 4.5:1, and large text and UI components ≥ 3:1 (1.4.3, 1.4.11), checked for
-      every palette in both modes.
+      every surface palette and accent preset in both modes.
 - [ ] State is never shown by color alone. Completed lessons have an icon and accessible text
       (1.4.1).
 - [ ] At 400% zoom (320 CSS px wide) the content reflows, with no horizontal scroll except the
@@ -93,7 +91,7 @@ required before cutover.
 
 | Key | Action |
 | --- | --- |
-| `/` | Focus library search |
+| `/` or `Ctrl`/`Cmd` + `K` | Open global search |
 | `Space` / `K` | Play or pause |
 | `←` / `J` | Seek back |
 | `→` / `L` | Seek forward |
@@ -101,16 +99,20 @@ required before cutover.
 | `[` / `]` | Playback speed |
 | `F` | Fullscreen (video) |
 | `M` | Mute |
-| `0`–`9` | Jump to a point in the lesson |
+| `0`–`9` | Jump to 0% to 90% of the lesson |
+| `N` | Open the lesson notes |
+| `T` | Cinema mode (video, 1024 px and wider) |
+| `P` | Picture-in-picture (video) |
 | `←` / `→` / `PgUp` / `PgDn` | Previous or next page (PDF reader) |
-| `j` / `k` / `g` / `G` | Next or previous page, first or last page (PDF reader) |
-| `n` / `p` / `h` / `u` / `?` | Next/previous search hit or mark, highlight, underline, shortcut sheet (PDF reader) |
+| `j` / `k` / `g` / `G` / `Home` / `End` | Next or previous page, first or last page (PDF reader) |
+| `+` / `-` | Zoom (PDF reader) |
+| `n` / `p` / `h` / `u` / `?` | Next or previous search hit or mark, highlight, underline, shortcut sheet (PDF reader) |
 
-Keep this table in sync with the player's shortcut handler.
+Keep this table in sync with `playerShortcutAction` in `apps/web-next/src/lib/player.ts` and `PDF_COMMANDS` in `apps/web-next/src/lib/pdf.ts`.
 
-## Manual pass before cutover
+## Manual pass still owed
 
 - [ ] Keyboard only: sign in, resume a lesson, take a note, mark completed, change palette.
 - [ ] Screen reader: NVDA + Firefox (Windows), Orca + Firefox (Linux), the same flow.
 - [ ] Mobile: 375 px width, touch only, the same flow.
-- [ ] Record the results and known limitations in the cutover PR.
+- [ ] Record the results and known limitations in the PR that closes this item.

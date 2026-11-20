@@ -1,8 +1,8 @@
 # Security model
 
-LearnVault is a self-hosted study space. This document describes what the code enforces today, which
-tests hold those guarantees in place, and which limits are accepted on purpose. It covers the Rust
-server, the React SPA it serves, the Tauri desktop application, and the shared core.
+This document describes what the code enforces today, which tests back each guarantee, and which limits
+are accepted on purpose. It covers the Rust server, the React SPA it serves, the Tauri desktop app, and
+the shared core.
 
 Security fixes target the latest release from the default branch. Report vulnerabilities through the
 private channel described in [`.github/SECURITY.md`](../../.github/SECURITY.md); never open a public
@@ -37,7 +37,7 @@ described below. The desktop application is single-user and has no accounts.
 
 - Passwords are hashed with Argon2id at 64 MiB memory, 2 iterations, 1 lane, 32-byte output, stored as
   a PHC string. Verification returns a boolean and never leaks hash details
-  (`crates/core/src/auth.rs`).
+  (`crates/server/src/auth.rs`).
 - Username and password bounds are validated before hashing, so oversized input never reaches Argon2.
 - Every login runs the same-origin check and a per-source rate limit: 5 attempts per 60-second
   window, with the tracking table capped at 1024 sources. At capacity, the oldest non-throttled
@@ -86,23 +86,25 @@ described below. The desktop application is single-user and has no accounts.
   sessions, and player preferences.
 - Search returns notes only for their owner. Catalog results are limited to courses the user may
   access.
-- Course access is per user. With no `user_course_access` rows the user sees every course; with rows,
-  only the listed courses, and the sentinel `__none__` means no access. New users start with no
-  access until an admin grants it.
-- A sync pull applies the user's current course grants when it is served: operations on media of a
-  course the user can no longer open are skipped, the cursor still advances past them, and a later
-  re-grant makes them visible again to devices whose cursor has not passed them. Copies already pulled
-  to a device are not purged. Administrators see the whole journal (`crates/core`, `pull_operations_for_user`).
+- Course access is per user. With no `user_course_access` rows the user sees every course (the "all courses"
+  choice in Settings). With rows, only the listed courses, and the sentinel `__none__` means no access.
+  The new-account form starts with no course selected, so a new student sees nothing until an admin grants access.
+- A sync pull reads the caller's journal and excludes the requesting device's writes. For non-admins it
+  skips operations that reference known media outside the current course grants and advances the cursor past
+  them. A later grant can expose entries the device has yet to pass. Copies already pulled remain on the
+  device (`crates/core`, `pull_operations_for_user`).
 - Admin-only operations: listing, creating, and deleting users, setting course access, catalog
   rescan, course import and removal, covers, manual ordering, media impact and removal, and database
   backup download. These check the admin role in the handler.
-- The update check requires a valid session. Non-admins never see the update surface in the SPA.
+- The update status requires a valid session. Only administrators can force a refresh or read the update
+  history, and the SPA hides the update surface from non-admins.
 
 ## 5. Media and the course library
 
-- The client never sends a filesystem path. Media endpoints accept a `library_id` and a `media_id`;
-  the core revalidates the stored relative path, confines it to the library root, and opens a
-  read-only descriptor that the adapter streams (`crates/core/src/media.rs`).
+- The client never sends a filesystem path. HTTP media requests identify a course and a relative path;
+  desktop playback uses an opaque media ID. For local media, the core finds the catalog entry and opens its
+  stored relative path through a read-only handle confined to the course root
+  (`crates/core/src/media.rs`).
 - On Unix every path component is opened relative to its parent directory descriptor and symlinks are
   refused. On Windows the file is opened relative to a directory capability, so an intermediate
   junction cannot redirect access outside the root.
@@ -117,19 +119,14 @@ described below. The desktop application is single-user and has no accounts.
 - Subtitle sidecars are served through the same authenticated media route with the same confinement,
   not through a separate static handler.
 - Remote sources (WebDAV, SMB) keep this contract: read-only access, credentials encrypted at
-  rest, never logged, and never echoed back in API responses. WebDAV refuses cross-host redirects
-  and SMB disables DFS referrals for the same reason: credentials must not follow a server-chosen
-  redirect to another host. Source URLs with a link-local, multicast, broadcast or unspecified
-  host are rejected (`unsafe_source_target`), and so are host names that resolve to such an address:
-  every returned address is checked, one denied address rejects the whole answer, and the connection
-  goes only to a validated address (IPv4 and IPv6, WebDAV and SMB). WebDAV keeps the URL host name for
-  TLS and `Host`, and ignores `HTTP_PROXY`, `HTTPS_PROXY` and `ALL_PROXY`, so a proxy cannot resolve the
-  name outside the policy. This keeps a source away from cloud metadata and
-  other non-library endpoints; private LAN and loopback addresses remain allowed by design, and
-  plain `http://`/`dav://` credentials are accepted with a warning in the admin UI.
-
-## 6. Browser hardening
-
+  rest, never logged, and never echoed back in API responses. WebDAV refuses redirects
+  and SMB disables DFS referrals, so credentials never follow a server-chosen redirect to another host.
+  Literal addresses in 0.0.0.0/8 or that are link-local, multicast, broadcast, or unspecified are rejected
+  with `unsafe_source_target`. A host name is rejected before connection if any address it resolves to
+  violates the same policy, and the connection goes only to a validated address (IPv4 and IPv6).
+  WebDAV keeps the URL host name for TLS and `Host` and ignores `HTTP_PROXY`, `HTTPS_PROXY` and
+  `ALL_PROXY`, so a proxy cannot resolve the name outside the policy. Private LAN and loopback addresses
+  stay allowed by design, and plain `http://`/`dav://` credentials are accepted with a warning in the admin UI.
 - Course roots of a remote source (ADR 0004) keep the same boundary. Browsing a source and choosing
   its folders as courses is administrator-only (and same-origin for changes), lists one folder
   level per request and never writes to the source. A client path must be a clean relative path
@@ -138,6 +135,9 @@ described below. The desktop application is single-user and has no accounts.
   root's own library. Access to a root is decided by the root's own id, so a user granted only a
   root never sees the rest of the source, and removing a root never turns a restricted user into
   an unrestricted one.
+
+## 6. Browser hardening
+
 - Each response carries a Content Security Policy: `default-src 'self'`; `script-src 'self'` plus
   per-build inline hashes; `style-src 'self' 'unsafe-hashes'` plus the same hash mechanism;
   `img-src 'self' data: blob:`; `media-src 'self' data: blob:`; `frame-ancestors 'none'`.
@@ -147,7 +147,9 @@ described below. The desktop application is single-user and has no accounts.
   `apps/web-next/eslint.config.js`). Notes, titles, and file names render as text. Markdown is parsed
   into React elements by `apps/web-next/src/lib/markdown.ts`; there is no raw HTML rendering path.
 - There are no third-party requests: no CDN, web fonts, analytics, or telemetry. Fonts are bundled.
-  The only outbound request belongs to the server's opt-in update check, never to the browser.
+  The browser makes no outbound request. The server's update check is on by default. Disable it with
+  `--no-update-check` or `LEARNVAULT_UPDATE_CHECK=off` (`false` also works; unset or empty leaves it on).
+  The flag wins over the variable.
 - Browser storage holds preferences and caches only. Session tokens and secrets are never written to
   `localStorage`, `sessionStorage`, or IndexedDB.
 - URLs composed from user or file data are encoded, and external links use
@@ -165,14 +167,16 @@ described below. The desktop application is single-user and has no accounts.
   dialog, store, remote, or direct updater permission.
 - The study owner is fixed in Rust. IPC commands never accept an owner from the webview.
 - "Open in system player" accepts a media id only, never a path or URL.
-- The updater consumes a signed manifest; pre-releases are ignored, so a beta never moves a stable
-  installation.
+- The updater reads `latest.json` from GitHub Releases and verifies the downloaded update payload against
+  the bundled public key and the payload's detached signature. Pre-releases are ignored, so a beta never
+  moves a stable installation. Inside Flatpak the built-in updater is off.
 - The desktop database lives in the application data directory and is not shared with the server.
-- Sync is the only outbound network path. The desktop may call one user-configured server over
-  http(s) with TLS verification never disabled, sends only the operation log (see [Offline Sync](../reference/api.md#offline-sync); the server applies the current course grants on pull, §4), and
-  keeps the session cookie in a `0600` file next to its database. It never opens a listening socket,
-  and the guard tests in `crates/desktop/tests/foundation.rs` still forbid listeners, embedded
-  servers, and privileged Tauri plugins.
+- Rust makes two kinds of outbound request: the update manifest check and, if the user links a server,
+  sync. The webview makes none. Sync calls one user-configured server over http(s), never disables TLS
+  verification, sends only the operation log (see [Offline Sync](../reference/api.md#offline-sync); the
+  server applies current course grants on pull, section 4), and keeps the session cookie in a `0600` file
+  next to its database. The desktop never opens a listening socket, and the guard tests in
+  `crates/desktop/tests/foundation.rs` forbid listeners, embedded servers, and privileged Tauri plugins.
 
 ## 8. Secrets and configuration
 
@@ -186,28 +190,23 @@ described below. The desktop application is single-user and has no accounts.
 
 ## 9. Supply chain
 
-- `Cargo.lock` and `pnpm-lock.yaml` are committed and installs use frozen lockfiles. Rust and Node
-  versions are pinned by `rust-toolchain.toml` and `packageManager`.
-- CI runs CodeQL, dependency review on pull requests, `cargo audit --deny unsound`, and
+- `Cargo.lock` and `pnpm-lock.yaml` are committed and installs use frozen lockfiles.
+  `rust-toolchain.toml` pins Rust. `packageManager` selects pnpm and CI selects Node 24.
+- GitHub code scanning runs CodeQL for JavaScript and TypeScript through the repository's default setup
+  (no workflow file), on pull requests, pushes to the default branch, and a weekly schedule. The ruleset does
+  not require it.
+- CI runs dependency review on pull requests, `cargo audit --deny unsound`, and
   `pnpm audit --audit-level=low`.
-- Four advisories are accepted with documented rationale rather than silently ignored:
-  - `GHSA-g3hv-75wg-m249` (minimatch, dev tooling) is ignored in `pnpm-workspace.yaml`; forcing the
-    patched major breaks `eslint-plugin-jsx-a11y`.
-  - `GHSA-gcqx-w48m-w2h4` (deepmerge) is ignored for the same reason: it is reachable only through the
-    `shadcn` component CLI, no patched release exists, and it never reaches the shipped bundles.
-  - `RUSTSEC-2024-0429` (glib, reached through Tauri's GTK stack) is ignored in `.cargo/audit.toml`;
-    the patched release needs a GTK major upgrade that no current Tauri version provides.
-  - `RUSTSEC-2023-0071` (`rsa`, reached through `smb` → `sspi`) is ignored in `.cargo/audit.toml`.
-    `sspi` pins the release candidate `rsa = "=0.10.0-rc.18"` even in its newest release, and the
-    Marvin attack targets RSA private-key decryption, which the product never performs: SMB sources
-    authenticate with NTLM only and Kerberos is disabled.
+- Five advisory exceptions are configured. `pnpm-workspace.yaml` records the deepmerge, minimatch and picomatch
+  exceptions, and `.cargo/audit.toml` records the glib and rsa exceptions. Those files give the rationale and
+  removal condition for each. Issue #224 tracks the glib exception.
 - Each new runtime dependency must be justified in its pull request, and Dependabot alerts stay open
   until the upgrade is actually possible.
 
 ## 10. Data, privacy, and retention
 
-- There is no analytics, telemetry, or crash reporting. The instance contacts GitHub only for the
-  release check, and the desktop only for its update manifest.
+- There is no analytics, telemetry, or crash reporting. The server contacts GitHub only for the release
+  check, and the desktop only for its update manifest and, if configured, its sync server.
 - All study data lives in the local SQLite database. Nothing is uploaded anywhere by default.
 - Backups are generated on demand and downloadable by an admin only.
 
@@ -227,7 +226,6 @@ described below. The desktop application is single-user and has no accounts.
   the root looks like a normal file inside it.
 - **Desktop has no accounts and no at-rest encryption.** Anyone with access to the machine profile
   can read the local database.
-- **Three Dependabot advisories remain open** for the reasons in section 9.
 - **Remote source coverage is uneven.** WebDAV and SMB credentials are encrypted at rest with the
   same store, but remote sources have no custom cover, manual ordering, search indexing or
   transcoding. SMB uses NTLM only (no Kerberos) and no end-to-end test against a real SMB server

@@ -6,7 +6,7 @@ Accepted. This ADR supersedes the frontend part of [ADR 0001](0001-reescrita-em-
 "a single SPA in Svelte 5 + TypeScript + Vite". Everything else in ADR 0001 still applies: the Rust
 workspace, the Axum server, the Tauri desktop shell, and the shared core.
 
-Tracking: epic #347, Phase 0 #334.
+Tracking: epic #347, Phase 0 #334. The cutover (#340) is complete: `apps/web-next` ships and `apps/web` is gone.
 
 ## Context
 
@@ -82,8 +82,8 @@ The framework-free TypeScript modules move over unchanged with their tests: `tra
 
 - No backend change is needed to reach parity. The existing HTTP API and IPC commands cover every
   screen.
-- The new app is built next to the old one in `apps/web-next` and replaces it in a single cutover
-  (Phase 6, #340). Until then, `apps/web` remains the shipped UI.
+- The new app was built next to the old one in `apps/web-next` and replaced it in a single cutover
+  (Phase 6, #340).
 - The server and desktop builds keep their output paths (`crates/server/web/build`,
   `crates/desktop/frontend-dist`), so packaging, the Containerfile stage, and Tauri config change
   only in package names.
@@ -91,7 +91,7 @@ The framework-free TypeScript modules move over unchanged with their tests: `tra
   follow `.agents/playbooks/dependencies.md`. Each needs a pinned version and a minimum release age.
 - The 2.5D forest, nursery, and related components are not ported. Their data lives only in browser
   storage, so no server data is lost.
-- The `tr()` location in `AGENTS.md` and `.agents/repository.md` changes at cutover.
+- The `tr()` location in `AGENTS.md` and `.agents/repository.md` moved to `apps/web-next/src/lib/i18n.ts` at cutover.
 
 ## Validation and rollback
 
