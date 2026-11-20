@@ -1,9 +1,12 @@
+import { invoke } from '@tauri-apps/api/core';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { pomodoro } from '@/lib/pomodoro-store';
 import { clearProgressOutbox, progressOutboxKey, readProgressOutbox } from '@/lib/progress-outbox';
-import { transport, type Catalog, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
+import { DesktopStub, transport, type Catalog, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
+
+vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn() }));
 
 const media = (name: string, availability = 'available'): FileEntry => ({ name, path: `c/${name}`, size: 1, mediaId: name, kind: 'media', availability });
 const lesson = (title: string, files: FileEntry[]): CatalogNode => ({ title, path: `c/${title}`, role: 'lesson', files, looseFiles: [], children: [] });
@@ -54,6 +57,26 @@ describe('lesson page', () => {
 		expect(screen.getByRole('slider', { name: 'Volume' })).toBeTruthy();
 		for (const name of ['Play', 'Back 10s', 'Forward 10s', 'Mute', 'Player settings', 'Cinema mode', 'Fullscreen']) expect(screen.getAllByRole('button', { name }).length).toBe(1);
 		expect(screen.getByRole('combobox', { name: 'Speed' })).toBeTruthy();
+	});
+
+	it.each([true, false, undefined])('shows the system player action only with a confirmed capability (%s)', async (systemPlayer) => {
+		const desktop = new DesktopStub();
+		vi.spyOn(transport, 'mediaCapabilities').mockImplementation(() => desktop.mediaCapabilities());
+		if (systemPlayer === undefined) vi.mocked(invoke).mockRejectedValueOnce(new Error('IPC unavailable'));
+		else vi.mocked(invoke).mockResolvedValueOnce({ transcoding: false, systemPlayer });
+
+		const { client } = renderApp('/course/c/c%2FOne', { catalog });
+		const video = await screen.findByLabelText('Lesson player: One');
+		await waitFor(() => expect(client.getQueryState(['media-capabilities'])?.status).toBe('success'));
+
+		fireEvent.click(screen.getByRole('button', { name: 'Player settings' }));
+		await screen.findByRole('menuitem', { name: 'Loop a section' });
+		expect(Boolean(screen.queryByRole('menuitem', { name: 'Open in system player' }))).toBe(systemPlayer === true);
+
+		Object.defineProperty(video, 'error', { value: { code: 3 }, configurable: true });
+		fireEvent.error(video);
+		await screen.findByText('The media could not be decoded.');
+		expect(Boolean(screen.queryByRole('button', { name: 'Open in system player' }))).toBe(systemPlayer === true);
 	});
 
 	it('opens the module that holds the lesson even when module and lesson paths differ', async () => {

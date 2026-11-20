@@ -284,10 +284,18 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 
 	const errorMessage = useMemo(() => {
 		if (serverBusy) return [tr('The server is busy right now.', 'O servidor está ocupado agora.'), tr('Too many streams are open or the server is under load. Wait a moment and try again; nothing is lost.', 'Há muitas reproduções abertas ou o servidor está sobrecarregado. Espere um momento e tente de novo; nada foi perdido.')];
-		if (errorCode === 4) return [tr('This media format or codec is not supported here.', 'Este formato ou codec de mídia não é suportado aqui.'), requiresTranscodingProbe(playable?.name ?? '') ? tr('This kind of file usually needs on-demand transcoding or the system player.', 'Esse tipo de arquivo geralmente precisa de transcodificação sob demanda ou do player do sistema.') : tr('Examples: HEVC/H.265 video or AC3 audio.', 'Exemplos: vídeo HEVC/H.265 ou áudio AC3.')];
+		if (errorCode === 4) {
+			const suggestSystemPlayer = capabilities.data?.systemPlayer !== false && requiresTranscodingProbe(playable?.name ?? '');
+			return [
+				tr('This media format or codec is not supported here.', 'Este formato ou codec de mídia não é suportado aqui.'),
+				suggestSystemPlayer
+					? tr('This kind of file usually needs on-demand transcoding or the system player.', 'Esse tipo de arquivo geralmente precisa de transcodificação sob demanda ou do player do sistema.')
+					: tr('Examples: HEVC/H.265 video or AC3 audio.', 'Exemplos: vídeo HEVC/H.265 ou áudio AC3.')
+			];
+		}
 		if (errorCode === 3) return [tr('The media could not be decoded.', 'Não foi possível decodificar a mídia.'), tr('The file may be damaged or use a codec your hardware cannot decode.', 'O arquivo pode estar corrompido ou usar um codec que seu hardware não decodifica.')];
 		return [tr('Could not load this media.', 'Não foi possível carregar esta mídia.'), tr('The file may have moved or its drive may be disconnected. Reconnect it and use Refresh courses in My learning; your progress is kept.', 'O arquivo pode ter sido movido ou o disco desconectado. Reconecte e use Atualizar cursos em Meu aprendizado; seu progresso fica salvo.')];
-	}, [errorCode, playable?.name, serverBusy]);
+	}, [capabilities.data?.systemPlayer, errorCode, playable?.name, serverBusy]);
 
 	if (!activeSource) {
 		const missing = mediaAvailability(lesson.media) === 'missing';

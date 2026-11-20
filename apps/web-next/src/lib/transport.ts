@@ -1950,10 +1950,10 @@ export class DesktopStub implements Transport {
 			const res = await invoke<{ transcoding?: boolean; systemPlayer?: boolean }>('desktop_media_capabilities');
 			return {
 				transcoding: Boolean(res?.transcoding),
-				systemPlayer: Boolean(res?.systemPlayer ?? true)
+				systemPlayer: res?.systemPlayer === true
 			};
 		} catch {
-			return { transcoding: false, systemPlayer: true };
+			return { transcoding: false, systemPlayer: false };
 		}
 	}
 	// Every media delivered to the player uses the authorized identity. The catalogued path is
