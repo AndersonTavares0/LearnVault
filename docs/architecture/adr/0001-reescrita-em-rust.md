@@ -4,9 +4,9 @@
 
 Accepted — 2026-10-14 (Implemented — 2026-10-17)
 
-This ADR records the **approved architecture**. The Rust rewrite was completed in Phases 1 to 5,
-and the legacy Go implementation was fully removed from the repository in PR #206, making Rust
-the single backend of LearnVault.
+This ADR records the approved architecture. The Rust rewrite finished in Phases 1 to 5, and PR #206
+removed the Go implementation, so Rust is the only backend. [ADR 0003](0003-react-frontend.md) replaced
+the Svelte frontend chosen below.
 
 ## Context
 
@@ -14,10 +14,9 @@ LearnVault turns local course folders into a personal study platform, used in tw
 offline desktop application and as a self-hosted server with a web UI. The current implementation
 is a Go service with SQLite and an embedded SvelteKit SPA.
 
-The maintainer decided to adopt Rust as the long-term stack, with a single domain core shared
-between the server and the desktop, and Tauri 2 as the desktop technology. The decision is
-**technological and deliberate**: there is no concrete Go limitation that forces the change, and Go
-with Wails would serve both modes with less work.
+The maintainer chose Rust as the long-term stack, with one domain core shared by the server and the
+desktop, and Tauri 2 for the desktop. The choice was deliberate and not forced: no Go limitation required
+it, and Go with Wails would have served both modes with less work.
 
 ## Decision
 
@@ -33,16 +32,15 @@ LearnVault becomes a Rust workspace:
   selection and a media playback protocol. No HTTP, no cookies, no network ports and no
   authentication.
 - `apps/web/` — a single SPA in Svelte 5 + TypeScript + Vite, without SvelteKit, with hash
-  routing and two builds that select the transport at compile time.
+  routing and two builds that select the transport at compile time. (Replaced by `apps/web-next`,
+  React 19, in ADR 0003.)
 
 ### State after the migration
 
-On 2026-10-19, the implementation phases of the stack were recorded as complete in issue #41.
-The Go service was removed in PR #206; the explicit importer for legacy Go databases remains. The
-Tauri window and the IPC slices described in `docs/architecture/overview.md` are implemented.
-This does not complete distribution: the Flatpak/Linux desktop build is still pending sandbox
-validation, and other pending targets are listed in `docs/product/roadmap.md` and
-`docs/operations/distribution.md`.
+On 2026-10-19, issue #41 recorded the implementation phases as complete. PR #206 removed the Go
+service, and the explicit importer for legacy Go databases remains. The Tauri window and the IPC slices
+described in `docs/architecture/overview.md` are implemented. Flatpak bundles for amd64 and arm64
+first appeared in the v0.9.1 pre-release, and v0.9.5 was the first regular release to carry them. Pending targets are listed in `docs/product/roadmap.md` and `docs/operations/distribution.md`.
 
 Domain decisions that the rewrite keeps:
 
@@ -61,8 +59,8 @@ Domain decisions that the rewrite keeps:
 - Study state is identified by an opaque `owner_id`: the desktop uses a fixed local owner and the
   server uses the identifier of the authenticated user.
 
-Distribution: an NSIS installer on Windows; **Flatpak as the preferred Linux format**, subject to
-technical validation of permissions, persistent access to libraries and media playback; an OCI
+Distribution: an NSIS installer on Windows; **Flatpak as the preferred Linux format**, conditional at the
+time on technical validation of permissions, persistent access to libraries and media playback; an OCI
 image plus a native binary for self-hosted installation. One version per release.
 
 Execution happens in phases: governance, `crates/core`, `crates/server`, `apps/web/`,
@@ -109,21 +107,21 @@ Execution happens in phases: governance, `crates/core`, `crates/server`, `apps/w
 
 ### Risks
 
-- **Flatpak packaging:** treated as the preferred format, not the definitive one; permissions,
-  persistent access to libraries and media playback need technical validation.
-- **Playback on the packaged Linux desktop:** the protocol and the tests exist, but Flatpak still
-  needs a real smoke test to validate persistent permissions and playback inside the sandbox.
-- **A single version across binaries:** it requires a single source of truth for the version
-  number; the server version is already exposed in `--version` and `/api/healthz`.
+- **Flatpak packaging:** treated as the preferred format, not the definitive one. Flatpak CI builds the
+  bundle, checks permissions, starts it under a virtual display, and checks that the FileChooser and OpenURI
+  portals respond. The job does not test persistent folder access or playback. The sandbox reaches selected
+  folders through the portal and has no broad host or home grant. The system player command returns `false`
+  inside Flatpak. See [Flatpak packaging](../../operations/flatpak.md).
+- **A single version across binaries:** all packaged binaries use the Release Please version. The server
+  version is exposed in `--version` and `/api/healthz`.
 
 ## Validation and rollback
 
-Planned validation: Rust test coverage of at least 80% measured with `cargo-llvm-cov`,
-`cargo fmt --check`, `cargo clippy` without warnings, SPA builds in both modes, and running the
+Planned validation: at least 80% line coverage of `crates/core` measured with `cargo-llvm-cov` (enforced in
+CI), `cargo fmt --check`, `cargo clippy` without warnings, SPA builds in both modes, and running the
 distribution artifacts before each release.
 
-Historical record: during the rewrite, the Go service remained available until its removal in
-PR #206, on 2026-10-17. Today the Go runtime is not in the repository. Importing legacy SQLite
-databases is explicit and backup-first; the procedure and its limits are in
-`docs/operations/migration-go-to-rust.md`. There was no proven cutover/rollback rehearsal with
-real volumes; that remains a separate operational task, not a code step still to be implemented.
+The Go service stayed available during the rewrite until PR #206 removed it on 2026-10-17. Importing legacy
+SQLite databases is explicit and backup-first; the procedure and its limits are in
+`docs/operations/migration-go-to-rust.md`. No cutover or rollback rehearsal with real volumes has been
+proven. That is an operational task, not pending code.

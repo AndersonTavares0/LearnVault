@@ -1,7 +1,7 @@
 # LearnVault Roadmap
 
-**Target audience:** anyone wanting to understand the current product status and future direction.
-Detailed requirements are in [requirements.md](requirements.md); technical architecture is in
+**Target audience:** anyone who wants the current product status and direction.
+Requirements are in [requirements.md](requirements.md); architecture is in
 [overview.md](../architecture/overview.md).
 
 ## Status Guide
@@ -13,19 +13,21 @@ Detailed requirements are in [requirements.md](requirements.md); technical archi
 
 ## Delivered
 
-- **Rust Core:** domain, SQLite, and catalog in `crates/core`; Axum HTTP server in `crates/server`; React 19 + Vite web frontend in `apps/web-next`. The legacy Go service was fully replaced.
-- **Offline Desktop (Tauri 2):** catalog, native library folder picker, per-course import and removal, explicit library rescan, local media protocol by opaque ID, and study progress via internal IPC. The desktop app requires no authentication and opens no network ports.
-- **Study Rules Engine:** shared progress tracking, streaks, and gamification across server, web UI, and desktop.
+- **Rust Core:** domain, SQLite, and catalog in `crates/core`; Axum HTTP server in `crates/server`; React 19 + Vite web frontend in `apps/web-next`. The Go service and the Svelte SPA are gone.
+- **Offline Desktop (Tauri 2):** catalog, native folder picker, per-course import and removal, explicit rescan, a local media protocol addressed by opaque ID, and study progress over IPC. It has no authentication and opens no listening port.
+- **Study Rules:** progress, streaks, XP, missions, and badges, shared by the server and the desktop.
 - **Video & Audio Player:** media and subtitle selection per lesson, keyboard shortcuts (`J`/`K`/`L`, `0-9`, `M`, `N`, `F`, `P`, `[`/`]`), persistent playback rate, Picture-in-Picture, interactive timeline with note markers, optional auto-advance, on-demand FFmpeg remuxing/transcoding for extended formats (`.mkv`, `.avi`, `.wmv`, `.ts`, HEVC, AC3), and opening in the default system media player on desktop.
 - **Course Study View:** integrated player and lesson playlist, resuming last watched lesson, quick lesson completion toggle in the course tree, active module auto-expansion, module materials separated from the video playlist, and course administration actions.
 - **Study Notes & Flashcards:** timestamped study notes with one-click seeking, global note search with course filtering, Markdown export, and spaced repetition flashcards on Web and desktop.
 - **PDF Reader:** continuous or single-page reading, search within the open document, highlights, underlines, notes, and annotated PDF export. The original PDF stays unchanged.
 - **Focus & Habits:** Pomodoro timer with an offline queue, study streaks, daily missions, and a weekly study-day goal.
 - **Course Covers:** automatic title-based covers, root image detection (`cover.*`, `folder.*`, `poster.*`, `thumb.*`), and custom cover upload / native picker with PNG/JPEG/WebP validation, 4 MiB limit, and atomic file saving outside course folders.
-- **Administrative Backup & Restore:** secure SQLite database download and integrity-checked restore via the server admin interface.
-- **Multi-User Accounts & Course Access Permissions:** local student accounts, admin management, and granular course assignment.
-- **Internationalization (i18n):** runtime language switching supporting English (default) and Brazilian Portuguese (`pt-BR`) with persistence across reloads.
-- **Distribution:** Windows NSIS installer, signed updater (Ed25519), Linux server tarballs, and OCI container images with verifiable `SHA256SUMS`.
+- **Backup & Restore:** an admin downloads a consistent, integrity-checked SQLite copy from Settings. Restore is the `learnvault-server restore` command, with the service stopped.
+- **Multi-User Accounts & Course Access:** local student accounts, admin management, and per-course grants.
+- **Remote Sources:** WebDAV and SMB sources with administrator-chosen course folders ([ADR 0004](../architecture/adr/0004-remote-course-roots.md)), including automatic course detection.
+- **Desktop Sync:** optional link to a server account with an offline outbox; browser writes reach the desktop on pull, and a pull applies the user's current course grants ([ADR 0005](../architecture/adr/0005-sync-journal-for-browser-writes.md)).
+- **i18n:** runtime switch between English (default) and Brazilian Portuguese (`pt-BR`), remembered across reloads.
+- **Distribution:** Windows NSIS installer with a signed updater, Linux Flatpak desktop bundles (amd64, arm64; first published in the v0.9.1 pre-release, in a regular release since v0.9.5; GitHub Releases only), Linux server tarballs, and OCI images on GHCR, with verifiable `SHA256SUMS`.
 
 ## In Progress: Polish & Production Quality
 
@@ -35,8 +37,8 @@ Detailed requirements are in [requirements.md](requirements.md); technical archi
 - [x] Extended media format support, on-demand server transcoding, and desktop external player.
 - [x] Local multi-user student accounts with course access permissions.
 - [x] Course and lesson bookmarking / favorites (#304).
-- [x] Full i18n support (`en` default, `pt-BR` fully supported) and English canonical documentation (#306).
-- [ ] Continuous accessibility improvements: keyboard trap prevention, ARIA announcements, and screen reader testing.
+- [x] i18n (`en` default, `pt-BR`) and English documentation (#306).
+- [ ] Accessibility: a manual keyboard and screen reader pass is still owed ([checklist](../design/accessibility.md)).
 
 ## Next: Study Desk Enhancements
 
@@ -48,8 +50,8 @@ Detailed requirements are in [requirements.md](requirements.md); technical archi
 - [x] Maintain core compilation without Docker or Podman.
 - [x] Publish OCI container image and native server binaries for self-hosted deployment.
 - [x] Provide Docker Compose and Podman Quadlet deployment templates.
-- [ ] Package Linux Flatpak desktop app using `xdg-portal` file chooser in verified sandbox.
-- [ ] Sign Windows desktop binaries with code-signing certificates when available.
+- [x] Package the Linux desktop app as a Flatpak with the `xdg-desktop-portal` file chooser ([details](../operations/flatpak.md)).
+- [ ] Sign Windows binaries with a code-signing certificate. The updater payload is already signed; the installer is not.
 
 ## Long-term Explorations
 
@@ -60,12 +62,12 @@ Detailed requirements are in [requirements.md](requirements.md); technical archi
 
 ## Delivery Invariants
 
-- Every deliverable includes automated tests, documentation updates, and clear verification.
-- Distribution targets are additive: container build failures do not block native server packaging.
-- No feature ever modifies or copies the original physical course library.
-- Scope adjustments are coordinated through GitHub issues and pull requests.
+- Every deliverable ships with automated tests and documentation updates.
+- Distribution targets are independent: a container build failure does not block native server packaging.
+- No feature modifies or copies the original course library.
+- Scope changes go through GitHub issues and pull requests.
 
 ## Related Documentation
 
-- [Requirements](requirements.md) for functional and non-functional requirements.
-- [Architecture](../architecture/overview.md) for architectural boundaries and design decisions.
+- [Requirements](requirements.md)
+- [Architecture](../architecture/overview.md)

@@ -14,7 +14,7 @@ Rulesets supersede classic Branch Protection by providing:
 
 | File | Purpose |
 | :--- | :--- |
-| [`learnvault-main.json`](learnvault-main.json) | The exact, production-ready ruleset for LearnVault enforcing the 5 core CI status checks. |
+| [`learnvault-main.json`](learnvault-main.json) | The exact, production-ready ruleset for LearnVault enforcing the 7 required CI status checks. |
 | [`default-branch.template.json`](default-branch.template.json) | A clean, generic baseline ruleset ready to be imported into any GitHub repository. |
 
 ---
@@ -34,7 +34,7 @@ Both templates enforce the following invariants:
    - **`required_review_thread_resolution: true`:** Requires all conversations and review threads to be explicitly resolved before merging.
 4. **Strict Status Checks (`required_status_checks`):**
    - **`strict_required_status_checks_policy: true`:** Requires branches to be strictly up-to-date with the default branch before merging ("Require branches to be up to date before merging").
-   - In `learnvault-main.json`, enforces the 5 mandatory jobs: `SPA checks`, `Rust tests and lints`, `Desktop crate compile and guards`, `Container build (Rust)`, and `CI gate`.
+   - In `learnvault-main.json`, enforces the 7 required checks: `SPA checks`, `Rust tests and lints`, `Windows core tests`, `Desktop crate compile and guards`, `Container build (Rust)`, `Dependency review`, and `CI gate`.
    - In `default-branch.template.json`, the `required_status_checks` list is empty (`[]`) so you can populate it with your repository's workflow jobs.
 5. **No Unaudited Admin Bypasses (`bypass_actors: []`):**
    Admins and maintainers are subject to the same protections as contributors, preventing accidental force-pushes or direct commits without a PR.
