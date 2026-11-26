@@ -2,7 +2,7 @@ import { expect, type Page } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { buildPdf } from './fixtures/make-pdf';
-import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from './web-next-support';
+import { collectCspViolations, createTest, expectNoAxeViolations, setTheme, signIn } from './web-next-support';
 
 // Continuous reading, keyboard shortcuts and night mode in the PDF reader, behind the real
 // server and its CSP. Fixtures are generated in memory, so no PDF is committed.
@@ -144,8 +144,7 @@ test('the night theme dims the pages, persists per user, and passes axe in the d
 	await page.getByRole('menuitemradio', { name: 'Night' }).click();
 	await page.keyboard.press('Escape');
 	expect(await page.locator('[data-page="1"] canvas').evaluate((element) => getComputedStyle(element).filter)).toContain('invert');
-	await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
-	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+	await setTheme(page, 'dark');
 	await expectNoAxeViolations(page, 'pdf reader dark');
 	await page.reload();
 	await expect(page.locator('[data-page="1"] canvas')).toBeVisible();

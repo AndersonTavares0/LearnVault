@@ -18,6 +18,15 @@ export async function signIn(page: Page, origin: string) {
 	await expect(page.getByRole('heading', { name: 'My learning' })).toBeVisible();
 }
 
+/** Sets the app theme whatever it starts as (the default is dark), through the header's theme toggle. */
+export async function setTheme(page: Page, theme: 'light' | 'dark') {
+	const html = page.locator('html');
+	if ((await html.getAttribute('data-theme')) !== theme) {
+		await page.getByRole('button', { name: theme === 'dark' ? 'Switch to the dark theme' : 'Switch to the light theme' }).click();
+	}
+	await expect(html).toHaveAttribute('data-theme', theme);
+}
+
 /** Fails on any WCAG 2.2 AA issue axe can detect on the current page. */
 export async function expectNoAxeViolations(page: Page, context: string, disableRules: string[] = []) {
 	const results = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).disableRules(disableRules).analyze();

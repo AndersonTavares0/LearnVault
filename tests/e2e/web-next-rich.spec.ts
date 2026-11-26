@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { TINY_VP9_WEBM_BASE64, TINY_WEBM_BASE64 } from './fixtures/tiny-webm';
 import { makeHostilePdfs, makePdf } from './fixtures/make-pdf';
-import { collectCspViolations, createTest, expectNoAxeViolations, signIn } from './web-next-support';
+import { collectCspViolations, createTest, expectNoAxeViolations, setTheme, signIn } from './web-next-support';
 
 // The parts of the React app that need real media: the player's control bar, notes with formatting,
 // the PDF editor and the dark theme. The library has one playable video lesson and one PDF lesson.
@@ -45,6 +45,7 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 	const violations = collectCspViolations(page);
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await openVideoLesson(page, origin);
+	await setTheme(page, 'light');
 	const video = page.locator('video');
 	expect(await video.getAttribute('controls')).toBeNull();
 	await page.getByRole('button', { name: 'Play', exact: true }).click();
@@ -58,6 +59,10 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 		await page.getByRole('button', { name: 'Player settings' }).click();
 		await page.getByRole('menuitem', { name: 'Subtitles' }).click();
 		await page.getByRole('menuitemradio', { name, exact: true }).click();
+		// A radio choice leaves the menus open: the first Escape closes the Subtitles submenu, the second the settings menu.
+		await page.keyboard.press('Escape');
+		await page.keyboard.press('Escape');
+		await expect(page.locator('[role="menu"][data-open]')).toHaveCount(0);
 	};
 	await expect(page.locator('video track')).toHaveCount(1);
 	await chooseSubtitle('Off');
@@ -75,8 +80,7 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 	await page.getByRole('button', { name: 'Cinema mode' }).click();
 	await page.reload();
 	await expect(page.getByRole('button', { name: 'Cinema mode' })).toHaveAttribute('aria-pressed', 'true');
-	await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
-	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+	await setTheme(page, 'dark');
 	await expectNoAxeViolations(page, 'lesson dark', NO_CAPTIONS);
 	// The server keeps the speed and subtitle language for the user, not the browser.
 	await page.evaluate(() => localStorage.clear());
@@ -100,11 +104,11 @@ test('the player settings menu opens inside the fullscreen player', async ({ pag
 test('every lesson tool fits without horizontal scrolling at narrow widths', async ({ page, origin }) => {
 	await openVideoLesson(page, origin);
 	const tools = page.getByRole('tablist', { name: 'Lesson tools' });
-	await expect(tools.getByRole('tab')).toHaveCount(5);
+	// This lesson has a subtitle but no cards: the rail offers Notes, Cards and Contents.
+	await expect(tools.getByRole('tab')).toHaveText(['Notes', 'Cards', 'Contents']);
 	await page.evaluate(() => document.fonts.ready.then(() => undefined));
-	for (const theme of ['light', 'dark']) {
-		if (theme === 'dark') await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
-		await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+	for (const theme of ['light', 'dark'] as const) {
+		await setTheme(page, theme);
 		for (const width of [320, 390, 768]) {
 			await page.setViewportSize({ width, height: 844 });
 			const context = `${width}px ${theme}`;
@@ -131,7 +135,7 @@ test('notes take formatting, show it, and are found from the course card', async
 	await expect(field).toHaveValue('**remember this**');
 	await page.getByRole('button', { name: 'Save note' }).click();
 	await expect(page.locator('span.font-bold', { hasText: 'remember this' })).toBeVisible();
-	await expect(page.getByText('Saved · just now')).toBeVisible();
+	await expect(page.getByRole('status').filter({ hasText: 'Note saved' })).toBeVisible();
 
 	await page.goto(`${origin}/#/notes`);
 	await expect(page.getByRole('heading', { name: 'Notes', level: 1 })).toBeVisible();
@@ -143,6 +147,7 @@ test('the PDF editor searches, marks, takes a note and exports the marks', async
 	const violations = collectCspViolations(page);
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await openCourse(page, origin);
+	await setTheme(page, 'light');
 	await page.getByRole('button', { name: 'Expand all' }).click();
 	await page.getByRole('link', { name: 'Guide' }).first().click();
 	await expect(page.getByRole('toolbar', { name: 'PDF controls' })).toBeVisible();
@@ -170,7 +175,7 @@ test('the PDF editor searches, marks, takes a note and exports the marks', async
 	const exported = await readFile((await download.path())!, 'utf8');
 	expect(exported).toContain('check this against the lecture');
 
-	await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
+	await setTheme(page, 'dark');
 	await expectNoAxeViolations(page, 'pdf dark');
 	expect(violations).toEqual([]);
 });
@@ -178,8 +183,7 @@ test('the PDF editor searches, marks, takes a note and exports the marks', async
 test('every main page passes axe on the dark theme', async ({ page, origin }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await signIn(page, origin);
-	await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
-	await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+	await setTheme(page, 'dark');
 	for (const route of ['#/', '#/progress', '#/notes', '#/review', '#/history', '#/settings', '#/settings#users']) {
 		await page.goto(`${origin}/${route}`);
 		await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -220,7 +224,7 @@ test('main pages keep their content inside narrow and desktop viewports', async 
 
 test('mobile settings stay usable in Portuguese and the dark theme', async ({ page, origin }, testInfo) => {
 	await signIn(page, origin);
-	await page.getByRole('button', { name: 'Switch to the dark theme' }).click();
+	await setTheme(page, 'dark');
 	await page.goto(`${origin}/#/settings`);
 	await page.getByRole('button', { name: 'Português (Brasil)' }).click();
 	for (const width of [320, 390]) {
