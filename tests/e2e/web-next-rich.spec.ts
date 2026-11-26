@@ -53,12 +53,16 @@ test('the player has one control bar that works, keeps cinema mode and passes ax
 	await page.getByLabel('Speed').selectOption('1.5');
 	expect(await video.evaluate((element: HTMLVideoElement) => element.playbackRate)).toBe(1.5);
 	// The sidecar subtitle is offered, can be hidden, and hiding removes the track.
-	const captions = page.locator('#player-subtitles');
-	await expect(captions).toBeVisible();
+	// Subtitles are chosen in the player settings menu.
+	const chooseSubtitle = async (name: string) => {
+		await page.getByRole('button', { name: 'Player settings' }).click();
+		await page.getByRole('menuitem', { name: 'Subtitles' }).click();
+		await page.getByRole('menuitemradio', { name, exact: true }).click();
+	};
 	await expect(page.locator('video track')).toHaveCount(1);
-	await captions.selectOption('');
+	await chooseSubtitle('Off');
 	await expect(page.locator('video track')).toHaveCount(0);
-	await captions.selectOption({ label: 'Lesson.en.vtt' });
+	await chooseSubtitle('Lesson.en.vtt');
 	await expect(page.locator('video track')).toHaveCount(1);
 	await expectNoAxeViolations(page, 'lesson light', NO_CAPTIONS);
 
