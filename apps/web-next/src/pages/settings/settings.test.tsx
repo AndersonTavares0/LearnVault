@@ -26,7 +26,8 @@ describe('settings', () => {
 		renderApp('/settings', { catalog });
 		const accent = await screen.findByRole('group', { name: 'Accent color' });
 		fireEvent.click(within(accent).getByRole('button', { name: 'Plum' }));
-		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#7A3B7B');
+		// The default theme is dark, so the page shows the preset's lighter twin.
+		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#C58BD0');
 		fireEvent.click(within(screen.getByRole('group', { name: 'Corners' })).getByRole('button', { name: 'Round' }));
 		expect(document.documentElement.dataset.radius).toBe('round');
 		fireEvent.click(within(screen.getByRole('group', { name: 'Course content in a lesson' })).getByRole('button', { name: 'On the left' }));
@@ -34,7 +35,7 @@ describe('settings', () => {
 		fireEvent.click(screen.getByRole('checkbox', { name: 'Streak' }));
 		expect(JSON.parse(localStorage.getItem('learnvault-appearance')!)).toMatchObject({ accent: '#7A3B7B', radius: 'round', sidebar: 'left', showStreak: false });
 		fireEvent.click(screen.getByRole('button', { name: 'Reset to the default look' }));
-		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#1C1815');
+		expect(document.documentElement.style.getPropertyValue('--brand')).toBe('#F0BE62');
 		expect(document.documentElement.dataset.radius).toBe('soft');
 	});
 

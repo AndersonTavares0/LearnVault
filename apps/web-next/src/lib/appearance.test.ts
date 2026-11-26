@@ -27,7 +27,7 @@ describe('appearance', () => {
 		const root = document.createElement('html');
 		const saved = new Map<string, string>();
 		const storage = { getItem: (key: string) => saved.get(key) ?? null, setItem: (key: string, value: string) => void saved.set(key, value), removeItem: (key: string) => void saved.delete(key) } as unknown as Storage;
-		updateAppearance({ accent: '#6A32C9', radius: 'round', density: 'compact' }, storage, root);
+		updateAppearance({ theme: 'light', accent: '#6A32C9', radius: 'round', density: 'compact' }, storage, root);
 		expect(root.style.getPropertyValue('--brand')).toBe('#6A32C9');
 		expect(root.dataset.radius).toBe('round');
 		expect(root.dataset.density).toBe('compact');
@@ -64,10 +64,11 @@ describe('appearance', () => {
 });
 
 describe('brand palette', () => {
-	it('defaults to the warm ink accent, with its muted brass twin on the dark page', () => {
-		expect(DEFAULT_APPEARANCE.accent).toBe('#1C1815');
-		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'ink', hex: '#1C1815', dark: '#C9B594', tone: '#5C4229' });
-		expect(darkAccent('#1C1815')).toBe('#C9B594');
+	it('defaults to the lamp accent: bronze on the light page and lamplight on the dark one', () => {
+		expect(DEFAULT_APPEARANCE).toMatchObject({ theme: 'dark', surface: 'lamplight', accent: '#8A5A0C' });
+		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'lamp', hex: '#8A5A0C', dark: '#F0BE62' });
+		expect(darkAccent('#8A5A0C')).toBe('#F0BE62');
+		expect(contrast('#FFFFFF', readableAccent('#8A5A0C'))).toBeGreaterThanOrEqual(4.5);
 	});
 
 	it('keeps white text on the ink accent and the brass accent on the dark panel above 4.5:1', () => {

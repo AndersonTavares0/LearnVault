@@ -53,14 +53,15 @@ describe('AppearanceSettings', () => {
 		render(<AppearanceSettings />);
 		press('Theme', 'Dark');
 		expect(root.dataset.theme).toBe('dark');
-		expect(root.style.getPropertyValue('--brand')).toBe('#C9B594');
+		expect(root.style.getPropertyValue('--brand')).toBe('#F0BE62');
 		press('Theme', 'Light');
 		expect(root.dataset.theme).toBe('light');
-		expect(root.style.getPropertyValue('--brand')).toBe('#1C1815');
+		expect(root.style.getPropertyValue('--brand')).toBe('#8A5A0C');
 	});
 
 	it('follows the reward colour choice', () => {
 		render(<AppearanceSettings />);
+		press('Theme', 'Light');
 		press('Rewards (streak, XP, badges)', 'Same as accent');
 		expect(root.style.getPropertyValue('--reward')).toBe('var(--brand-ink)');
 		expect(root.style.getPropertyValue('--reward-fill')).toBe('var(--brand)');
@@ -103,6 +104,7 @@ describe('AppearanceSettings', () => {
 
 	it('explains when a light custom colour is darkened for white text', () => {
 		render(<AppearanceSettings />);
+		press('Theme', 'Light');
 		fireEvent.change(screen.getByLabelText('Your own color'), { target: { value: '#FFEE00' } });
 		expect(screen.getByText(/too light for white text/)).toBeTruthy();
 	});

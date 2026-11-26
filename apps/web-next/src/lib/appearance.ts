@@ -3,12 +3,14 @@ import { createStore } from '@/lib/store';
 /**
  * Everything a learner can change about how LearnVault looks and what it shows. One small object,
  * kept in this browser (nothing is sent anywhere), applied to <html> before the first render.
- * Light is the default; dark (warm black) and "follow the system" are choices.
+ * Dark Lamplight is the default; light (Daylight) and "follow the system" are choices.
  */
 export const APPEARANCE_STORAGE_KEY = 'learnvault-appearance';
 
 /** Each preset has the colour used on the light page and a lighter one for the dark page. */
 export const ACCENT_PRESETS = [
+	// Lamp amber, the default: bronze on the light page (white text at 4.5:1), lamplight on the dark one.
+	{ id: 'lamp', hex: '#8A5A0C', dark: '#F0BE62' },
 	// Warm ink, the brand's near-black. `tone` is what the page, panels and tints are mixed from on the light page:
 	// mixing from a near-black would darken them (less text contrast) and, with so little chroma, turn them pink.
 	{ id: 'ink', hex: '#1C1815', dark: '#C9B594', tone: '#5C4229' },
@@ -23,9 +25,10 @@ export const ACCENT_PRESETS = [
 ] as const;
 
 export const THEMES = ['light', 'dark', 'system'] as const;
-export const SURFACES = ['warm', 'stone', 'crisp', 'sepia', 'sage', 'nord', 'rose', 'solarized'] as const;
+export const SURFACES = ['lamplight', 'warm', 'stone', 'crisp', 'sepia', 'sage', 'nord', 'rose', 'solarized'] as const;
 
 export const SURFACE_SWATCHES: Record<(typeof SURFACES)[number], { light: string; dark: string; edgeLight: string; edgeDark: string }> = {
+	lamplight: { light: '#F1F3EF', dark: '#0D1210', edgeLight: '#DCE2DA', edgeDark: '#25322B' },
 	warm: { light: '#FBF7F1', dark: '#161719', edgeLight: '#E7D8C6', edgeDark: '#36383C' },
 	stone: { light: '#F4F5F7', dark: '#0E1014', edgeLight: '#DCE0E8', edgeDark: '#2B313E' },
 	crisp: { light: '#FFFFFF', dark: '#060607', edgeLight: '#E5E7EB', edgeDark: '#27272A' },
@@ -71,8 +74,8 @@ export type Appearance = {
 };
 
 export const DEFAULT_APPEARANCE: Appearance = {
-	theme: 'light',
-	surface: 'warm',
+	theme: 'dark',
+	surface: 'lamplight',
 	accent: ACCENT_PRESETS[0].hex,
 	reward: 'amber',
 	radius: 'soft',

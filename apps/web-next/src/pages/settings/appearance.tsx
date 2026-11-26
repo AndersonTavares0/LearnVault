@@ -13,9 +13,10 @@ import { persistLibraryView } from '@/lib/library-view';
 import { cn } from '@/lib/utils';
 import { safeStorage } from '@/app/preferences';
 
-const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ ink: tr('Ink', 'Tinta'), brown: tr('Brown', 'Marrom'), amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
+const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ lamp: tr('Lamp', 'Abajur'), ink: tr('Ink', 'Tinta'), brown: tr('Brown', 'Marrom'), amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
 
 const surfaceNames = (): Record<(typeof SURFACES)[number], string> => ({
+	lamplight: tr('Lamplight', 'Luz de abajur'),
 	warm: tr('Warm paper', 'Papel quente'),
 	stone: tr('Cool stone', 'Pedra neutra'),
 	crisp: tr('Crisp contrast', 'Alto contraste'),
@@ -124,7 +125,7 @@ export function AppearanceSettings() {
 			<Choice legend={tr('Density', 'Densidade')} options={DENSITIES} value={value.density} label={(option) => (option === 'comfortable' ? tr('Comfortable', 'Confortável') : tr('Compact', 'Compacta'))} onChange={(density) => change({ density })} />
 			<Choice legend={tr('Text size', 'Tamanho do texto')} options={TEXT_SIZES} value={value.textSize} label={(option) => ({ small: tr('Small', 'Pequeno'), medium: tr('Medium', 'Médio'), large: tr('Large', 'Grande') })[option]} onChange={(textSize) => change({ textSize })} />
 			<Choice legend={tr('Page width', 'Largura da página')} options={PAGE_WIDTHS} value={value.pageWidth} label={(option) => ({ focused: tr('Focused', 'Focada'), standard: tr('Standard', 'Padrão'), wide: tr('Wide', 'Ampla') })[option]} onChange={(pageWidth) => change({ pageWidth })} />
-			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('DM Sans with serif titles', 'DM Sans com títulos serifados'), modern: tr('Clean sans-serif', 'Sans-serif limpa'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
+			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('Geist', 'Geist'), modern: tr('Clean sans-serif', 'Sans-serif limpa'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
 						<SwitchCard label={tr('Reduce motion & animations', 'Reduzir animações e movimento')} checked={value.reduceMotion} onChange={(reduceMotion) => change({ reduceMotion })} />
 			</Panel>
 			<Panel className="space-y-6 p-5 sm:p-6 xl:col-span-2">
