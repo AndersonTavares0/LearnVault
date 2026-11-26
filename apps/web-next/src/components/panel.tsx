@@ -1,9 +1,14 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-/** The look every page shares: restrained cards on cream paper, fine hairlines, small tracked labels. */
-export const Panel = ({ children, className }: { children: ReactNode; className?: string }) => (
-	<div data-panel className={cn('min-w-0 rounded-[var(--radius-xl)] border border-[var(--study-rule)] bg-card p-6 sm:p-8', className)}>{children}</div>
+/**
+ * A boxed card by default. `open` drops the box: a section with a hairline above it, for pages that
+ * separate their content with rules rather than containers.
+ */
+export const Panel = ({ children, className, variant = 'card' }: { children: ReactNode; className?: string; variant?: 'card' | 'open' }) => (
+	variant === 'open'
+		? <div className={cn('min-w-0 border-t border-[var(--study-rule)] py-6', className)}>{children}</div>
+		: <div data-panel className={cn('min-w-0 rounded-[var(--radius-xl)] border border-[var(--study-rule)] bg-card p-6 sm:p-8', className)}>{children}</div>
 );
 
 /** A tinted surface for the one thing a page wants you to do first. */

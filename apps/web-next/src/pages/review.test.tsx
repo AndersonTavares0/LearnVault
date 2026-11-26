@@ -93,7 +93,7 @@ describe('review', () => {
 	it('explains how to make cards when there are none, and is in the navigation', async () => {
 		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([]);
 		renderApp('/review', { catalog });
-		expect(await screen.findByText('No cards yet')).toBeTruthy();
+		expect(await screen.findByText(/^No cards yet\./)).toBeTruthy();
 		expect(screen.getAllByRole('link', { name: 'Review' })[0].getAttribute('href')).toBe('/review');
 	});
 

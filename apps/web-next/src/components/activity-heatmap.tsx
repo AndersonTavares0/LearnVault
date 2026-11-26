@@ -14,9 +14,9 @@ export type DayActivity = {
 };
 
 const LEVEL_MIX: Record<1 | 2 | 3, string> = {
-	1: 'color-mix(in oklch, var(--primary) 30%, var(--muted))',
-	2: 'color-mix(in oklch, var(--primary) 54%, var(--muted))',
-	3: 'color-mix(in oklch, var(--primary) 78%, var(--muted))'
+	1: 'color-mix(in oklch, var(--success) 30%, var(--muted))',
+	2: 'color-mix(in oklch, var(--success) 54%, var(--muted))',
+	3: 'color-mix(in oklch, var(--success) 78%, var(--muted))'
 };
 
 function dayLevel(isActive: boolean, info?: DayActivity): 0 | 1 | 2 | 3 | 4 {
@@ -110,7 +110,7 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 	return (
 		<section aria-labelledby="heatmap-heading" className="space-y-3">
 			<div className="flex flex-wrap items-baseline justify-between gap-2">
-				<h2 id="heatmap-heading" className="text-base font-medium">{tr('Study days', 'Dias de estudo')}</h2>
+				<h2 id="heatmap-heading" className="text-[15px] font-semibold">{tr('Study days', 'Dias de estudo')}</h2>
 				<p className="text-sm text-muted-foreground">{summary}</p>
 			</div>
 			<div ref={containerRef} className="relative flex gap-2">
@@ -151,7 +151,7 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 										}}
 										className={cn(
 											'size-3 rounded-[3px] transition-[transform,box-shadow] duration-100 hover:ring-2 hover:ring-foreground/60 sm:size-auto sm:aspect-square',
-											level > 0 ? 'bg-primary' : 'bg-muted ring-1 ring-inset ring-border/60'
+											level > 0 ? 'bg-success' : 'bg-muted'
 										)}
 									/>
 								);
@@ -167,14 +167,14 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 			</div>
 			<div aria-hidden="true" className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
 				<span>{tr('Less', 'Menos')}</span>
-				<span className="size-3 rounded-[3px] bg-muted ring-1 ring-inset ring-border/60" />
+				<span className="size-3 rounded-[3px] bg-muted" />
 				{([1, 2, 3, 4] as const).map((level) => (
-					<span key={level} data-level={level} style={levelStyle(level)} className="size-3 rounded-[3px] bg-primary" />
+					<span key={level} data-level={level} style={levelStyle(level)} className="size-3 rounded-[3px] bg-success" />
 				))}
 				<span>{tr('More', 'Mais')}</span>
 			</div>
 			<details onToggle={(event) => setShowDetails(event.currentTarget.open)}>
-				<summary className="w-fit min-h-11 cursor-pointer rounded-md px-2 py-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground">
+				<summary className="w-fit min-h-11 cursor-pointer rounded-md px-2 py-3 text-sm text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground">
 					{tr('View daily study activity', 'Ver atividade diária de estudo')}
 				</summary>
 				{showDetails && (

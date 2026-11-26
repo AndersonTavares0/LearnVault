@@ -7,7 +7,7 @@ import { ConfirmDelete } from '@/components/confirm-delete';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
 import { Panel } from '@/components/panel';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
 import { getLocale, tr } from '@/lib/i18n';
@@ -51,6 +51,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 	const [view, setView] = useState<'lesson' | 'date'>('lesson');
 	const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
 	const [deleting, setDeleting] = useState<StudyNote | null>(null);
+	const firstCourse = catalog.data?.nodes.find((node) => node.role === 'course');
 	const refresh = () => client.invalidateQueries({ queryKey: ['notes'] });
 	const update = useMutation({ mutationFn: ({ id, content }: { id: string; content: string }) => transport.updateNote(id, content), onSuccess: () => { setEditing(null); return refresh(); } });
 	const remove = useMutation({ mutationFn: (id: string) => transport.deleteNote(id), onSuccess: () => { setDeleting(null); return refresh(); } });
@@ -126,14 +127,14 @@ function Notebook({ courseId }: { courseId: string | null }) {
 	};
 
 	const renderItem = ({ note, location }: Entry) => (
-		<li key={note.noteId} className="group grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-3 xl:grid-cols-[3.5rem_minmax(0,1fr)_auto] xl:gap-x-4">
-			<div className="w-14 shrink-0 pt-0.5">
+		<li key={note.noteId} className="group grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-4 xl:grid-cols-[4.75rem_minmax(0,1fr)_auto] xl:gap-x-4">
+			<div className="shrink-0 pt-0.5">
 					{location ? (
-						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="study-timecode relative inline-flex min-h-11 min-w-14 items-center justify-center after:absolute after:-inset-y-1 after:inset-x-0 after:content-[''] hover:underline">
-							{formatDuration(note.positionSeconds)}
+						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="study-timecode relative inline-flex min-h-11 items-center after:absolute after:-inset-y-1 after:inset-x-0 after:content-[''] hover:underline"><span className="rounded-md border border-primary/70 px-2 py-0.5 text-primary hover:bg-primary/10">
+							{formatDuration(note.positionSeconds)}</span>
 						</Link>
 					) : (
-						<span className="study-timecode inline-flex min-h-11 min-w-14 items-center justify-center text-muted-foreground">{formatDuration(note.positionSeconds)}</span>
+						<span className="study-timecode inline-flex min-h-11 items-center rounded-md border border-border px-2 py-0.5 text-muted-foreground">{formatDuration(note.positionSeconds)}</span>
 					)}
 			</div>
 			<div className="min-w-0 space-y-1">
@@ -166,7 +167,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 			<PageHeader
 				icon={NotebookPen}
 				title={courseId === null ? tr('Notes', 'Notas') : tr(`${courseTitle} notes`, `Notas de ${courseTitle}`)}
-				description={totalNotes === 0 ? undefined : (courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso`)) + ` · ${tr(`${groups.length} ${groups.length === 1 ? 'lesson' : 'lessons'}`, `${groups.length} ${groups.length === 1 ? 'aula' : 'aulas'}`)} · ${tr(`${weekCount} this week`, `${weekCount} nesta semana`)}`}
+				description={totalNotes === 0 ? undefined : <span className="inline-flex flex-wrap gap-x-4 gap-y-1"><span>{courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso`)}</span><span>{tr(`${groups.length} ${groups.length === 1 ? 'lesson' : 'lessons'}`, `${groups.length} ${groups.length === 1 ? 'aula' : 'aulas'}`)}</span><span>{tr(`${weekCount} this week`, `${weekCount} nesta semana`)}</span></span>}
 				actions={matches.length > 0 ? (
 					<Button variant="outline" onClick={exportMarkdown}>
 						<Download />
@@ -179,12 +180,12 @@ function Notebook({ courseId }: { courseId: string | null }) {
 			<div className={cn('grid items-start gap-8', courses.length > 1 && 'lg:grid-cols-[15rem_minmax(0,1fr)]')}>
 				{courses.length > 1 && (
 					<aside aria-label={tr('Courses', 'Cursos')} className="hidden space-y-1 lg:block">
-						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 border-b px-3.5 py-2 text-left text-sm', courseId === null ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 border-b px-3.5 py-2 text-left text-sm', courseId === null ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
 							<span className="truncate">{tr('All courses', 'Todos os cursos')}</span>
 							<span className="shrink-0 text-xs tabular-nums">{totalNotes}</span>
 						</button>
 						{courses.map((course) => (
-							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 border-b px-3.5 py-2 text-left text-sm', courseId === course.id ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 border-b px-3.5 py-2 text-left text-sm', courseId === course.id ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
 								<span className="line-clamp-2 min-w-0">{course.title}</span>
 								<span className="shrink-0 text-xs tabular-nums">{course.count}</span>
 							</button>
@@ -214,44 +215,36 @@ function Notebook({ courseId }: { courseId: string | null }) {
 					{notes.isPending ? (
 						<p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
 					) : inScope === 0 ? (
-						(() => {
-							const firstCourse = catalog.data?.nodes.find((node) => node.role === 'course');
-							return (
-								<div className="mx-auto max-w-xl py-4">
-									<div className="study-surface space-y-5 bg-card p-6 text-center sm:p-10">
-										<NotebookPen className="mx-auto size-8 text-muted-foreground" aria-hidden="true" />
-										<div className="space-y-2">
-											<h2 className="font-heading text-2xl font-semibold">{tr('Your study notebook', 'Seu caderno de estudo')}</h2>
-											<p className="mx-auto max-w-prose text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open Notes to write one tied to that moment.', 'Durante uma aula, use “Nota” para registrar uma ideia e voltar a esse trecho depois.')}</p>
-										</div>
-										<div className="flex flex-col justify-center gap-2.5 sm:flex-row sm:flex-wrap">
-											{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className={cn(buttonVariants(), 'w-full sm:w-auto')}>{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
-											<Link to="/" className={cn(buttonVariants({ variant: firstCourse?.courseId ? 'outline' : 'default' }), 'w-full sm:w-auto')}>{tr('Browse your library', 'Explorar a biblioteca')}</Link>
-											{courseId !== null && <Link to="/notes" className={cn(buttonVariants({ variant: 'outline' }), 'w-full sm:w-auto')}>{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
-										</div>
-									</div>
-								</div>
-							);
-						})()
+						(
+							<div className="space-y-3">
+								<h2 className="text-[15px] font-semibold">{tr('Your study notebook', 'Seu caderno de estudo')}</h2>
+								<p className="text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open Notes to write one tied to that moment.', 'Durante uma aula, use “Nota” para registrar uma ideia e voltar a esse trecho depois.')}</p>
+								<p className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+									{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
+									<Link to="/" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Browse your library', 'Explorar a biblioteca')}</Link>
+									{courseId !== null && <Link to="/notes" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
+								</p>
+							</div>
+						)
 					) : groups.length === 0 ? (
 						<div role="status" className="space-y-2 text-muted-foreground">
 							<p>{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
-							{courseId !== null && <Link to="/notes" className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
+							{courseId !== null && <Link to="/notes" className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
 						</div>
 					) : view === 'date' ? (
 						dayGroups.map(({ day, courses: dayCourses }) => (
 							<section key={day} aria-label={day}>
-								<Panel className="study-surface space-y-4">
-									<h2 className="font-heading text-xl font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { dateStyle: 'full' })}</h2>
+								<Panel variant="open" className="space-y-4">
+									<h2 className="text-[15px] font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { dateStyle: 'full' })}</h2>
 									<div className="space-y-4">
 										{dayCourses.map((course) => (
 											<div key={course.id} className="space-y-3 border-t pt-3 first:border-t-0 first:pt-0">
-												<h3 className="text-sm font-semibold text-muted-foreground">{course.title}</h3>
+												<h3 className="text-[15px] font-semibold">{course.title}</h3>
 												{course.lessons.map((lesson) => (
 													<div key={lesson.items[0].note.mediaId} className="space-y-1">
 														<div className="flex flex-wrap items-baseline justify-between gap-2">
-															<h4 className="text-base font-semibold text-balance">{lesson.title}</h4>
-															{lesson.location && <Link to={href('course', lesson.location.courseId, lesson.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+															<h4 className="text-sm font-medium text-muted-foreground text-balance">{lesson.title}</h4>
+															{lesson.location && <Link to={href('course', lesson.location.courseId, lesson.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Open lesson', 'Abrir aula')}</Link>}
 														</div>
 														<ul className="divide-y">{lesson.items.map((entry) => renderItem(entry))}</ul>
 													</div>
@@ -265,17 +258,17 @@ function Notebook({ courseId }: { courseId: string | null }) {
 					) : (
 						courseSections.map((section) => {
 							const lessons = section.groups.map((group) => (
-								<section key={group.items[0].note.mediaId} aria-label={group.lesson} className="border-t pt-5 pb-3">
+								<section key={group.items[0].note.mediaId} aria-label={group.lesson} className="pt-4">
 									<div className="flex flex-wrap items-baseline justify-between gap-2">
-										<h3 className="text-base font-semibold text-balance">{group.lesson}<span className="ml-2.5 text-xs font-normal text-muted-foreground tabular-nums">{tr(`${group.items.length} ${group.items.length === 1 ? 'note' : 'notes'}`, `${group.items.length} ${group.items.length === 1 ? 'nota' : 'notas'}`)}</span></h3>
-										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+										<h3 className="text-sm font-medium text-muted-foreground text-balance">{group.lesson}<span className="ml-2.5 text-xs font-normal tabular-nums">{tr(`${group.items.length} ${group.items.length === 1 ? 'note' : 'notes'}`, `${group.items.length} ${group.items.length === 1 ? 'nota' : 'notas'}`)}</span></h3>
+										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Open lesson', 'Abrir aula')}</Link>}
 									</div>
-									<ul className="mt-1 divide-y divide-border/50">{group.items.map((entry) => renderItem(entry))}</ul>
+									<ul className="divide-y divide-[var(--study-rule)]">{group.items.map((entry) => renderItem(entry))}</ul>
 								</section>
 							));
 							return courseId === null ? (
-								<section key={section.id} aria-label={section.title} className="space-y-1">
-									<h2 className="pt-2 font-sans text-xl font-bold text-balance">{section.title}<span className="ml-3 text-sm font-normal text-muted-foreground tabular-nums">{tr(`${section.count} ${section.count === 1 ? 'note' : 'notes'}`, `${section.count} ${section.count === 1 ? 'nota' : 'notas'}`)}</span></h2>
+								<section key={section.id} aria-label={section.title} className="space-y-1 pb-2">
+									<h2 className="border-t border-[var(--study-rule)] pt-6 text-[15px] font-semibold text-balance">{section.title}<span className="ml-3 text-sm font-normal text-muted-foreground tabular-nums">{tr(`${section.count} ${section.count === 1 ? 'note' : 'notes'}`, `${section.count} ${section.count === 1 ? 'nota' : 'notas'}`)}</span></h2>
 									{lessons}
 								</section>
 							) : <div key={section.id}>{lessons}</div>;
