@@ -28,7 +28,9 @@ type Props = {
 	onTime: (seconds: number) => void;
 	onOpenNotes: () => void;
 	/** Timestamp bookmarks drawn on the seek bar. */
-	markers?: { id: string; positionSeconds: number; label: string }[];
+	bookmarks?: { id: string; positionSeconds: number; label: string }[];
+	/** Note times in seconds, drawn as thin decorative ticks on the seek bar. */
+	markers?: number[];
 	/** Cinema mode: the page gives the picture the whole width. The button shows only when the page offers it. */
 	cinema?: boolean;
 	onCinema?: () => void;
@@ -70,7 +72,7 @@ function useCaptions(subtitle: FileEntry | null, courseId: string) {
 	return { src: null, message, download: url };
 }
 
-export function MediaPlayer({ lesson, courseId, initialPosition, preferences, onPreferencesChange, onPosition, onEnded, onTime, onOpenNotes, markers = [], cinema = false, onCinema, handle }: Props) {
+export function MediaPlayer({ lesson, courseId, initialPosition, preferences, onPreferencesChange, onPosition, onEnded, onTime, onOpenNotes, bookmarks = [], markers = [], cinema = false, onCinema, handle }: Props) {
 	const lessonPreference = preferences.lessons[lessonPreferenceKey(courseId, lesson.path)] ?? {};
 	const available = (files: FileEntry[]) => files.filter((file) => file.availability?.trim().toLowerCase() !== 'missing');
 	const playable = selectPlayableMedia(lesson.media, lessonPreference.mediaId);
@@ -375,7 +377,8 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		setCaptionsOn(!captionsOn);
 	};
 	const span = Math.max(1, Math.floor(total));
-	const timelineMarkers = markers.filter((marker) => marker.positionSeconds > 0 && marker.positionSeconds < span);
+	const timelineMarkers = bookmarks.filter((marker) => marker.positionSeconds > 0 && marker.positionSeconds < span);
+	const noteTicks = markers.filter((at) => at > 0 && at < span);
 	// Re-encoding is the fallback: it is offered only after on-demand transcoding failed.
 	const showReencode = Boolean(transcode && !transcode.reencode);
 	const bar = (
@@ -383,6 +386,9 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			<div className="relative py-1 sm:py-0">
 				<input type="range" aria-label={tr('Seek', 'Posição')} min={0} max={span} step={1} value={Math.min(Math.floor(now), span)} aria-valuetext={`${formatDuration(now)} / ${formatDuration(total)}`}
 					onChange={(event) => seek(Number(event.target.value))} className="block h-8 w-full cursor-pointer accent-[var(--reward-fill)] sm:h-5" />
+				{noteTicks.map((at) => (
+					<span key={at} aria-hidden="true" className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-x-px -translate-y-1/2 rounded-full bg-current opacity-80" style={{ left: `${(at / span) * 100}%` }} />
+				))}
 				{timelineMarkers.length > 0 && (
 					<div className="pointer-events-none absolute inset-x-0 top-1 flex h-8 items-center sm:top-0 sm:h-5">
 						{timelineMarkers.map((marker) => (
@@ -443,7 +449,7 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			) : (
 				// The group takes focus so single-key shortcuts only act on the player (WCAG 2.1.4).
 				// eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions
-				<div ref={setContainer} role="group" tabIndex={0} onKeyDown={onKeyDown} data-player aria-label={tr('Media player', 'Player de mídia')} aria-describedby="player-shortcuts" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0 1 2 3 4 5 6 7 8 9" className="relative group/player overflow-hidden rounded-xl bg-black focus-visible:ring-3 focus-visible:ring-ring">
+				<div ref={setContainer} role="group" tabIndex={0} onKeyDown={onKeyDown} data-player aria-label={tr('Media player', 'Player de mídia')} aria-describedby="player-shortcuts" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0 1 2 3 4 5 6 7 8 9" className="relative group/player overflow-hidden bg-black max-sm:rounded-none sm:rounded-xl focus-visible:ring-3 focus-visible:ring-ring">
 					{/* Captions come from the course's own subtitle files; many lessons have none (WCAG 1.2.2 depends on the content). */}
 					{kind === 'audio' ? (
 						// eslint-disable-next-line jsx-a11y/media-has-caption
