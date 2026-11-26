@@ -130,11 +130,11 @@ function Notebook({ courseId }: { courseId: string | null }) {
 		<li key={note.noteId} className="group grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-4 xl:grid-cols-[4.75rem_minmax(0,1fr)_auto] xl:gap-x-4">
 			<div className="shrink-0 pt-0.5">
 					{location ? (
-						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="study-timecode relative inline-flex min-h-11 items-center after:absolute after:-inset-y-1 after:inset-x-0 after:content-[''] hover:underline"><span className="rounded-md border border-primary/70 px-2 py-0.5 text-primary hover:bg-primary/10">
+						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="relative inline-flex min-h-11 items-center after:absolute after:-inset-y-1 after:inset-x-0 after:content-[''] hover:underline"><span className="rounded-md border border-primary/45 px-2 py-0.5 text-[11.5px] font-semibold tabular-nums text-primary hover:bg-primary/10">
 							{formatDuration(note.positionSeconds)}</span>
 						</Link>
 					) : (
-						<span className="study-timecode inline-flex min-h-11 items-center rounded-md border border-border px-2 py-0.5 text-muted-foreground">{formatDuration(note.positionSeconds)}</span>
+						<span className="inline-flex min-h-11 items-center rounded-md border border-border px-2 py-0.5 text-[11.5px] font-semibold tabular-nums text-muted-foreground">{formatDuration(note.positionSeconds)}</span>
 					)}
 			</div>
 			<div className="min-w-0 space-y-1">
@@ -148,15 +148,13 @@ function Notebook({ courseId }: { courseId: string | null }) {
 						</div>
 					</form>
 				) : (
-					<Markdown text={note.content} className="max-w-[68ch] font-[Literata_Variable,Georgia,serif] text-[1.0625rem] leading-relaxed" />
+					<Markdown text={note.content} className="max-w-[68ch] text-[15px] leading-[1.6] text-foreground" />
 				)}
 			</div>
-			<div className="col-start-2 flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground xl:col-start-auto">
-				<time dateTime={new Date(note.updatedAt * 1000).toISOString()} className="study-timecode whitespace-nowrap">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</time>
-				<span aria-hidden="true" className="opacity-50">·</span>
-				<Button variant="ghost" size="xs" className="min-w-11 px-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}>{tr('Edit', 'Editar')}</Button>
-				<span aria-hidden="true" className="opacity-50">·</span>
-				<Button variant="ghost" size="xs" className="min-w-11 px-1.5 text-xs font-medium text-muted-foreground hover:text-destructive" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}>{tr('Delete', 'Excluir')}</Button>
+			<div className="col-start-2 flex flex-wrap items-center gap-x-2 text-[12.5px] text-muted-foreground xl:col-start-auto">
+				<time dateTime={new Date(note.updatedAt * 1000).toISOString()} className="whitespace-nowrap tabular-nums">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</time>
+				<Button variant="ghost" size="xs" className="min-w-11 px-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}>{tr('Edit', 'Editar')}</Button>
+				<Button variant="ghost" size="xs" className="min-w-11 px-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-destructive" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}>{tr('Delete', 'Excluir')}</Button>
 			</div>
 		</li>
 	);
