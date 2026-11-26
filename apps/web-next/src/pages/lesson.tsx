@@ -233,21 +233,21 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const materialCount = lesson.materials.length + lesson.subtitles.length;
 	return (
 		<div data-lesson-focus={focus ? 'on' : undefined} className="space-y-5">
-			<header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
-				<nav aria-label={tr('Breadcrumb', 'Caminho')} className="flex min-w-0 items-center gap-1.5 text-sm">
+			<header className="flex items-center justify-between gap-3 lg:flex-wrap lg:gap-x-6 lg:gap-y-3">
+				<nav aria-label={tr('Breadcrumb', 'Caminho')} className="flex min-w-0 flex-1 items-center gap-1.5 text-sm lg:flex-none">
 					<Link to={path(href('course', courseId))} className="inline-flex min-h-11 min-w-0 items-center gap-1 font-medium text-muted-foreground hover:text-foreground">
 						<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="truncate">{course.title}</span>
 					</Link>
 					{moduleTitle && <><span aria-hidden="true" className="text-muted-foreground/60">/</span><span className="truncate text-muted-foreground">{moduleTitle}</span></>}
 				</nav>
-				<div className="flex flex-wrap items-center gap-2">
-					<Button variant="outline" aria-pressed={focus} onClick={() => setFocus(!focus)}><Focus />{tr('Focus', 'Foco')}</Button>
-					<Button variant="outline" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
-					<Button variant="outline" disabled={!next} title={tr('Jump to the next lesson without marking this one completed', 'Ir para a próxima aula sem marcar esta como concluída')} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+				<div className="flex shrink-0 items-center gap-2">
+					<Button variant="outline" className="hidden lg:inline-flex" aria-pressed={focus} onClick={() => setFocus(!focus)}><Focus />{tr('Focus', 'Foco')}</Button>
+					<Button variant="outline" className="max-lg:size-11 max-lg:px-0" title={tr('Previous', 'Anterior')} disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft /><span className="max-lg:sr-only">{tr('Previous', 'Anterior')}</span></Button>
+					<Button variant="outline" className="max-lg:size-11 max-lg:px-0" disabled={!next} title={tr('Jump to the next lesson without marking this one completed', 'Ir para a próxima aula sem marcar esta como concluída')} onClick={() => next && goTo(next.path)}><span className="max-lg:sr-only">{tr('Next', 'Próxima')}</span><ChevronRight /></Button>
 					{cinema && (
 						<Button variant="secondary" onClick={() => setCinema(false)}>{tr('Exit cinema', 'Sair do cinema')}</Button>
 					)}
-					<Button variant="outline" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
+					<Button variant="outline" className="hidden lg:inline-flex" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
 				</div>
 			</header>
 
@@ -339,9 +339,9 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 					</div>
 				</div>
 
-				{contentOpen && (
+				{(
 					// Desktop: a full-height rail with tabs. Phones: the same tabs as a sheet under the lesson.
-					<aside className="lesson-rail min-w-0 border-t border-[var(--study-rule)] bg-card lg:border-t-0 lg:border-l [:root[data-sidebar=left]_&]:lg:order-first [:root[data-sidebar=left]_&]:lg:border-x-0 [:root[data-sidebar=left]_&]:lg:border-r">
+					<aside className={cn('lesson-rail min-w-0 border-t border-[var(--study-rule)] bg-card lg:border-t-0 lg:border-l [:root[data-sidebar=left]_&]:lg:order-first [:root[data-sidebar=left]_&]:lg:border-x-0 [:root[data-sidebar=left]_&]:lg:border-r', !contentOpen && 'hidden max-lg:block')}>
 						<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))} className="gap-0">
 							<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start gap-1 border-b px-3 group-data-horizontal/tabs:h-auto [&>[role=tab]]:min-h-11">
 								{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}{noteCount > 0 && ` (${noteCount})`}</TabsTrigger>}

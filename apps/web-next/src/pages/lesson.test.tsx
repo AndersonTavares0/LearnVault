@@ -125,7 +125,8 @@ describe('lesson page', () => {
 		expect(localStorage.getItem('learnvault-cinema')).toBe('1');
 		fireEvent.click(screen.getByRole('button', { name: 'Hide contents' }));
 		expect(localStorage.getItem('learnvault-lesson-content')).toBe('0');
-		expect(screen.queryByRole('tab', { name: 'Contents' })).toBeNull();
+		// Hidden on desktop; the rail stays in the DOM so phones still get the sheet.
+		expect(screen.getByRole('tab', { name: 'Contents' }).closest('aside')?.className).toContain('hidden');
 		cleanup();
 		renderApp('/course/c/c%2FOne', { catalog });
 		expect((await screen.findByRole('button', { name: 'Cinema mode' })).getAttribute('aria-pressed')).toBe('true');
