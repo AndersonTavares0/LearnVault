@@ -97,14 +97,15 @@ describe('course page', () => {
 		expect(await screen.findByRole('heading', { name: 'Course not found' })).toBeTruthy();
 	});
 
-	it.each([true, false])('shows detailed cover art, but keeps the monogram for a flat image (detail: %s)', async (detail) => {
+	it.each([true, false])('shows detailed cover art, but keeps the first letter for a flat image (detail: %s)', async (detail) => {
 		const withCover: Catalog = { complete: true, looseFiles: [], nodes: [{ ...catalog.nodes[0], coverVersion: 3 }] };
 		renderApp('/course/rust', { catalog: withCover });
 		const heading = await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
 		const hero = heading.closest('[data-course-hero]')!;
 		const covers = hero.querySelectorAll<HTMLImageElement>('img[src*="/cover"]');
 		expect(covers).toHaveLength(1);
-		expect(within(hero as HTMLElement).getByText('RF')).toBeTruthy();
+		// The course hero passes `compact`, so its generated cover shows only the first letter.
+		expect(within(hero as HTMLElement).getByText('R')).toBeTruthy();
 		const data = new Uint8ClampedArray(8 * 8 * 4);
 		if (detail) data[4] = 255;
 		const read = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({

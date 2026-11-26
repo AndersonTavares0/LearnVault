@@ -42,7 +42,8 @@ describe('CourseCard variants', () => {
 
 	it('grid is a borderless cover with lesson count, done count, segments and the favorite toggle', () => {
 		show('grid');
-		expect(screen.getByText('4 lessons')).toBeTruthy();
+		// The generated cover names the lesson count and the card meta repeats it.
+		expect(screen.getAllByText('4 lessons')).toHaveLength(2);
 		expect(screen.getByText('1 done')).toBeTruthy();
 		expect(screen.getByRole('progressbar', { name: '1 of 4 lessons done' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Add Rust from Zero to favorites' })).toBeTruthy();
