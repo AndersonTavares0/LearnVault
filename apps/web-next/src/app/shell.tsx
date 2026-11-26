@@ -222,7 +222,8 @@ function AccountMenu({ username, userId }: { username: string; userId: string })
 		<>
 			<DropdownMenu>
 				<DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="lg:order-first lg:min-w-0 lg:flex-1 lg:justify-start lg:gap-2 lg:px-2" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
-					<span className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-muted text-sm font-bold text-foreground" aria-hidden="true">{username.trim()[0]?.toUpperCase() ?? '?'}</span>
+					{/* The initial is drawn by CSS so it stays out of the visible label, which must match "Account: <name>". */}
+					<span data-initial={username.trim()[0]?.toUpperCase() ?? '?'} className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-muted text-sm font-bold text-foreground before:content-[attr(data-initial)]" aria-hidden="true" />
 					<span className="hidden truncate text-sm font-medium lg:block">{username}</span>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-56">
