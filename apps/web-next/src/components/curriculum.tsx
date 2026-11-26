@@ -1,4 +1,4 @@
-import { Check, ChevronDown, CircleCheck, CirclePlay, Circle, FileText, PlayCircle, Star, TriangleAlert } from 'lucide-react';
+import { Check, ChevronDown, CircleCheck, Circle, FileText, Film, Star, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -36,13 +36,13 @@ const contains = (node: CatalogNode, path: string | null | undefined): boolean =
  */
 export function Curriculum(props: Props) {
 	return (
-		<ul className={cn('divide-y', props.compact ? 'border-y' : 'overflow-hidden rounded-[1.25rem] border bg-card')}>
+		<ul className={cn('divide-y divide-[var(--study-rule)]', props.compact ? 'border-y border-[var(--study-rule)]' : 'study-surface overflow-hidden')}>
 			{props.nodes.map((node, index) => <CurriculumNode key={node.path} node={node} index={index + 1} {...props} />)}
 		</ul>
 	);
 }
 
-function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; index?: number }) {
+function CurriculumNode({ node, index, moduleTitle, ...props }: Props & { node: CatalogNode; index?: number; moduleTitle?: string }) {
 	const [open, setOpen] = useState(() => contains(node, props.activePath));
 	const [seen, setSeen] = useState(props.signal?.n ?? 0);
 	if (props.signal && props.signal.n !== seen) {
@@ -56,7 +56,7 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 		setSeenActive(props.activePath);
 		if (contains(node, props.activePath)) setOpen(true);
 	}
-	if (node.role === 'lesson') return <LessonRow node={node} {...props} />;
+	if (node.role === 'lesson') return <LessonRow node={node} moduleTitle={moduleTitle} {...props} />;
 	const { done, total } = courseProgress(node, props.completed);
 	const complete = total > 0 && done === total;
 	const current = contains(node, props.activePath);
@@ -65,12 +65,12 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 			<details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group">
 				<summary className={cn('flex cursor-pointer list-none items-center gap-3 transition-colors duration-150 hover:bg-muted [&::-webkit-details-marker]:hidden', props.compact ? 'min-h-14 px-3 py-2' : 'min-h-14 bg-muted/50 px-4 py-3', current && 'bg-brand-tint')}>
 					{index !== undefined ? (
-						<span className={cn('grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors duration-150', complete ? 'bg-primary text-primary-foreground' : 'bg-brand-soft', current && 'ring-2 ring-primary ring-offset-2 ring-offset-card')} aria-hidden="true">{complete ? <Check className="size-4" /> : index}</span>
+						<span className={cn('grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors duration-150', complete ? 'bg-primary text-primary-foreground' : current ? 'border-2 border-primary bg-card text-primary' : 'bg-brand-soft text-foreground')} aria-hidden="true">{complete ? <Check className="size-4" /> : index}</span>
 					) : (
 						<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />
 					)}
 					<span className="min-w-0 flex-1">
-						<span className={cn('block font-semibold', props.compact ? 'text-sm leading-snug' : 'text-base')}>{node.title}{current && <span className="sr-only">{tr(' (current module)', ' (módulo atual)')}</span>}</span>
+						<span className={cn('block font-semibold', props.compact ? 'text-sm leading-snug' : 'text-base')}>{node.title}{current && props.compact && <span className="sr-only">{tr(' (current module)', ' (módulo atual)')}</span>}</span>
 						{!props.compact && total > 0 && <span className="block text-sm text-muted-foreground">{tr(`${total} ${total === 1 ? 'lesson' : 'lessons'}`, `${total} ${total === 1 ? 'aula' : 'aulas'}`)}</span>}
 					</span>
 					{total > 0 && props.compact ? (
@@ -80,16 +80,18 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 						</>
 					) : total > 0 ? (
 						<>
-							<span className={cn('shrink-0 text-sm tabular-nums', (complete || current) ? 'rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand-ink' : 'text-muted-foreground')}>
-								{complete ? tr('Completed', 'Concluído') : current ? tr('You are here', 'Você está aqui') : done === 0 ? tr('Not started', 'Não iniciado') : tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}
+							<span className={cn('shrink-0 text-xs tabular-nums', complete ? 'font-semibold text-primary' : current ? 'font-semibold text-brand-ink' : 'text-muted-foreground')}>
+								{complete ? tr('Completed', 'Concluído') : current ? tr('Next module', 'Próximo módulo') : done === 0 ? tr('Not started', 'Não iniciado') : tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}
 							</span>
 							{index !== undefined && <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />}
 						</>
 					) : null}
 				</summary>
 				{node.children.length > 0 && (
-					<ul className="divide-y border-t bg-background/50">
-						{node.children.map((child) => <CurriculumNode key={child.path} node={child} {...props} />)}
+					<ul className="divide-y divide-[var(--study-rule)] border-t border-[var(--study-rule)] bg-background/50">
+						{node.children.map((child) => (
+							<CurriculumNode key={child.path} node={child} moduleTitle={node.children.length === 1 ? node.title : undefined} {...props} />
+						))}
 					</ul>
 				)}
 			</details>
@@ -97,7 +99,7 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 	);
 }
 
-function LessonRow({ node, courseId, completed, favorites, activePath, compact }: Props & { node: CatalogNode }) {
+function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePath, compact }: Props & { node: CatalogNode; moduleTitle?: string }) {
 	const setCompleted = useSetLessonCompleted();
 	const toggleFavorite = useToggleLessonFavorite();
 	const counts = countCatalogFiles(node);
@@ -107,7 +109,9 @@ function LessonRow({ node, courseId, completed, favorites, activePath, compact }
 	const isDone = Boolean(mediaId && completed.has(mediaId));
 	const isFavorite = Boolean(mediaId && favorites.has(mediaId));
 	const active = activePath === node.path;
-	const Icon = active ? CirclePlay : counts.videos > 0 || (counts.audios ?? 0) > 0 ? PlayCircle : FileText;
+	const KindIcon = counts.videos > 0 || (counts.audios ?? 0) > 0 ? Film : FileText;
+	const label = /^(lesson|aula)(\s+\d+)?$/i.test(node.title.trim()) && moduleTitle ? moduleTitle : node.title;
+	const displayLabel = !compact && moduleTitle === label ? tr('Open lesson', 'Abrir aula') : label;
 	const row = useRef<HTMLLIElement>(null);
 	// In the player sidebar, bring the open lesson into view inside the panel (never the page).
 	useEffect(() => {
@@ -118,7 +122,7 @@ function LessonRow({ node, courseId, completed, favorites, activePath, compact }
 	}, [active, compact]);
 
 	return (
-		<li ref={row} className={cn('flex items-center gap-1 pr-2 transition-colors duration-150', active ? 'bg-brand-tint' : 'hover:bg-muted/40')}>
+		<li ref={row} className={cn('flex items-center gap-1 pr-2 transition-colors duration-150', active ? 'border-l-2 border-l-primary bg-brand-tint/70' : 'hover:bg-muted/40')}>
 			{studySyncSupported && mediaId && !missing ? (
 				<Button variant="ghost" size="icon" aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone })}
 					aria-label={isDone ? tr(`Mark “${node.title}” as not completed`, `Marcar “${node.title}” como não concluída`) : tr(`Mark “${node.title}” as completed`, `Marcar “${node.title}” como concluída`)}>
@@ -130,14 +134,19 @@ function LessonRow({ node, courseId, completed, favorites, activePath, compact }
 			{missing ? (
 				<div className="flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2 text-muted-foreground">
 					<TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-					<span className="min-w-0 flex-1">{node.title}</span>
+					<span className="min-w-0 flex-1">{label}</span>
 					<span className="shrink-0 text-xs">{tr('Missing media', 'Mídia ausente')}</span>
 				</div>
 			) : (
-				<Link to={href('course', courseId, node.path).replace(/^#/, '')} aria-current={active ? 'page' : undefined} className={cn('flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md py-2 hover:underline', active && 'font-semibold')}>
-					<Icon className={cn('size-4 shrink-0', active ? 'fill-primary text-primary-foreground' : 'text-muted-foreground')} aria-hidden="true" />
-					<span className="min-w-0 flex-1">{node.title}</span>
-					{meta && !compact && <span className="shrink-0 text-xs text-muted-foreground">{meta}</span>}
+				<Link to={href('course', courseId, node.path).replace(/^#/, '')} aria-current={compact && active ? 'page' : undefined} className={cn('flex min-h-11 min-w-0 flex-1 items-center gap-2.5 rounded-md py-2 hover:underline', active ? 'font-semibold text-foreground' : '')}>
+					<span className="min-w-0 flex-1">{displayLabel}</span>
+					{meta && !compact && (
+						<span className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+							<KindIcon className="size-3.5" aria-hidden="true" />
+							<span>{meta}</span>
+						</span>
+					)}
+					{displayLabel !== label && <span className="sr-only">{label}</span>}
 				</Link>
 			)}
 			{studySyncSupported && mediaId && !missing && (

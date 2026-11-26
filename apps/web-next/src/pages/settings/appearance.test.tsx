@@ -53,7 +53,7 @@ describe('AppearanceSettings', () => {
 		render(<AppearanceSettings />);
 		press('Theme', 'Dark');
 		expect(root.dataset.theme).toBe('dark');
-		expect(root.style.getPropertyValue('--brand')).toBe('#E0A83E');
+		expect(root.style.getPropertyValue('--brand')).toBe('#C9B594');
 		press('Theme', 'Light');
 		expect(root.dataset.theme).toBe('light');
 		expect(root.style.getPropertyValue('--brand')).toBe('#1C1815');

@@ -234,12 +234,12 @@ test('admin settings pass axe and new accounts start with no course access', asy
 	expect(violations).toEqual([]);
 });
 
-test('the sign-in page shows the brand mark and the Sapere aude motto in both languages', async ({ page, origin }) => {
+test('the sign-in page shows the LearnVault wordmark and the Sapere aude motto in both languages', async ({ page, origin }) => {
 	await page.goto(`${origin}/#/login`);
 	const motto = page.locator('[lang="la"]', { hasText: 'Sapere aude' });
 	await expect(motto).toBeVisible();
 	await expect(page.getByText('Dare to know')).toBeVisible();
-	await expect(page.locator('main svg, form svg, svg').first()).toBeVisible();
+	await expect(page.getByText('LearnVault', { exact: true })).toBeVisible();
 
 	await page.getByRole('button', { name: /Switch language to/ }).click();
 	await expect(page.getByText('Ouse saber')).toBeVisible();

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, Download, NotebookPen, Search } from 'lucide-react';
+import { ArrowLeft, Download, NotebookPen, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { GONE } from '@/components/course-picker';
@@ -7,7 +7,7 @@ import { ConfirmDelete } from '@/components/confirm-delete';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
 import { Panel } from '@/components/panel';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
 import { getLocale, tr } from '@/lib/i18n';
@@ -126,17 +126,17 @@ function Notebook({ courseId }: { courseId: string | null }) {
 	};
 
 	const renderItem = ({ note, location }: Entry) => (
-		<li key={note.noteId} className="group -mx-3 flex flex-wrap items-start gap-4 rounded-xl px-3 py-3 transition-colors duration-150 focus-within:bg-panel/60 hover:bg-panel/60 sm:flex-nowrap">
+		<li key={note.noteId} className="group grid grid-cols-[3.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-3 xl:grid-cols-[3.5rem_minmax(0,1fr)_auto] xl:gap-x-4">
 			<div className="w-14 shrink-0 pt-0.5">
 					{location ? (
-						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="relative inline-flex h-8 min-w-14 items-center justify-center rounded-lg bg-brand-soft px-2 text-sm font-semibold text-brand-ink tabular-nums after:absolute after:-inset-y-2 after:inset-x-0 after:content-[''] hover:underline">
+						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="study-timecode relative inline-flex min-h-11 min-w-14 items-center justify-center after:absolute after:-inset-y-1 after:inset-x-0 after:content-[''] hover:underline">
 							{formatDuration(note.positionSeconds)}
 						</Link>
 					) : (
-						<span className="inline-flex h-8 min-w-14 items-center justify-center rounded-lg bg-muted px-2 text-sm text-muted-foreground tabular-nums">{formatDuration(note.positionSeconds)}</span>
+						<span className="study-timecode inline-flex min-h-11 min-w-14 items-center justify-center text-muted-foreground">{formatDuration(note.positionSeconds)}</span>
 					)}
 			</div>
-			<div className="min-w-0 flex-1 space-y-1">
+			<div className="min-w-0 space-y-1">
 				{editing?.id === note.noteId ? (
 					<form className="space-y-2" onSubmit={(event) => { event.preventDefault(); if (editing.content.trim()) update.mutate({ id: editing.id, content: editing.content.trim() }); }}>
 						<label htmlFor={`edit-${note.noteId}`} className="sr-only">{tr('Note text', 'Texto da nota')}</label>
@@ -147,15 +147,15 @@ function Notebook({ courseId }: { courseId: string | null }) {
 						</div>
 					</form>
 				) : (
-					<Markdown text={note.content} className="max-w-prose font-[Literata_Variable,Georgia,serif] text-[1.0625rem] leading-relaxed" />
+					<Markdown text={note.content} className="max-w-[68ch] font-[Literata_Variable,Georgia,serif] text-[1.0625rem] leading-relaxed" />
 				)}
 			</div>
-			<div className="ml-auto flex shrink-0 items-center gap-1 self-start text-xs text-muted-foreground">
-				<span className="whitespace-nowrap">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</span>
+			<div className="col-start-2 flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground xl:col-start-auto">
+				<time dateTime={new Date(note.updatedAt * 1000).toISOString()} className="study-timecode whitespace-nowrap">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</time>
 				<span aria-hidden="true" className="opacity-50">·</span>
-				<Button variant="ghost" size="xs" className="h-9 px-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}>{tr('Edit', 'Editar')}</Button>
+				<Button variant="ghost" size="xs" className="min-w-11 px-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}>{tr('Edit', 'Editar')}</Button>
 				<span aria-hidden="true" className="opacity-50">·</span>
-				<Button variant="ghost" size="xs" className="h-9 px-1.5 text-xs font-medium text-muted-foreground hover:text-destructive" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}>{tr('Delete', 'Excluir')}</Button>
+				<Button variant="ghost" size="xs" className="min-w-11 px-1.5 text-xs font-medium text-muted-foreground hover:text-destructive" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}>{tr('Delete', 'Excluir')}</Button>
 			</div>
 		</li>
 	);
@@ -166,9 +166,9 @@ function Notebook({ courseId }: { courseId: string | null }) {
 			<PageHeader
 				icon={NotebookPen}
 				title={courseId === null ? tr('Notes', 'Notas') : tr(`${courseTitle} notes`, `Notas de ${courseTitle}`)}
-				description={(courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso`)) + ` · ${tr(`${groups.length} ${groups.length === 1 ? 'lesson' : 'lessons'}`, `${groups.length} ${groups.length === 1 ? 'aula' : 'aulas'}`)} · ${tr(`${weekCount} this week`, `${weekCount} nesta semana`)}`}
+				description={totalNotes === 0 ? undefined : (courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso`)) + ` · ${tr(`${groups.length} ${groups.length === 1 ? 'lesson' : 'lessons'}`, `${groups.length} ${groups.length === 1 ? 'aula' : 'aulas'}`)} · ${tr(`${weekCount} this week`, `${weekCount} nesta semana`)}`}
 				actions={matches.length > 0 ? (
-					<Button variant="outline" className="rounded-full" onClick={exportMarkdown}>
+					<Button variant="outline" onClick={exportMarkdown}>
 						<Download />
 						{isFiltered
 							? tr(`Export ${total} filtered ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar ${total} ${total === 1 ? 'nota filtrada' : 'notas filtradas'} em Markdown`)
@@ -179,12 +179,12 @@ function Notebook({ courseId }: { courseId: string | null }) {
 			<div className={cn('grid items-start gap-8', courses.length > 1 && 'lg:grid-cols-[15rem_minmax(0,1fr)]')}>
 				{courses.length > 1 && (
 					<aside aria-label={tr('Courses', 'Cursos')} className="hidden space-y-1 lg:block">
-						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-left text-sm transition-colors duration-150', courseId === null ? 'bg-panel font-semibold text-foreground' : 'text-muted-foreground hover:bg-brand-tint hover:text-foreground')}>
+						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 border-b px-3.5 py-2 text-left text-sm', courseId === null ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
 							<span className="truncate">{tr('All courses', 'Todos os cursos')}</span>
 							<span className="shrink-0 text-xs tabular-nums">{totalNotes}</span>
 						</button>
 						{courses.map((course) => (
-							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-left text-sm transition-colors duration-150', courseId === course.id ? 'bg-panel font-semibold text-foreground' : 'text-muted-foreground hover:bg-brand-tint hover:text-foreground')}>
+							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 border-b px-3.5 py-2 text-left text-sm', courseId === course.id ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
 								<span className="line-clamp-2 min-w-0">{course.title}</span>
 								<span className="shrink-0 text-xs tabular-nums">{course.count}</span>
 							</button>
@@ -192,33 +192,56 @@ function Notebook({ courseId }: { courseId: string | null }) {
 					</aside>
 				)}
 				<div className="min-w-0 space-y-6">
-					<div className="flex flex-wrap items-center gap-3">
-						<div role="search" aria-label={tr('Notes', 'Notas')} className="relative min-w-0 flex-1 basis-60">
-							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-							<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes or lessons', 'Buscar notas ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
+					{totalNotes > 0 && (
+						<div className="flex flex-wrap items-center gap-3">
+							<div role="search" aria-label={tr('Notes', 'Notas')} className="relative min-w-0 flex-1 basis-60">
+								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+								<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes or lessons', 'Buscar notas ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
+							</div>
+							{courses.length > 1 && (
+								<select aria-label={tr('Filter by course', 'Filtrar por curso')} value={courseId ?? ''} onChange={(event) => setParams(event.target.value ? { course: event.target.value } : {})} className="h-11 min-w-0 max-w-full rounded-[var(--radius)] border border-[var(--study-rule)] bg-card px-3 pr-8 text-sm sm:max-w-xs lg:hidden">
+									<option value="">{tr('All courses', 'Todos os cursos')}</option>
+									{courses.map((course) => <option key={course.id} value={course.id}>{course.title} ({course.count})</option>)}
+								</select>
+							)}
+							<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="inline-flex rounded-[var(--radius)] border border-[var(--study-rule)] bg-panel/75 p-0.5">
+								<button type="button" aria-pressed={view === 'lesson'} onClick={() => setView('lesson')} className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-[calc(var(--radius)-2px)] px-3 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', view === 'lesson' ? 'bg-card font-semibold text-foreground shadow-2xs' : 'font-medium text-muted-foreground hover:text-foreground')}>{tr('By lesson', 'Por aula')}</button>
+								<button type="button" aria-pressed={view === 'date'} onClick={() => setView('date')} className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-[calc(var(--radius)-2px)] px-3 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', view === 'date' ? 'bg-card font-semibold text-foreground shadow-2xs' : 'font-medium text-muted-foreground hover:text-foreground')}>{tr('By date', 'Por data')}</button>
+							</div>
 						</div>
-						{courses.length > 1 && (
-							<select aria-label={tr('Filter by course', 'Filtrar por curso')} value={courseId ?? ''} onChange={(event) => setParams(event.target.value ? { course: event.target.value } : {})} className="h-11 min-w-0 max-w-full rounded-lg border border-input bg-background px-3 text-sm sm:max-w-xs lg:hidden">
-								<option value="">{tr('All courses', 'Todos os cursos')}</option>
-								{courses.map((course) => <option key={course.id} value={course.id}>{course.title} ({course.count})</option>)}
-							</select>
-						)}
-						<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="flex gap-2">
-							<Button size="sm" variant={view === 'lesson' ? 'selected' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}{view === 'lesson' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
-							<Button size="sm" variant={view === 'date' ? 'selected' : 'outline'} aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('By date', 'Por data')}{view === 'date' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
-						</div>
-					</div>
+					)}
 					{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
 					{notes.isPending ? (
 						<p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
 					) : inScope === 0 ? (
-						<Panel className="p-5 text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open the Notes tab or press n to write one tied to that moment.', 'Ainda não há notas. Assistindo a uma aula, abra a aba Notas ou aperte n para escrever uma presa àquele momento.')}</Panel>
+						(() => {
+							const firstCourse = catalog.data?.nodes.find((node) => node.role === 'course');
+							return (
+								<div className="mx-auto max-w-xl py-4">
+									<div className="study-surface space-y-5 bg-card p-6 text-center sm:p-10">
+										<NotebookPen className="mx-auto size-8 text-muted-foreground" aria-hidden="true" />
+										<div className="space-y-2">
+											<h2 className="font-heading text-2xl font-semibold">{tr('Your study notebook', 'Seu caderno de estudo')}</h2>
+											<p className="mx-auto max-w-prose text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open Notes to write one tied to that moment.', 'Durante uma aula, use “Nota” para registrar uma ideia e voltar a esse trecho depois.')}</p>
+										</div>
+										<div className="flex flex-col justify-center gap-2.5 sm:flex-row sm:flex-wrap">
+											{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className={cn(buttonVariants(), 'w-full sm:w-auto')}>{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
+											<Link to="/" className={cn(buttonVariants({ variant: firstCourse?.courseId ? 'outline' : 'default' }), 'w-full sm:w-auto')}>{tr('Browse your library', 'Explorar a biblioteca')}</Link>
+											{courseId !== null && <Link to="/notes" className={cn(buttonVariants({ variant: 'outline' }), 'w-full sm:w-auto')}>{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
+										</div>
+									</div>
+								</div>
+							);
+						})()
 					) : groups.length === 0 ? (
-						<p role="status" className="text-muted-foreground">{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
+						<div role="status" className="space-y-2 text-muted-foreground">
+							<p>{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
+							{courseId !== null && <Link to="/notes" className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
+						</div>
 					) : view === 'date' ? (
 						dayGroups.map(({ day, courses: dayCourses }) => (
 							<section key={day} aria-label={day}>
-								<Panel className="space-y-4">
+								<Panel className="study-surface space-y-4">
 									<h2 className="font-heading text-xl font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { dateStyle: 'full' })}</h2>
 									<div className="space-y-4">
 										{dayCourses.map((course) => (

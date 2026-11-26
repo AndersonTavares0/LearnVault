@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Catalog, CatalogNode, FileEntry } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
 
@@ -26,10 +26,10 @@ describe('course page', () => {
 		expect(await screen.findByRole('heading', { level: 1, name: 'Rust from zero' })).toBeTruthy();
 		expect(screen.getByRole('progressbar', { name: '1 of 2 lessons completed (50%)' })).toBeTruthy();
 		expect(screen.getByRole('link', { name: /^Resume Borrowing/ }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
-		expect(screen.getByText('You are here')).toBeTruthy();
+		expect(screen.getByText('Next module')).toBeTruthy();
 		expect(screen.getByText('2 lessons')).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Mark “Ownership” as not completed' }).getAttribute('aria-pressed')).toBe('true');
-		expect(screen.getByRole('link', { name: /^Borrowing/ }).getAttribute('aria-current')).toBe('page');
+		expect(screen.getByRole('link', { name: /^Borrowing/ }).hasAttribute('aria-current')).toBe(false);
 		expect(screen.getByText('Missing media')).toBeTruthy();
 	});
 
@@ -85,15 +85,25 @@ describe('course page', () => {
 		expect(await screen.findByRole('heading', { name: 'Course not found' })).toBeTruthy();
 	});
 
-	it('adds a blurred backdrop to the course hero when artwork is available', async () => {
+	it.each([true, false])('shows detailed cover art, but keeps the monogram for a flat image (detail: %s)', async (detail) => {
 		const withCover: Catalog = { complete: true, looseFiles: [], nodes: [{ ...catalog.nodes[0], coverVersion: 3 }] };
 		renderApp('/course/rust', { catalog: withCover });
 		const heading = await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
-		const hero = heading.closest('[data-panel]');
-		expect(hero?.querySelectorAll('img[src*="/cover"]').length).toBe(2);
-		cleanup();
-		renderApp('/course/rust', { catalog });
-		const plainHeading = await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
-		expect(plainHeading.closest('[data-panel]')?.querySelectorAll('img[src*="/cover"]').length).toBe(0);
+		const hero = heading.closest('[data-panel]')!;
+		const covers = hero.querySelectorAll<HTMLImageElement>('img[src*="/cover"]');
+		expect(covers).toHaveLength(1);
+		expect(within(hero as HTMLElement).getByText('RF')).toBeTruthy();
+		const data = new Uint8ClampedArray(8 * 8 * 4);
+		if (detail) data[4] = 255;
+		const read = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+			drawImage: vi.fn(),
+			getImageData: () => ({ data })
+		} as unknown as CanvasRenderingContext2D);
+		try {
+			fireEvent.load(covers[0]);
+			expect(covers[0].hasAttribute('data-ready')).toBe(detail);
+		} finally {
+			read.mockRestore();
+		}
 	});
 });

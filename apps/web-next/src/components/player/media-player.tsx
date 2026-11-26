@@ -380,11 +380,11 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const showReencode = Boolean(transcode && !transcode.reencode);
 	const bar = (
 		<div className={cn('space-y-1', onVideo ? 'relative bg-black px-3 pt-1 pb-2 text-white sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-10 sm:bg-transparent sm:bg-linear-to-t sm:from-black/85 sm:via-black/55 sm:to-transparent sm:pt-12 sm:transition-opacity' : 'rounded-[1.5rem] border bg-card p-3', onVideo && (playing ? 'sm:opacity-0 sm:group-hover/player:opacity-100 sm:group-focus-within/player:opacity-100 sm:[@media(hover:none)]:opacity-100' : ''))}>
-			<div className="relative">
+			<div className="relative py-1 sm:py-0">
 				<input type="range" aria-label={tr('Seek', 'Posição')} min={0} max={span} step={1} value={Math.min(Math.floor(now), span)} aria-valuetext={`${formatDuration(now)} / ${formatDuration(total)}`}
-					onChange={(event) => seek(Number(event.target.value))} className="block h-5 w-full cursor-pointer accent-[var(--reward-fill)]" />
+					onChange={(event) => seek(Number(event.target.value))} className="block h-8 w-full cursor-pointer accent-[var(--reward-fill)] sm:h-5" />
 				{timelineMarkers.length > 0 && (
-					<div className="pointer-events-none absolute inset-x-0 top-0 flex h-5 items-center">
+					<div className="pointer-events-none absolute inset-x-0 top-1 flex h-8 items-center sm:top-0 sm:h-5">
 						{timelineMarkers.map((marker) => (
 							<button key={marker.id} type="button" onClick={() => seek(marker.positionSeconds)} style={{ left: `${(marker.positionSeconds / span) * 100}%` }}
 								className="pointer-events-auto absolute size-3 -translate-x-1/2 rounded-full border border-black/40 bg-[var(--reward-fill)] hover:scale-125 focus-visible:ring-2 focus-visible:ring-ring"

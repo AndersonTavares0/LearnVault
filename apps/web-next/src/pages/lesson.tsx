@@ -69,6 +69,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const wide = cinema || !contentOpen;
 	const [quickNote, setQuickNote] = useState<{ position: number; content: string } | null>(null);
 	const [cardRequest, setCardRequest] = useState(0);
+	const [cardSeed, setCardSeed] = useState<{ key: number; back: string; position: number | null } | null>(null);
 	const [breakPhase, setBreakPhase] = useState<'break' | 'over' | null>(null);
 	const timer = useStore(pomodoro);
 	const [seenRound, setSeenRound] = useState(timer.lastCompleted?.at ?? 0);
@@ -208,15 +209,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	}, [breakPhase]);
 
 	const missingTitle = tr('Lesson not found', 'Aula não encontrada');
-	usePageTitle(lesson ? `${lesson.title} · ${course.title}` : missingTitle);
+	const genericLessonName = lesson && /^(lesson|aula)(\s+\d+)?$/i.test(lesson.title.trim());
+	const displayTitle = lesson ? (genericLessonName && location?.moduleTitle ? location.moduleTitle : lesson.title) : missingTitle;
+	usePageTitle(lesson ? `${displayTitle} · ${course.title}` : missingTitle);
 
 	const sequence = useMemo(() => lessonSequence([course]), [course]);
-	// One pass over the course, not one catalog walk per segment on every render.
-	const donePaths = useMemo(() => new Set(sequence.filter((item) => {
-		const other = findLesson(catalog.data ?? null, courseId, item.path);
-		const files = other ? [findLessonPdf(other), ...other.media] : [];
-		return files.some((file) => file?.mediaId && completed.has(file.mediaId));
-	}).map((item) => item.path)), [sequence, catalog.data, courseId, completed]);
 	if (!lesson) {
 		return (
 			<div className="space-y-4">
@@ -239,32 +236,32 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	};
 	const closeBreak = () => setBreakPhase(null);
 
+	const displayBreadcrumb = genericLessonName && location?.moduleTitle ? course.title : (location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title);
 	return (
 		<div>
-			<header className="mb-6 space-y-4">
+			<header className="mb-4 border-b border-[var(--study-rule)] pb-4 sm:mb-6">
 				<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
 					<div className="min-w-0 space-y-1">
 						<Link to={path(href('course', courseId))} className="inline-flex min-h-11 max-w-full items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
-							<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 max-w-[28rem] truncate">{location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}</span>
+							<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 max-w-[28rem] truncate">{displayBreadcrumb}</span>
 						</Link>
-						<h1 className="font-heading text-3xl leading-tight font-bold text-balance sm:text-4xl">{lesson.title}</h1>
+						<h1 className="font-heading text-3xl leading-tight font-semibold text-balance sm:text-4xl">{displayTitle}</h1>
 					</div>
 					<div className="flex flex-wrap items-center gap-2">
-						{position >= 0 && <span className="mr-2 text-sm text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
-						<Button variant="outline" className="h-11 rounded-full px-5 disabled:opacity-60" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
-						<Button className="h-11 rounded-full px-5" disabled={!next} title={tr('Jump to the next lesson without marking this one completed', 'Ir para a próxima aula sem marcar esta como concluída')} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+						{position >= 0 && <span className="study-timecode mr-2 text-muted-foreground">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
+						<Button variant="outline" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
+						<Button variant="outline" disabled={!next} title={tr('Jump to the next lesson without marking this one completed', 'Ir para a próxima aula sem marcar esta como concluída')} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
 						{cinema && (
-							<Button variant="secondary" className="h-11 rounded-full px-5" onClick={() => setCinema(false)}>{tr('Exit cinema', 'Sair do cinema')}</Button>
+							<Button variant="secondary" onClick={() => setCinema(false)}>{tr('Exit cinema', 'Sair do cinema')}</Button>
 						)}
-						<Button variant="outline" className="hidden h-11 rounded-full px-5 lg:inline-flex" aria-pressed={contentOpen} title={tr('Expand player width by hiding the course content sidebar', 'Ampliar a largura do player ocultando a barra de conteúdo')} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
+						<Button variant="outline" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
 					</div>
 				</div>
-				<LessonRail sequence={sequence} current={position} isDone={(path) => donePaths.has(path)} />
 			</header>
 
 			<div className={cn('grid gap-6', !wide && 'lg:grid-cols-[minmax(0,1fr)_22rem] [:root[data-sidebar=left]_&]:lg:grid-cols-[22rem_minmax(0,1fr)]')}>
 				<div className="min-w-0 space-y-4">
-					<div className={cn('relative', cinema && 'rounded-[2rem] bg-black p-3 sm:p-6')}>
+					<div className={cn('relative', cinema && 'rounded-[var(--radius-lg)] bg-[#141210] p-2 sm:p-5')}>
 						{/* While the break screen is up, the player under it takes no focus or keys. */}
 						<div inert={Boolean(breakPhase)}>
 						{pdf ? (
@@ -320,17 +317,17 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</div>
 					)}
 
-					<div className="flex flex-wrap items-center gap-2">
-						{studySyncSupported && mediaId && (
-								<Button variant={isDone ? 'secondary' : 'default'} aria-pressed={isDone} disabled={setCompleted.isPending} title={tr('Mark or unmark this lesson completed regardless of playback position', 'Marcar ou desmarcar esta aula como concluída, independente da posição do vídeo')} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
-									{isDone ? <CircleCheck /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
-								</Button>
-								)}
-						{hasNotes && <Button variant="outline" title={tr('Write a Markdown note tied to this moment without leaving the video', 'Escrever uma nota em Markdown presa a este momento sem sair do vídeo')} onClick={() => { openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 rounded border px-1.5 text-xs text-muted-foreground">N</kbd></Button>}
+					<div className="flex flex-wrap items-center gap-2 border-b border-[var(--study-rule)] pb-4">
+						{hasNotes && <Button variant="outline" title={tr('Write a Markdown note tied to this moment without leaving the video', 'Escrever uma nota em Markdown presa a este momento sem sair do vídeo')} onClick={() => { openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 hidden rounded border px-1.5 text-xs text-muted-foreground sm:inline-block">N</kbd></Button>}
 						{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
-						{hasNotes && <Button variant="outline" title={tr('Save a labelled timestamp on the timeline', 'Salvar um marcador de tempo rotulado na linha do tempo')} onClick={() => { player.current?.pause(); setTab('bookmarks'); }}>{tr(`Timestamp ${formatDuration(time)}`, `Marcador ${formatDuration(time)}`)}</Button>}
-						<div className="ml-auto flex flex-wrap items-center gap-2">
-							<label className="inline-flex min-h-11 cursor-pointer items-center gap-2.5 rounded-xl border border-border bg-card px-3 text-sm font-medium text-foreground/85 transition-colors duration-150 hover:bg-muted/60 has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50" title={tr('When playback ends, mark completed and advance after 5 s', 'Ao chegar ao fim, marca como concluída e avança em 5 s')}>
+						{hasNotes && <Button variant="outline" title={tr('Save a labelled timestamp on the timeline', 'Salvar um marcador de tempo rotulado na linha do tempo')} onClick={() => { player.current?.pause(); setTab('bookmarks'); }}>{tr('Timestamp', 'Marcador')} <span className="study-timecode">{formatDuration(time)}</span></Button>}
+						{studySyncSupported && mediaId && (
+							<Button variant="outline" aria-pressed={isDone} disabled={setCompleted.isPending} title={tr('Mark or unmark this lesson completed regardless of playback position', 'Marcar ou desmarcar esta aula como concluída, independente da posição do vídeo')} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
+								{isDone ? <CircleCheck className="text-primary" /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
+							</Button>
+						)}
+						<div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+							<label className="inline-flex min-h-11 cursor-pointer items-center gap-2.5 px-2 text-sm font-medium text-foreground/85 hover:text-foreground has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50" title={tr('When playback ends, mark completed and advance after 5 s', 'Ao chegar ao fim, marca como concluída e avança em 5 s')}>
 								<input type="checkbox" className="peer sr-only" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
 								<span aria-hidden="true" className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-border-strong/45 transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] peer-checked:bg-primary">
 									<span className={cn('size-3.5 translate-x-0.5 rounded-full bg-card shadow-xs transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]', preferences.autoNext && 'translate-x-[1.125rem]')} />
@@ -347,7 +344,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 								event.preventDefault();
 								if (quickNote.content.trim() && !createQuickNote.isPending) createQuickNote.mutate({ position: quickNote.position, content: quickNote.content.trim() });
 							}}
-							className="space-y-3 rounded-[1.5rem] border bg-card p-4"
+							className="study-surface space-y-3 p-4"
 						>
 							<div className="flex flex-wrap items-center justify-between gap-2">
 								<Label htmlFor="quick-note-draft" className="font-semibold">
@@ -390,17 +387,17 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 								)}
 							<div className="grid gap-4 md:grid-cols-3">
 								<LessonPanel icon={PenLine} count={lessonNotes.data?.length} title={tr('Your notes', 'Suas notas')} empty={tr('Press N to add a note at the current time.', 'Aperte N para anotar neste momento.')}>
-									{(lessonNotes.data ?? []).slice(0, 3).map((note) => <li key={note.noteId} className="flex items-baseline gap-2.5"><button type="button" onClick={() => player.current?.seek(note.positionSeconds)} className="shrink-0 font-semibold text-primary tabular-nums hover:underline">{formatDuration(note.positionSeconds)}</button><span className="min-w-0 truncate text-foreground/90">{plainTextMarkdown(note.content)}</span></li>)}
+									{(lessonNotes.data ?? []).slice(0, 3).map((note) => <li key={note.noteId} className="flex items-baseline gap-2.5"><button type="button" onClick={() => player.current?.seek(note.positionSeconds)} className="study-timecode shrink-0 text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring">{formatDuration(note.positionSeconds)}</button><span className="min-w-0 truncate text-foreground/90">{plainTextMarkdown(note.content)}</span></li>)}
 								</LessonPanel>
 								<LessonPanel icon={Clock} count={bookmarks.data?.length} title={tr('Timestamps', 'Marcadores')} empty={tr('Mark a moment to come back to it.', 'Marque um momento para voltar a ele.')}>
-									{(bookmarks.data ?? []).slice(0, 4).map((bookmark) => <li key={bookmark.bookmarkId} className="flex items-baseline gap-2.5"><button type="button" onClick={() => player.current?.seek(bookmark.positionSeconds)} className="shrink-0 font-semibold text-primary tabular-nums hover:underline">{formatDuration(bookmark.positionSeconds)}</button><span className="min-w-0 truncate text-foreground/90">{bookmark.label}</span></li>)}
+									{(bookmarks.data ?? []).slice(0, 4).map((bookmark) => <li key={bookmark.bookmarkId} className="flex items-baseline gap-2.5"><button type="button" onClick={() => player.current?.seek(bookmark.positionSeconds)} className="study-timecode shrink-0 text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring">{formatDuration(bookmark.positionSeconds)}</button><span className="min-w-0 truncate text-foreground/90">{bookmark.label}</span></li>)}
 								</LessonPanel>
 								<LessonPanel icon={FileText} count={lesson.materials.length} title={tr('Materials in this lesson', 'Materiais desta aula')} empty={tr('No files with this lesson.', 'Nenhum arquivo nesta aula.')}>
 									{lesson.materials.slice(0, 4).map((file) => <li key={file.path} className="truncate text-foreground/90">{file.name}</li>)}
 								</LessonPanel>
 							</div>
 							{next && (
-								<div className="flex flex-wrap items-center gap-4 rounded-2xl border bg-card p-4">
+								<div className="study-surface flex flex-wrap items-center gap-4 p-4">
 									<div className="min-w-0 flex-1"><p className="text-sm text-muted-foreground">{tr('Up next', 'A seguir')}</p><p className="truncate font-semibold">{next.title}</p></div>
 									<Button variant="outline" onClick={() => goTo(next.path)}>{tr('Go to next lesson', 'Ir para a próxima aula')}</Button>
 								</div>
@@ -408,7 +405,20 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</TabsContent>
 						{hasNotes && mediaId && (
 							<TabsContent value="notes" keepMounted className="pt-5">
-								<StudyNotes mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} addRequest={0} title={lesson.title} trail={location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title} allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`} />
+								<StudyNotes
+									mediaId={mediaId}
+									currentTime={time}
+									onSeek={(seconds) => player.current?.seek(seconds)}
+									addRequest={0}
+									onMakeCard={hasCards ? (note) => {
+										player.current?.pause();
+										setTab('cards');
+										setCardSeed({ key: (cardSeed?.key ?? 0) + 1, back: note.content, position: note.positionSeconds });
+									} : undefined}
+									title={displayTitle}
+									trail={location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}
+									allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`}
+								/>
 							</TabsContent>
 						)}
 						{hasNotes && mediaId && (
@@ -418,7 +428,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						)}
 						{hasCards && mediaId && (
 							<TabsContent value="cards" keepMounted className="pt-5">
-								<Flashcards mediaId={mediaId} currentTime={time} addRequest={cardRequest} />
+								<Flashcards mediaId={mediaId} currentTime={time} addRequest={cardRequest} cardSeed={cardSeed} />
 							</TabsContent>
 						)}
 						<TabsContent value="materials" className="pt-5">
@@ -428,7 +438,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 				</div>
 
 				{contentOpen && (
-					<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('min-w-0 space-y-3 rounded-[2rem] border bg-card p-4 [:root[data-sidebar=left]_&]:lg:order-first', !wide && 'lg:sticky lg:top-6 lg:max-h-[calc(100dvh-11rem)] lg:self-start lg:overflow-y-auto')}>
+					<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('study-surface min-w-0 space-y-3 p-4 [:root[data-sidebar=left]_&]:lg:order-first', !wide && 'lg:sticky lg:top-6 lg:max-h-[calc(100dvh-11rem)] lg:self-start lg:overflow-y-auto')}>
 						<div className="flex items-start justify-between gap-2 px-1">
 							<div>
 								<h2 className="text-[1.0625rem] font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
@@ -437,7 +447,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</div>
 						<div role="search" className="relative px-1">
 							<Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-							<Input type="search" value={find} onChange={(event) => setFind(event.target.value)} placeholder={tr('Find a lesson', 'Buscar aula')} aria-label={tr('Find a lesson', 'Buscar aula')} className="h-10 pl-9" />
+							<Input type="search" value={find} onChange={(event) => setFind(event.target.value)} placeholder={tr('Find a lesson', 'Buscar aula')} aria-label={tr('Find a lesson', 'Buscar aula')} className="pl-9" />
 						</div>
 						{found.length === 0 ? <p role="status" className="px-2 py-3 text-sm text-muted-foreground">{tr('No lesson matches.', 'Nenhuma aula corresponde.')}</p> : <Curriculum compact nodes={found} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} signal={needle ? { open: true, n: needle.length } : undefined} />}
 					</aside>
@@ -450,11 +460,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 /** A small panel of the Overview: a title and a few rows, or one line saying how to fill it. */
 function LessonPanel({ icon: Icon, count, title, empty, children }: { icon?: LucideIcon; count?: number; title: string; empty: string; children: React.ReactNode[] }) {
 	return (
-		<section aria-label={title} className="rounded-2xl border bg-card p-4">
+		<section aria-label={title} className="border-t border-[var(--study-rule)] pt-4">
 			<div className="mb-3 flex items-center gap-2">
 				{Icon && <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
 				<h2 className="text-sm font-bold tracking-tight">{title}</h2>
-				{count !== undefined && count > 0 && <span className="ml-auto rounded-full bg-panel px-2 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">{count}</span>}
+				{count !== undefined && count > 0 && <span className="study-timecode ml-auto text-muted-foreground">{count}</span>}
 			</div>
 			{children.length > 0 ? <ul className="space-y-2 text-sm">{children}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>}
 		</section>
@@ -489,16 +499,6 @@ function useStoredFlag(key: string, fallback: boolean) {
 		}
 	};
 	return [value, set] as const;
-}
-
-/** One segment per lesson: done, the current one, or still to come. Decorative; the text names the position. */
-function LessonRail({ sequence, current, isDone }: { sequence: { path: string }[]; current: number; isDone: (path: string) => boolean }) {
-	if (sequence.length < 2 || sequence.length > 60) return null;
-	return (
-		<div aria-hidden="true" className="flex gap-1">
-			{sequence.map((item, index) => <span key={item.path} className={cn('h-1.5 flex-1 rounded-full transition-colors duration-200', isDone(item.path) ? 'bg-primary' : index === current ? 'bg-[var(--reward-fill)] ring-2 ring-[var(--reward-fill)]/25' : 'bg-border')} />)}
-		</div>
-	);
 }
 
 /** The reader for a PDF lesson, with its type said out loud and the read-only promise. */

@@ -17,16 +17,16 @@ describe('course page status', () => {
 		}] };
 		renderApp('/course/c', { catalog });
 		expect(screen.getByRole('note')).toBeTruthy();
-		expect(screen.getByText('The structure of this course was hard to read.')).toBeTruthy();
+		expect(screen.getByText('Check your course files')).toBeTruthy();
 		expect(screen.getByText('No lesson has a video, so the lesson list may be empty.')).toBeTruthy();
 		// A material beside the course is not a problem worth a line.
 		expect(screen.queryByText('Some materials are not attached to a lesson.')).toBeNull();
 	});
 
-	it('shows no note for a course whose only oddity is a material beside it', () => {
+	it('does not infer an alphabetical order from numbering or loose files', () => {
 		const catalog: Catalog = { complete: true, looseFiles: [], nodes: [{
 			title: 'Course', path: 'c', role: 'course', courseId: 'c', files: [], looseFiles: [], children: [lesson('Intro', 'one')],
-			structure: { confidence: 'medium', concerns: ['loose_materials'] },
+			structure: { confidence: 'medium', concerns: ['loose_materials', 'lessons_without_numbering'] },
 		}] };
 		renderApp('/course/c', { catalog });
 		expect(screen.queryByRole('note')).toBeNull();

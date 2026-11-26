@@ -23,18 +23,29 @@ type Props = {
 	compact?: boolean;
 	/** Draw the lessons as a map instead of the title, where the course name is already the heading. */
 	map?: boolean;
-	/** Notifies the parent when the resolved cover or thumbnail image URL changes. */
-	onImageChange?: (src: string | null) => void;
 };
 
-/**
- * Course cover, by precedence (ADR 0002): the uploaded cover, then an automatic video
- * thumbnail captured once the cover is visible, then a cover drawn from the title and the
- * course's lessons. Decorative: the card or heading next to it names the course. When the title
- * is drawn on the cover the element carries `data-titled`, so the heading beside it can be
- * visually hidden instead of repeating the name.
- */
-export function CourseCover({ course, profile, className, eager = false, done = 0, total = 0, compact = false, map = false, onImageChange }: Props) {
+/** A low-resolution check avoids displaying nearly solid frames as course artwork. */
+function hasImageDetail(image: HTMLImageElement): boolean {
+	try {
+		const canvas = document.createElement('canvas');
+		canvas.width = canvas.height = 8;
+		const context = canvas.getContext('2d');
+		if (!context) return true;
+		context.drawImage(image, 0, 0, 8, 8);
+		const { data } = context.getImageData(0, 0, 8, 8);
+		for (let i = 4; i < data.length; i += 4) {
+			if (Math.abs(data[i] - data[0]) > 16 || Math.abs(data[i + 1] - data[1]) > 16 || Math.abs(data[i + 2] - data[2]) > 16 || Math.abs(data[i + 3] - data[3]) > 16) return true;
+		}
+		return false;
+	} catch {
+		// Some transports prevent reading pixels. Keep an image that cannot be inspected.
+		return true;
+	}
+}
+
+/** Decorative course art: a detailed source image or a generated cover. */
+export function CourseCover({ course, profile, className, eager = false, done = 0, total = 0, compact = false, map = false }: Props) {
 	const element = useRef<HTMLSpanElement>(null);
 	const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
 	const manualCoverUrl = transport.coverUrl(courseIdOf(course), course.coverVersion ?? null);
@@ -61,16 +72,12 @@ export function CourseCover({ course, profile, className, eager = false, done = 
 	}, [course, profile, manualCoverUrl]);
 
 	const image = source === 'manual' ? manualCoverUrl : source === 'thumbnail' ? thumbnailUrl : null;
-	useEffect(() => {
-		onImageChange?.(image);
-	}, [image, onImageChange]);
 	return (
-		<span ref={element} aria-hidden="true" className={cn('relative block aspect-[16/10] overflow-hidden rounded-[1.25rem] bg-muted', className)}>
-			{image ? (
-				<img src={image} alt="" width={600} height={400} loading={eager ? 'eager' : 'lazy'} decoding="async" className="size-full object-cover" />
-			) : (
-				<CoverArt title={course.title} done={done} total={total} compact={compact} map={map} />
-			)}
+		<span ref={element} aria-hidden="true" className={cn('relative block aspect-[4/3] overflow-hidden rounded-[var(--radius)] bg-muted ring-1 ring-inset ring-foreground/10', className)}>
+			<CoverArt title={course.title} courseId={courseIdOf(course)} done={done} total={total} compact={compact} map={map} />
+			{image && <img key={image} src={image} alt="" width={600} height={400} loading={eager ? 'eager' : 'lazy'} decoding="async" className="absolute inset-0 size-full object-cover opacity-0 data-[ready]:opacity-100" onLoad={({ currentTarget }) => {
+				if (hasImageDetail(currentTarget)) currentTarget.dataset.ready = '';
+			}} />}
 		</span>
 	);
 }

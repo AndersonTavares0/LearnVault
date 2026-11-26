@@ -356,6 +356,24 @@ describe('video frame capture', () => {
 		harness.deps.revokeObjectUrl = () => { throw new Error('cleanup failed'); };
 		await expect(captureVideoThumbnail('opaque', harness.deps)).resolves.toBeNull();
 	});
+
+	it('rejects solid flat frames so courses fall back to typographic covers', async () => {
+		const flat = captureHarness();
+		const createFlatCanvas = () => ({
+			width: 0,
+			height: 0,
+			getContext: () => ({
+				drawImage: () => {},
+				getImageData: (_x: number, _y: number, width: number, height: number) => ({
+					data: new Uint8ClampedArray(width * height * 4).fill(255)
+				})
+			}),
+			toBlob: (cb: BlobCallback) => cb(new Blob(['jpeg'], { type: 'image/jpeg' })),
+			remove: () => {}
+		});
+		flat.deps.createCanvas = () => createFlatCanvas() as unknown as HTMLCanvasElement;
+		await expect(captureVideoThumbnail('opaque', flat.deps)).resolves.toBeNull();
+	});
 });
 
 describe('course thumbnail orchestration', () => {

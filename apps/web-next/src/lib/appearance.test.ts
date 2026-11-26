@@ -64,22 +64,24 @@ describe('appearance', () => {
 });
 
 describe('brand palette', () => {
-	it('defaults to the warm ink accent, with its gold twin on the dark page', () => {
+	it('defaults to the warm ink accent, with its muted brass twin on the dark page', () => {
 		expect(DEFAULT_APPEARANCE.accent).toBe('#1C1815');
-		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'ink', hex: '#1C1815', dark: '#E0A83E', tone: '#5C4229' });
-		expect(darkAccent('#1C1815')).toBe('#E0A83E');
+		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'ink', hex: '#1C1815', dark: '#C9B594', tone: '#5C4229' });
+		expect(darkAccent('#1C1815')).toBe('#C9B594');
 	});
 
-	it('keeps white text on the ink accent and the gold accent on the dark panel above 4.5:1', () => {
+	it('keeps white text on the ink accent and the brass accent on the dark panel above 4.5:1', () => {
 		expect(contrast('#FFFFFF', readableAccent('#1C1815'))).toBeGreaterThanOrEqual(4.5);
-		expect(contrast('#1C1510', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
-		expect(contrast('#1C1209', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
+		const accent = darkAccent(DEFAULT_APPEARANCE.accent);
+		expect(contrast('#292B2E', accent)).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#1C1209', accent)).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#292B2E', darkAccent('#222222'))).toBeGreaterThanOrEqual(4.5);
 	});
 
 	it('gives the reward colour at least 3:1 as a graphic on every surface, light and dark', () => {
 		for (const surface of SURFACES) {
 			expect(contrast('#A8761F', SURFACE_SWATCHES[surface].light), `${surface} light`).toBeGreaterThanOrEqual(3);
-			expect(contrast('#E0A83E', SURFACE_SWATCHES[surface].dark), `${surface} dark`).toBeGreaterThanOrEqual(3);
+			expect(contrast('#C9B594', SURFACE_SWATCHES[surface].dark), `${surface} dark`).toBeGreaterThanOrEqual(3);
 		}
 	});
 
@@ -95,7 +97,7 @@ describe('brand palette', () => {
 		// must not carry small text; it still beats white (4.0:1).
 		expect(contrast('#1C1815', '#A8761F')).toBeGreaterThan(contrast('#FFFFFF', '#A8761F'));
 		expect(contrast('#1C1815', '#A8761F')).toBeGreaterThanOrEqual(3);
-		expect(contrast('#1C1815', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#1C1815', '#C9B594')).toBeGreaterThanOrEqual(4.5);
 	});
 
 	it('tints the light page from brown for the ink accent, and from the accent itself for every other colour', () => {

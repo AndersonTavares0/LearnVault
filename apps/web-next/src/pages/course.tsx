@@ -77,7 +77,6 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	const toggleFavorite = useToggleCourseFavorite();
 	const user = session.data?.user;
 	const [signal, setSignal] = useState({ open: false, n: 0 });
-	const [heroImage, setHeroImage] = useState<string | null>(null);
 	const [categorizing, setCategorizing] = useState(false);
 	const customCategories = useStore(courseCategoriesStore);
 	const category = resolveCourseCategory(course, customCategories);
@@ -107,7 +106,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	// and the documents become the primary content.
 	const readingOnly = counts.lessons === 0 && documents.length > 0;
 	// A material beside the course (a syllabus, a guide) is normal and already in Materials, so it is no warning.
-	const concerns = (course.structure?.concerns ?? []).filter((concern) => concern !== 'loose_materials');
+	const concerns = (course.structure?.concerns ?? []).filter((concern) => concern !== 'loose_materials' && concern !== 'lessons_without_numbering');
 	const percent = entry?.total ? Math.round((entry.done / entry.total) * 100) : 0;
 	const resumeAt = lastStudied && !lastStudied.item.completed ? lastStudied.item.positionSeconds : null;
 	const continuePath = lastStudied?.location && !lastStudied.item.completed ? lastStudied.location.lesson.path : entry?.next?.path;
@@ -116,32 +115,24 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 		<div className="space-y-8">
 			<div className="space-y-4">
 				<p className="text-sm text-muted-foreground"><Link to={libraryReturn()} className="inline-flex min-h-11 items-center hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('My learning', 'Meu aprendizado')}</Link> / {course.title}</p>
-				<Hero className="relative overflow-hidden p-6 sm:p-8">
-					{heroImage && (
-						<div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-							<img src={heroImage} alt="" className="size-full scale-110 object-cover opacity-25 blur-2xl saturate-125 dark:opacity-20" />
-							<div className="absolute inset-0 bg-linear-to-r from-panel/80 via-panel/90 to-panel/95" />
-						</div>
-					)}
-					<div className="relative grid gap-6 lg:grid-cols-[14.5rem_minmax(0,1fr)_auto] lg:items-center">
-					<div className="max-w-xs lg:w-[14.5rem] lg:max-w-none"><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} map={!readingOnly} onImageChange={setHeroImage} className={cn('shadow-sm ring-1 ring-border/75', heroImage && 'shadow-lg ring-foreground/10', readingOnly && 'hidden sm:block')} /></div>
+				<Hero className="relative overflow-hidden bg-card p-4 sm:p-5">
+					<div className={cn('grid items-start gap-x-3 gap-y-4 sm:grid-cols-[8rem_minmax(0,1fr)] sm:gap-5 lg:grid-cols-[8rem_minmax(0,1fr)_auto] lg:items-center', !readingOnly && 'grid-cols-[3.5rem_minmax(0,1fr)]')}>
+						<div className={cn('min-w-0', readingOnly && 'hidden sm:block')}><CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} compact className="aspect-square sm:aspect-[4/3]" /></div>
 						<div className="min-w-0 space-y-3">
 						<div className="space-y-2">
-							<h1 className="font-heading text-3xl leading-tight font-bold text-balance">{course.title}</h1>
-							<div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+							<h1 className="font-heading text-3xl leading-tight font-semibold text-balance sm:text-[2.125rem]">{course.title}</h1>
+							<div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
 								<span>{formatCourseMeta(counts)}</span>
-								<span aria-hidden="true">·</span>
-								<button type="button" onClick={() => setCategorizing(true)} className="inline-flex min-h-8 items-center gap-1.5 rounded-full border border-border bg-card/80 px-3 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-brand-tint focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+								<button type="button" onClick={() => setCategorizing(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius)] border border-[var(--study-rule)] bg-panel/60 px-3 text-xs font-medium text-foreground transition-colors hover:border-[var(--border-strong)] hover:bg-brand-tint focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
 									<Tag className="size-3 text-primary" aria-hidden="true" />
 									{category ?? tr('Add category', 'Adicionar categoria')}
 								</button>
 							</div>
 						</div>
 						<CourseCategoryDialog course={course} courseId={courseId} open={categorizing} onOpenChange={setCategorizing} />
-						{!readingOnly && concerns.length > 0 && <StructureNotice concerns={concerns} />}
 						{entry && entry.total > 0 && (
-							<div className="max-w-md space-y-1">
-								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-2 overflow-hidden rounded-full bg-brand-soft">
+							<div className="max-w-md space-y-1.5">
+								<div role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-labelledby="course-progress" className="h-1.5 overflow-hidden rounded-full bg-border/75">
 									<div className="h-full bg-primary" style={{ width: `${percent}%` }} />
 								</div>
 								<p id="course-progress" className="text-sm text-muted-foreground">{entry.total === counts.lessons ? tr(`${entry.done} of ${entry.total} lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas concluídas (${percent}%)`) : tr(`${entry.done} of ${entry.total} video lessons completed (${percent}%)`, `${entry.done} de ${entry.total} aulas em vídeo concluídas (${percent}%)`)}</p>
@@ -149,25 +140,29 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 							</div>
 						)}
 						</div>
-						<div className="flex flex-col items-stretch gap-2 lg:w-52">
+						<div className="col-span-full flex flex-col items-stretch gap-2 lg:col-span-1 lg:w-52">
 							{continuePath ? (
-								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex min-h-11 items-center justify-center rounded-xl bg-primary px-5 py-2 text-center text-base leading-snug font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+								<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-primary px-5 py-2 text-center text-base leading-snug font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 									{lastStudied?.location && !lastStudied.item.completed ? `${tr('Resume', 'Retomar')} ${lastStudied.location.lesson.title}${resumeAt ? ` · ${formatDuration(resumeAt)}` : ''}` : lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso')}
 								</Link>
 							) : documents.length > 0 ? (
-								<Link to={path(href('course', courseId, documents[0].path))} className="inline-flex h-11 items-center justify-center rounded-xl bg-primary px-5 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+								<Link to={path(href('course', courseId, documents[0].path))} className="inline-flex h-11 items-center justify-center rounded-[var(--radius)] bg-primary px-5 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 									{tr('Start reading', 'Começar a ler')}
 								</Link>
 							) : (
 								<p className="text-sm text-muted-foreground">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
 							)}
-							{studySyncSupported && entry && (
-								<Button variant="outline" className="h-11 rounded-xl" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
-									<Star className={cn(entry.favorite && 'fill-current')} />
-									{entry.favorite ? tr('Favorited', 'Favoritado') : tr('Favorite course', 'Favoritar curso')}
-								</Button>
-							)}
-							{user?.isAdmin && !course.remote && <CourseManagement course={course} courseId={courseId} lessons={counts.lessons} onRemoved={() => navigate('/', { replace: true })} />}
+							{(studySyncSupported && entry) || (user?.isAdmin && !course.remote) ? (
+								<div className="grid gap-2 min-[360px]:grid-cols-2 lg:grid-cols-1">
+									{studySyncSupported && entry && (
+										<Button variant="outline" className="w-full" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
+											<Star className={cn(entry.favorite && 'fill-current')} />
+											{entry.favorite ? tr('Favorited', 'Favoritado') : tr('Favorite course', 'Favoritar curso')}
+										</Button>
+									)}
+									{user?.isAdmin && !course.remote && <CourseManagement course={course} courseId={courseId} lessons={counts.lessons} className="w-full" onRemoved={() => navigate('/', { replace: true })} />}
+								</div>
+							) : null}
 						</div>
 					</div>
 				</Hero>
@@ -184,11 +179,11 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 					<TabsTrigger value="materials">{tr('Materials', 'Materiais')}{materials.length > 0 && <span className="tabular-nums">{materials.length}</span>}</TabsTrigger>
 					{studySyncSupported && <TabsTrigger value="notes">{tr('Notes', 'Notas')}</TabsTrigger>}
 				</TabsList>
-				<TabsContent value="content" className="space-y-6 pt-4">
+				<TabsContent value="content" className="space-y-4 pt-4">
+					{!readingOnly && concerns.length > 0 && <StructureNotice concerns={concerns} />}
 					{course.children.length > 0 && !readingOnly ? (
 						<div className="space-y-3">
-							<div className="flex flex-wrap items-center justify-between gap-2">
-								<p className="text-sm text-muted-foreground">{formatCourseMeta(counts)}</p>
+							<div className="flex flex-wrap items-center justify-end gap-2">
 								<span className="flex gap-1">
 									<Button variant="ghost" size="sm" onClick={() => setSignal(({ n }) => ({ open: true, n: n + 1 }))}>{tr('Expand all', 'Expandir tudo')}</Button>
 									<Button variant="ghost" size="sm" onClick={() => setSignal(({ n }) => ({ open: false, n: n + 1 }))}>{tr('Collapse all', 'Recolher tudo')}</Button>
@@ -268,10 +263,7 @@ function libraryReturn(): string {
 }
 
 function StructureNotice({ concerns }: { concerns: string[] }) {
-	const hard = concerns.length > 1 || concerns.includes('no_lessons') || concerns.includes('loose_media');
-	const headline = hard
-		? tr('The structure of this course was hard to read.', 'A estrutura deste curso foi difícil de interpretar.')
-		: tr('The organization of this course may not be the one you expect.', 'A organização deste curso pode não ser a que você espera.');
+	const headline = tr('Check your course files', 'Confira os arquivos do curso');
 	return (
 		<div role="note" className="max-w-xl space-y-1 text-sm">
 			<p className="font-medium">{headline}</p>
@@ -286,8 +278,6 @@ function concernText(concern: string): string {
 	switch (concern) {
 		case 'no_lessons': return tr('No lesson has a video, so the lesson list may be empty.', 'Nenhuma aula tem vídeo, então a lista de aulas pode estar vazia.');
 		case 'loose_media': return tr('Some videos are outside any lesson, so they are not listed as lessons.', 'Alguns vídeos estão fora de qualquer aula, então não aparecem como aulas.');
-		case 'lessons_without_numbering': return tr('Most lessons have no number in their name, so they are ordered alphabetically.', 'A maioria das aulas não tem número no nome, então estão em ordem alfabética.');
-		case 'loose_materials': return tr('Some materials are not attached to a lesson.', 'Alguns materiais não estão ligados a uma aula.');
 		default: return tr('Some files could not be classified.', 'Alguns arquivos não puderam ser classificados.');
 	}
 }

@@ -20,7 +20,7 @@ function dueLabel(nextDue: number, now: number): string {
 }
 
 /** Spaced-repetition cards for one lesson: review what is due, or manage the deck. */
-export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { mediaId: string; currentTime?: number; addRequest?: number }) {
+export function Flashcards({ mediaId, currentTime = 0, addRequest = 0, cardSeed }: { mediaId: string; currentTime?: number; addRequest?: number; cardSeed?: { key: number; back: string; position: number | null } | null }) {
 	const client = useQueryClient();
 	const key = ['flashcards', mediaId] as const;
 	const cards = useQuery({ queryKey: key, queryFn: () => transport.listFlashcards(mediaId) });
@@ -35,6 +35,12 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { media
 		setLastRequest(addRequest);
 		setMode('manage');
 		setForm({ cardId: null, front: '', back: '', position: Math.floor(currentTime) });
+	}
+	const [lastSeed, setLastSeed] = useState(cardSeed?.key ?? 0);
+	if (cardSeed && cardSeed.key !== lastSeed) {
+		setLastSeed(cardSeed.key);
+		setMode('manage');
+		setForm({ cardId: null, front: '', back: cardSeed.back, position: cardSeed.position });
 	}
 	useEffect(() => {
 		const timer = setInterval(() => setNow(nowSeconds()), 10_000);
@@ -126,6 +132,7 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0 }: { media
 						<Label htmlFor="card-back">{tr('Back: answer or explanation', 'Verso: resposta ou explicação')}</Label>
 						<textarea id="card-back" rows={3} maxLength={4000} required value={form.back} onChange={(event) => setForm({ ...form, back: event.target.value })} className="w-full rounded-lg border border-input bg-background p-3 text-sm" />
 					</div>
+					{cardSeed && form.back === cardSeed.back && <p className="text-xs font-medium text-primary">{tr('Pre-filled from your note — add a recall question above.', 'Preenchido da sua nota — adicione a pergunta de revisão acima.')}</p>}
 					{form.position !== null && <p className="text-xs text-muted-foreground">{tr(`Linked to this lesson at ${formatDuration(form.position)}.`, `Vinculado a esta aula em ${formatDuration(form.position)}.`)}</p>}
 					<p className="text-xs text-muted-foreground">{tr('Ctrl+Enter saves, Esc cancels.', 'Ctrl+Enter salva, Esc cancela.')}</p>
 					<div className="flex justify-end gap-2">

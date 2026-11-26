@@ -2,7 +2,6 @@ import { BookOpen, KeyRound, ChartNoAxesColumn, History, Layers, LogOut, Moon, N
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { BrandMark } from '@/components/brand';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { GlobalSearch } from '@/components/global-search';
 import { IndexingIndicator } from '@/components/indexing-indicator';
@@ -129,12 +128,12 @@ export function AppShell() {
 			<DocumentLock />
 			<SkipLink />
 			<DesktopTitlebar />
-			<header className="shrink-0 border-b print:hidden">
-				<div className="mx-auto flex h-[4.5rem] max-w-[var(--container-max,88rem)] items-center gap-x-3 px-4 sm:gap-x-8 sm:px-10">
-					<Link to="/" className="inline-flex items-center gap-2 rounded-md font-heading text-xl font-bold tracking-tight sm:gap-2.5 sm:text-2xl" aria-label={tr('LearnVault home', 'Início do LearnVault')}><BrandMark className="size-7 text-foreground sm:size-8" />LearnVault</Link>
-					{!locked && <nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
+			<header className="shrink-0 border-b border-[var(--study-rule)] bg-background/95 print:hidden">
+				<div className="mx-auto flex h-16 max-w-[var(--container-max,88rem)] items-center gap-x-3 px-4 sm:gap-x-8 sm:px-10">
+					<Link to="/" className="inline-flex min-h-11 items-center rounded-md font-heading text-xl font-bold tracking-tight sm:text-2xl" aria-label={tr('LearnVault home', 'Início do LearnVault')}>LearnVault</Link>
+					{!locked && <nav aria-label={tr('Main', 'Principal')} className="hidden h-full flex-1 justify-center gap-1 sm:gap-2 lg:flex">
 						{navItems().map((item) => (
-							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-150 hover:bg-brand-tint hover:text-foreground', isActive && 'bg-brand-soft font-semibold text-brand-ink')}>
+							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex h-full min-h-11 items-center border-b-2 px-3 text-[0.9375rem] font-medium whitespace-nowrap transition-colors duration-150', isActive ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:border-[var(--study-rule)] hover:text-foreground')}>
 								{item.label}
 							</NavLink>
 						))}
@@ -249,11 +248,11 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 
 function MobileTabs() {
 	return (
-		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xs lg:hidden print:hidden">
+		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--study-rule)] bg-background pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden">
 			<ul className="grid grid-cols-5">
 				{navItems().map((item) => (
 					<li key={item.to}>
-						<NavLink to={item.to} end={item.end} aria-label={item.to === '/' ? tr(`Library: ${item.label}`, `Biblioteca: ${item.label}`) : item.label} className={({ isActive }) => cn('flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-center text-xs text-muted-foreground', isActive && 'font-medium text-primary')}>
+						<NavLink to={item.to} end={item.end} aria-label={item.to === '/' ? tr(`Library: ${item.label}`, `Biblioteca: ${item.label}`) : item.label} className={({ isActive }) => cn('relative flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-center text-xs transition-colors', isActive ? 'font-semibold text-foreground before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:bg-primary before:content-[""]' : 'text-muted-foreground')}>
 							<item.icon className="size-5" aria-hidden="true" />
 							{item.to === '/' ? tr('Library', 'Biblioteca') : item.label}
 						</NavLink>
@@ -271,20 +270,13 @@ function MobileTabs() {
 	);
 }
 
-/** Page title: a tinted icon tile, the title in serif with its last word in the accent, and an optional line under it. */
-export function PageHeader({ icon: Icon, title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
+/** Page title: clear display typography anchored by a quiet hairline, no decorative badge chrome. */
+export function PageHeader({ title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
 	return (
-		<div className={cn('mb-8 flex flex-wrap items-end justify-between gap-4', className)}>
-			<div className="flex min-w-0 items-center gap-3.5">
-				{Icon && (
-					<span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-soft text-brand-ink ring-1 ring-primary/20">
-						<Icon className="size-5" />
-					</span>
-				)}
-				<div className="min-w-0 space-y-1">
-					<h1 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{title}</h1>
-					{description && <div className="text-muted-foreground">{description}</div>}
-				</div>
+		<div className={cn('mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--study-rule)] pb-5', className)}>
+			<div className="min-w-0 space-y-1">
+				<h1 className="font-heading text-3xl font-semibold tracking-tight text-balance sm:text-[2.25rem] sm:leading-[1.1]">{title}</h1>
+				{description && <div className="text-sm text-muted-foreground sm:text-[0.9375rem]">{description}</div>}
 			</div>
 			{actions && <div className="flex flex-wrap gap-2">{actions}</div>}
 		</div>

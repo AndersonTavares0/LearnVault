@@ -11,9 +11,8 @@ function hash(value: string): number {
 	return h >>> 0;
 }
 
-// Course colours: pale warm papers on the cream page and deep warm browns on the dark page, one
-// per title (the --cover-N tokens in app.css). Text on every one stays above 7:1.
-const GROUND_COUNT = 8;
+// Sage, clay, slate and ochre have light and dark surfaces (--cover-N).
+const GROUND_COUNT = 4;
 
 /** One block per lesson in rows, the finished ones lit and the next one marked. */
 function lessonMap(done: number, total: number) {
@@ -43,6 +42,7 @@ function lessonMap(done: number, total: number) {
 
 type Props = {
 	title: string;
+	courseId?: string;
 	/** Lessons finished and total lessons; the map draws the course as its own lessons. */
 	done: number;
 	total: number;
@@ -57,28 +57,29 @@ type Props = {
  * with the course's initials set large, like a book jacket. It carries no title and no progress,
  * because the card beside it already shows both. Decorative.
  */
-export function CoverArt({ title, done, total, compact = false, map = false }: Props) {
-	const ground = `var(--cover-${hash(title.normalize('NFD').toLowerCase()) % GROUND_COUNT})`;
+export function CoverArt({ title, courseId, done, total, compact = false, map = false }: Props) {
+	const ground = `var(--cover-${hash(courseId || title.normalize('NFD').toLowerCase()) % GROUND_COUNT})`;
 	if (map) return <svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice"><rect width="160" height="100" style={{ fill: ground }} />{lessonMap(done, total)}</svg>;
 	const letters = courseMonogram(title);
 	// A four-character monogram (a year such as "2010") is wider than two initials, so the
 	// type scales with the string to stay inside the cover.
-	const size = letters.length >= 4 ? 44 : letters.length === 3 ? 48 : compact ? 48 : 52;
+	const size = letters.length >= 4 ? 34 : letters.length === 3 ? 38 : 42;
 	// A small thumbnail is cropped to a square or a wide strip, so its initials sit in the middle, where no crop reaches.
 	if (compact) {
-		const small = letters.length >= 4 ? 26 : letters.length === 3 ? 32 : 40;
+		const small = letters.length >= 4 ? 24 : letters.length === 3 ? 30 : 36;
 		return (
 			<svg viewBox="0 0 100 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
 				<rect width="100" height="100" style={{ fill: ground }} />
-				<text x="50" y="50" fontSize={small} textAnchor="middle" dominantBaseline="central" className="fill-foreground font-heading font-bold">{letters}</text>
+				<text x="50" y="50" fontSize={small} textAnchor="middle" dominantBaseline="central" className="fill-foreground/90 font-heading font-semibold">{letters}</text>
 			</svg>
 		);
 	}
 	return (
 		<svg viewBox="0 0 160 100" aria-hidden="true" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
 			<rect width="160" height="100" style={{ fill: ground }} />
-			<rect x="14" y="18" width="22" height="2.5" rx="1.25" className="fill-[var(--reward-fill)]" />
-			<text x="12" y="80" fontSize={size} className="fill-foreground font-heading font-bold">{letters}</text>
+			<line x1="2" y1="0" x2="2" y2="100" strokeWidth="3" className="stroke-foreground/12" />
+			<rect x="14" y="18" width="16" height="2" rx="1" className="fill-[var(--reward-fill)]" />
+			<text x="14" y="78" fontSize={size} className="fill-foreground/90 font-heading font-semibold">{letters}</text>
 		</svg>
 	);
 }

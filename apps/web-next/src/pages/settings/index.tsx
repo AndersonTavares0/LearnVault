@@ -62,7 +62,7 @@ export function SettingsPage() {
 			<nav aria-label={tr('Settings sections', 'Seções dos ajustes')} className="mb-6 lg:sticky lg:top-6 lg:mb-0 lg:self-start">
 				<div className="space-y-2 lg:hidden">
 					<label htmlFor="settings-section" className="block text-sm font-medium">{tr('Settings section', 'Seção dos ajustes')}</label>
-					<select id="settings-section" value={active} onChange={(event) => setActive(event.target.value)} className="h-11 w-full rounded-lg border border-input bg-background px-3 text-sm">
+					<select id="settings-section" value={active} onChange={(event) => setActive(event.target.value)} className="h-11 w-full rounded-[var(--radius)] border border-[var(--study-rule)] bg-card px-3 pr-8 text-sm">
 						{sections.map((section) => <option key={section.id} value={section.id}>{section.label}</option>)}
 					</select>
 				</div>

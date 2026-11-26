@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Play, Plus, Trash2 } from 'lucide-react';
+import { Play, Plus, SquarePlus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { Eyebrow } from '@/components/panel';
 import { useState, type KeyboardEvent } from 'react';
@@ -18,7 +18,7 @@ export function useLessonNotes(mediaId: string | null) {
 }
 
 /** Timestamped notes for one lesson; a note's time button seeks the player. */
-export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, title, trail, allNotesTo }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void; addRequest: number; title?: string; trail?: string; allNotesTo?: string }) {
+export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCard, title, trail, allNotesTo }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void; addRequest: number; onMakeCard?: (note: StudyNote) => void; title?: string; trail?: string; allNotesTo?: string }) {
 	const client = useQueryClient();
 	const notes = useLessonNotes(mediaId);
 	const [draft, setDraft] = useState<{ position: number; content: string } | null>(null);
@@ -57,7 +57,7 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, title, tr
 					</div>
 					<div className="flex items-center gap-3">
 						<p role="status" aria-live="polite" className="text-sm text-muted-foreground">{saved ? tr('Saved · just now', 'Salva · agora') : ''}</p>
-						{allNotesTo && <Link to={allNotesTo} className="inline-flex min-h-11 items-center rounded-full border px-4 text-sm font-medium hover:bg-brand-tint">{tr('View all', 'Ver todas')}</Link>}
+						{allNotesTo && <Link to={allNotesTo} className="inline-flex min-h-11 items-center rounded-[var(--radius)] border border-[var(--study-rule)] bg-card px-4 text-sm font-medium hover:bg-brand-tint/65">{tr('View all', 'Ver todas')}</Link>}
 					</div>
 				</div>
 			)}
@@ -68,7 +68,7 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, title, tr
 			)}
 			{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 			{draft && (
-				<div className="space-y-2 rounded-[1.5rem] border bg-card p-4">
+				<div className="study-surface space-y-2 p-4">
 					<Label htmlFor="note-draft">{tr(`Note at ${formatDuration(draft.position)}`, `Nota em ${formatDuration(draft.position)}`)}</Label>
 					<NoteEditor id="note-draft" focusOnOpen rows={3} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} onKeyDown={onKeyDown} describedBy="note-draft-hint" />
 					<p id="note-draft-hint" className="text-xs text-muted-foreground">{tr('Ctrl+Enter saves the note.', 'Ctrl+Enter salva a nota.')}</p>
@@ -83,13 +83,18 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, title, tr
 			) : items.length === 0 && !draft ? (
 				<p className="text-sm text-muted-foreground">{tr('No notes in this lesson yet. Notes are tied to the moment in the lesson, so you can jump back later.', 'Ainda não há notas nesta aula. As notas ficam presas ao momento da aula, para você voltar depois.')}</p>
 			) : (
-				<ul className="space-y-2">
+				<ul className="divide-y divide-[var(--study-rule)] border-t border-[var(--study-rule)]">
 					{items.map((note) => (
-						<li key={note.noteId} className="flex items-start gap-2 rounded-lg border bg-card p-2">
-							<Button variant="ghost" size="sm" onClick={() => onSeek(note.positionSeconds)} aria-label={tr(`Play from ${formatDuration(note.positionSeconds)}`, `Reproduzir de ${formatDuration(note.positionSeconds)}`)} className="font-mono tabular-nums">
+						<li key={note.noteId} className="flex items-start gap-2 py-2.5">
+							<Button variant="ghost" size="sm" onClick={() => onSeek(note.positionSeconds)} aria-label={tr(`Play from ${formatDuration(note.positionSeconds)}`, `Reproduzir de ${formatDuration(note.positionSeconds)}`)} className="study-timecode text-primary">
 								<Play />{formatDuration(note.positionSeconds)}
 							</Button>
-							<Markdown text={note.content} className="min-w-0 flex-1 py-3 text-sm" />
+							<Markdown text={note.content} className="min-w-0 flex-1 py-2.5 text-sm leading-relaxed" />
+							{onMakeCard && (
+								<Button variant="ghost" size="sm" onClick={() => onMakeCard(note)} title={tr('Create a review card from this note', 'Criar um cartão de revisão desta nota')} aria-label={tr(`Make card from note at ${formatDuration(note.positionSeconds)}`, `Criar cartão da nota em ${formatDuration(note.positionSeconds)}`)}>
+									<SquarePlus />{tr('Card', 'Cartão')}
+								</Button>
+							)}
 							<Button variant="ghost" size="icon" onClick={() => remove.mutate(note.noteId)} disabled={remove.isPending} aria-label={tr(`Delete note at ${formatDuration(note.positionSeconds)}`, `Excluir nota em ${formatDuration(note.positionSeconds)}`)}>
 								<Trash2 />
 							</Button>

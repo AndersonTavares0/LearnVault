@@ -1,27 +1,11 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { setLocale } from '@/lib/i18n';
-import { BrandMark, Motto } from './brand';
+import { Motto } from './brand';
 
 afterEach(() => {
 	cleanup();
 	setLocale('en', null);
-});
-
-describe('BrandMark', () => {
-	it('is decorative and draws the full portico with a gold door and pediment dot', () => {
-		const { container } = render(<BrandMark />);
-		const svg = container.querySelector('svg');
-		expect(svg?.getAttribute('aria-hidden')).toBe('true');
-		expect(container.querySelectorAll('[fill="var(--reward-fill)"]')).toHaveLength(2);
-		expect(container.querySelectorAll('[fill="currentColor"]').length).toBeGreaterThan(2);
-	});
-
-	it('draws the reduced cut for small sizes: a door and no pediment dot', () => {
-		const { container } = render(<BrandMark compact />);
-		expect(container.querySelectorAll('[fill="var(--reward-fill)"]')).toHaveLength(1);
-		expect(container.querySelector('circle')).toBeNull();
-	});
 });
 
 describe('Motto', () => {

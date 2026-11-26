@@ -299,6 +299,25 @@ describe('lesson page', () => {
 			await waitFor(() => expect(remove).toHaveBeenCalledWith('card-1'));
 			await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
 		});
+
+		it('turns a saved note into a card seeded with its content and timestamp', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			vi.mocked(transport.listNotes).mockResolvedValue([
+				{ noteId: 'note-1', mediaId: 'one.mp4', positionSeconds: 83, content: 'Noise floor sits around -60 dBFS.', createdAt: 1, updatedAt: 1 }
+			]);
+			const create = vi.spyOn(transport, 'createFlashcard').mockResolvedValue({
+				cardId: 'card-note', mediaId: 'one.mp4', positionSeconds: 83, front: 'Typical room tone floor?', back: 'Noise floor sits around -60 dBFS.', intervalDays: 0, nextDue: 1, createdAt: 1, updatedAt: 1
+			});
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('tab', { name: /Notes/ }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Make card from note at 1:23' }));
+			expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
+			expect((screen.getByLabelText('Back: answer or explanation') as HTMLTextAreaElement).value).toBe('Noise floor sits around -60 dBFS.');
+			expect(await screen.findByText('Linked to this lesson at 1:23.')).toBeTruthy();
+			fireEvent.change(screen.getByLabelText('Front: question or concept'), { target: { value: 'Typical room tone floor?' } });
+			fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+			await waitFor(() => expect(create).toHaveBeenCalledWith('one.mp4', 'Typical room tone floor?', 'Noise floor sits around -60 dBFS.', 83));
+		});
 	});
 
 	describe('resume and persistence', () => {

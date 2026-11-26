@@ -94,39 +94,40 @@
   --brand-tone: var(--brand);
   --brand-deep: color-mix(in oklch, var(--brand) 55%, black);
   --brand-ink: color-mix(in oklch, var(--brand) 60%, black);
-  --brand-tint: color-mix(in oklch, var(--brand-tone) 12%, var(--background));
-  --brand-soft: color-mix(in oklch, var(--brand-tone) 22%, var(--background));
+  --brand-tint: color-mix(in oklch, var(--brand-tone) 8%, var(--background));
+  --brand-soft: color-mix(in oklch, var(--brand-tone) 14%, var(--background));
   --reward: #795514;
   --reward-fill: #A8761F;
   --reward-fill-fg: #1C1815;
   --reward-tint: #F3E3CB;
-  --radius: 0.875rem;
+  --radius: 0.625rem;
+  --study-rule: color-mix(in oklch, var(--foreground) 13%, var(--background));
   --density: 1;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
-  --background: color-mix(in oklch, var(--brand-tone) 6%, #FBF7F1);
-  --foreground: #2E2118;
-  --card: color-mix(in oklch, var(--brand-tone) 3%, #FFFFFF);
-  --card-foreground: #2E2118;
-  --popover: var(--card);
-  --popover-foreground: #2E2118;
+  --background: color-mix(in oklch, var(--brand-tone) 2.5%, #FBF9F5);
+  --foreground: #1E1915;
+  --card: #FFFFFF;
+  --card-foreground: #1E1915;
+  --popover: #FFFFFF;
+  --popover-foreground: #1E1915;
   --primary: var(--brand);
   --primary-foreground: var(--brand-fg);
   --secondary: var(--panel);
-  --secondary-foreground: #2E2118;
-  --muted: color-mix(in oklch, var(--brand-tone) 4%, #F3E9DB);
-  --muted-foreground: #6A5745;
+  --secondary-foreground: #1E1915;
+  --muted: color-mix(in oklch, var(--brand-tone) 3%, #F2EFE9);
+  --muted-foreground: #5C5248;
   --accent: var(--brand-tint);
-  --accent-foreground: #2E2118;
+  --accent-foreground: #1E1915;
   --destructive: #A33A32;
   --destructive-foreground: #FFFFFF;
-  --border: color-mix(in oklch, var(--brand-tone) 16%, #E5DDD2);
-  --border-strong: color-mix(in oklch, var(--foreground) 38%, var(--background));
+  --border: color-mix(in oklch, var(--brand-tone) 10%, #E4E0D8);
+  --border-strong: color-mix(in oklch, var(--foreground) 32%, var(--background));
   --input: #8C7F6C;
   --ring: var(--brand);
-  --success: #4F7D5A;
-  --success-tint: #E4EFE4;
+  --success: #2F6B3F;
+  --success-tint: #E4EFE6;
   --warning: #8A5A16;
   --warning-tint: #F3E3CB;
   --info: #3F5F8F;
@@ -136,15 +137,15 @@
   --chart-3: var(--brand-soft);
   --chart-4: #8C7F6C;
   --chart-5: #3A2515;
-  --sidebar: color-mix(in oklch, var(--brand-tone) 3%, #FBF7F1);
-  --sidebar-foreground: #2E2118;
+  --sidebar: color-mix(in oklch, var(--brand-tone) 2%, #FBF9F5);
+  --sidebar-foreground: #1E1915;
   --sidebar-primary: var(--brand);
   --sidebar-primary-foreground: var(--brand-fg);
   --sidebar-accent: var(--brand-tint);
-  --sidebar-accent-foreground: #2E2118;
+  --sidebar-accent-foreground: #1E1915;
   --sidebar-border: var(--border);
   --sidebar-ring: var(--brand);
-  --panel: color-mix(in oklch, var(--brand-tone) 11%, var(--background));
+  --panel: color-mix(in oklch, var(--brand-tone) 5%, var(--background));
   --panel-edge: var(--border);
   --stat-amber-bg: #F3E3CB;
   --stat-amber-border: #E4CFAF;
@@ -157,44 +158,45 @@
   --stat-green-ink: #3F6B4A;
 }
 
-/* Carvão quente: graphite with a warm undertone, warm hairlines, brass accent. */
+/* Graphite surfaces stay neutral; the warm accent identifies actions and state. */
 :root[data-theme="dark"] {
-  --background: color-mix(in oklch, var(--brand-tone) 6%, #0B0A09);
+  --background: #161719;
+  --brand-deep: color-mix(in oklch, var(--brand) 85%, var(--foreground));
   --brand-ink: color-mix(in oklch, var(--brand) 50%, white);
   --brand-soft: color-mix(in oklch, var(--brand-tone) 24%, var(--background));
-  --foreground: #F4EFE6;
-  --card: color-mix(in oklch, var(--brand-tone) 5%, #161311);
-  --card-foreground: #F4EFE6;
-  --popover: color-mix(in oklch, var(--brand-tone) 5%, #1C1916);
-  --popover-foreground: #F4EFE6;
+  --foreground: #F0EDE8;
+  --card: #222427;
+  --card-foreground: var(--foreground);
+  --popover: #2C2E32;
+  --popover-foreground: var(--foreground);
   --secondary: var(--panel);
-  --secondary-foreground: #F4EFE6;
-  --muted: color-mix(in oklch, var(--brand-tone) 4%, #1A1613);
-  --muted-foreground: #BFB5A7;
-  --accent-foreground: #F4EFE6;
+  --secondary-foreground: var(--foreground);
+  --muted: #1C1E21;
+  --muted-foreground: #B8B5AF;
+  --accent-foreground: var(--foreground);
   --destructive: #E08A82;
   --destructive-foreground: #201C18;
-  --border: color-mix(in oklch, var(--brand-tone) 16%, #38322B);
-  --border-strong: color-mix(in oklch, var(--foreground) 30%, var(--background));
-  --input: #8A7A68;
+  --border: #36383C;
+  --border-strong: color-mix(in oklch, var(--foreground) 38%, var(--background));
+  --input: #7D7D80;
   --success: #8FC79A;
   --success-tint: #223026;
   --warning: #E0B05F;
   --warning-tint: #3A2A18;
   --info: #9DB4D8;
   --info-tint: #1E2A3A;
-  --reward: #E0A83E;
-  --reward-fill: #E0A83E;
+  --reward: #C9B594;
+  --reward-fill: #C9B594;
   --reward-fill-fg: #1C1815;
-  --reward-tint: #3A2A18;
-  --chart-2: #BFB5A7;
-  --chart-4: #8A7A68;
-  --chart-5: #F4EFE6;
-  --sidebar: color-mix(in oklch, var(--brand-tone) 3%, #0B0A09);
-  --sidebar-foreground: #F4EFE6;
-  --sidebar-accent-foreground: #F4EFE6;
+  --reward-tint: #332D25;
+  --chart-2: var(--muted-foreground);
+  --chart-4: var(--input);
+  --chart-5: var(--foreground);
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-accent-foreground: var(--foreground);
   --sidebar-border: var(--border);
-  --panel: color-mix(in oklch, var(--brand-tone) 11%, #1E1A16);
+  --panel: #292B2E;
   --panel-edge: var(--border);
   --stat-amber-bg: #3A2A18;
   --stat-amber-border: #5A4228;
@@ -205,19 +207,19 @@
   --stat-green-bg: #223026;
   --stat-green-border: #3A5440;
   --stat-green-ink: #8FC79A;
-  --cover-0: #2B2118; --cover-1: #2E211B; --cover-2: #26261C; --cover-3: #222A20;
-  --cover-4: #2A241C; --cover-5: #2E2320; --cover-6: #262420; --cover-7: #2B2316;
+  --cover-0: #2E3D35; --cover-1: #45342F; --cover-2: #323D49; --cover-3: #453D2E;
 }
 :root {
-  --cover-0: #F6E7CF; --cover-1: #F2E0D2; --cover-2: #EAE4CF; --cover-3: #E3E8D6;
-  --cover-4: #E9DED0; --cover-5: #F1DCD3; --cover-6: #E6E3D8; --cover-7: #EFE2C8;
+  --cover-0: #DDE8DE; --cover-1: #EDDDD4; --cover-2: #DDE5EE; --cover-3: #EEE3C9;
 }
 
-/* Habit stats: a neutral card with one small jewel tile; color stays a detail. */
-.stat-amber, .stat-violet, .stat-green { background: var(--card); border-color: var(--border); }
-.stat-amber [data-stat-icon] { background: var(--stat-amber-bg); color: var(--stat-amber-ink); }
-.stat-violet [data-stat-icon] { background: var(--stat-violet-bg); color: var(--stat-violet-ink); }
-.stat-green [data-stat-icon] { background: var(--stat-green-bg); color: var(--stat-green-ink); }
+/* Habit stats: scoped inside @layer components so Tailwind utility classes can override cleanly. */
+@layer components {
+  .stat-amber, .stat-violet, .stat-green { background: var(--card); border-color: var(--border); }
+  .stat-amber [data-stat-icon] { background: var(--stat-amber-bg); color: var(--stat-amber-ink); }
+  .stat-violet [data-stat-icon] { background: var(--stat-violet-bg); color: var(--stat-violet-ink); }
+  .stat-green [data-stat-icon] { background: var(--stat-green-bg); color: var(--stat-green-ink); }
+}
 
 /* A small tint and ink in one hue per course, for the code and footer of a card. */
 .tone { background: hsl(var(--hue) 45% 92%); color: hsl(var(--hue) 60% 22%); }
@@ -250,16 +252,16 @@
 :root[data-page-width="wide"] { --container-max: 112rem; }
 
 :root[data-surface="stone"] {
-  --background: color-mix(in oklch, var(--brand-tone) 4%, #F4F5F7);
+  --background: color-mix(in oklch, var(--brand-tone) 2%, #F4F5F7);
   --foreground: #1E232C;
-  --card: color-mix(in oklch, var(--brand-tone) 2%, #FFFFFF);
+  --card: #FFFFFF;
   --card-foreground: #1E232C;
   --secondary-foreground: #1E232C;
   --accent-foreground: #1E232C;
-  --muted: color-mix(in oklch, var(--brand-tone) 5%, #ECEEF2);
+  --muted: color-mix(in oklch, var(--brand-tone) 3%, #ECEEF2);
   --muted-foreground: #525B6B;
-  --panel: color-mix(in oklch, var(--brand-tone) 9%, #ECEFF4);
-  --border: color-mix(in oklch, var(--brand-tone) 12%, #DCE0E8);
+  --panel: color-mix(in oklch, var(--brand-tone) 4%, #ECEFF4);
+  --border: color-mix(in oklch, var(--brand-tone) 8%, #DCE0E8);
 }
 :root[data-surface="crisp"] {
   --background: #FFFFFF;
@@ -268,70 +270,70 @@
   --card-foreground: #14161A;
   --secondary-foreground: #14161A;
   --accent-foreground: #14161A;
-  --muted: color-mix(in oklch, var(--brand-tone) 5%, #F2F3F5);
+  --muted: color-mix(in oklch, var(--brand-tone) 3%, #F2F3F5);
   --muted-foreground: #545966;
-  --panel: color-mix(in oklch, var(--brand-tone) 8%, #F4F5F8);
-  --border: color-mix(in oklch, var(--brand-tone) 10%, #E5E7EB);
+  --panel: color-mix(in oklch, var(--brand-tone) 4%, #F4F5F8);
+  --border: color-mix(in oklch, var(--brand-tone) 7%, #E5E7EB);
 }
 :root[data-surface="sepia"] {
-  --background: color-mix(in oklch, var(--brand-tone) 4%, #F4ECD8);
+  --background: color-mix(in oklch, var(--brand-tone) 2%, #F4ECD8);
   --foreground: #362617;
-  --card: color-mix(in oklch, var(--brand-tone) 3%, #FAF3E3);
+  --card: #FAF3E3;
   --card-foreground: #362617;
   --secondary-foreground: #362617;
   --accent-foreground: #362617;
-  --muted: color-mix(in oklch, var(--brand-tone) 5%, #EADEC3);
+  --muted: color-mix(in oklch, var(--brand-tone) 3%, #EADEC3);
   --muted-foreground: #66513C;
-  --panel: color-mix(in oklch, var(--brand-tone) 9%, #ECE0C6);
-  --border: color-mix(in oklch, var(--brand-tone) 12%, #DDD0B4);
+  --panel: color-mix(in oklch, var(--brand-tone) 4%, #ECE0C6);
+  --border: color-mix(in oklch, var(--brand-tone) 8%, #DDD0B4);
 }
 :root[data-surface="sage"] {
-  --background: color-mix(in oklch, var(--brand-tone) 4%, #F2F6F0);
+  --background: color-mix(in oklch, var(--brand-tone) 2%, #F2F6F0);
   --foreground: #1D2B21;
-  --card: color-mix(in oklch, var(--brand-tone) 2%, #F9FBF8);
+  --card: #F9FBF8;
   --card-foreground: #1D2B21;
   --secondary-foreground: #1D2B21;
   --accent-foreground: #1D2B21;
-  --muted: color-mix(in oklch, var(--brand-tone) 5%, #E6EDE4);
+  --muted: color-mix(in oklch, var(--brand-tone) 3%, #E6EDE4);
   --muted-foreground: #4C5E50;
-  --panel: color-mix(in oklch, var(--brand-tone) 9%, #E8EFE6);
-  --border: color-mix(in oklch, var(--brand-tone) 12%, #D3DFD1);
+  --panel: color-mix(in oklch, var(--brand-tone) 4%, #E8EFE6);
+  --border: color-mix(in oklch, var(--brand-tone) 8%, #D3DFD1);
 }
 :root[data-surface="nord"] {
-  --background: color-mix(in oklch, var(--brand-tone) 4%, #ECEFF4);
+  --background: color-mix(in oklch, var(--brand-tone) 2%, #ECEFF4);
   --foreground: #2E3440;
-  --card: color-mix(in oklch, var(--brand-tone) 2%, #F8FAFC);
+  --card: #F8FAFC;
   --card-foreground: #2E3440;
   --secondary-foreground: #2E3440;
   --accent-foreground: #2E3440;
-  --muted: color-mix(in oklch, var(--brand-tone) 5%, #E1E6EF);
+  --muted: color-mix(in oklch, var(--brand-tone) 3%, #E1E6EF);
   --muted-foreground: #4C566A;
-  --panel: color-mix(in oklch, var(--brand-tone) 9%, #E4E9F2);
-  --border: color-mix(in oklch, var(--brand-tone) 12%, #CFD7E3);
+  --panel: color-mix(in oklch, var(--brand-tone) 4%, #E4E9F2);
+  --border: color-mix(in oklch, var(--brand-tone) 8%, #CFD7E3);
 }
 :root[data-surface="rose"] {
-  --background: color-mix(in oklch, var(--brand-tone) 4%, #FAF4ED);
+  --background: color-mix(in oklch, var(--brand-tone) 2%, #FAF4ED);
   --foreground: #3E3A54;
-  --card: color-mix(in oklch, var(--brand-tone) 2%, #FFFAF5);
+  --card: #FFFAF5;
   --card-foreground: #3E3A54;
   --secondary-foreground: #3E3A54;
   --accent-foreground: #3E3A54;
-  --muted: color-mix(in oklch, var(--brand-tone) 5%, #F2E9E4);
+  --muted: color-mix(in oklch, var(--brand-tone) 3%, #F2E9E4);
   --muted-foreground: #5E5974;
-  --panel: color-mix(in oklch, var(--brand-tone) 9%, #F4ECE7);
-  --border: color-mix(in oklch, var(--brand-tone) 12%, #E4D8DB);
+  --panel: color-mix(in oklch, var(--brand-tone) 4%, #F4ECE7);
+  --border: color-mix(in oklch, var(--brand-tone) 8%, #E4D8DB);
 }
 :root[data-surface="solarized"] {
-  --background: color-mix(in oklch, var(--brand-tone) 4%, #FDF6E3);
+  --background: color-mix(in oklch, var(--brand-tone) 2%, #FDF6E3);
   --foreground: #2E3F44;
-  --card: color-mix(in oklch, var(--brand-tone) 2%, #FFFDF5);
+  --card: #FFFDF5;
   --card-foreground: #2E3F44;
   --secondary-foreground: #2E3F44;
   --accent-foreground: #2E3F44;
-  --muted: color-mix(in oklch, var(--brand-tone) 5%, #F1E9D2);
+  --muted: color-mix(in oklch, var(--brand-tone) 3%, #F1E9D2);
   --muted-foreground: #4C6067;
-  --panel: color-mix(in oklch, var(--brand-tone) 9%, #F3EBD4);
-  --border: color-mix(in oklch, var(--brand-tone) 12%, #E4DBC0);
+  --panel: color-mix(in oklch, var(--brand-tone) 4%, #F3EBD4);
+  --border: color-mix(in oklch, var(--brand-tone) 8%, #E4DBC0);
 }
 :root[data-theme="dark"][data-surface="stone"] {
   --background: color-mix(in oklch, var(--brand-tone) 5%, #0E1014);
@@ -477,7 +479,7 @@ html[data-app-shell], html[data-app-shell] body { height: 100%; overflow: hidden
   h1 {
     font-family: var(--heading-font);
     font-weight: 600;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.015em;
   }
   h2, h3 {
     font-weight: 600;
@@ -539,4 +541,29 @@ html[data-app-shell], html[data-app-shell] body { height: 100%; overflow: hidden
 /* Text selection takes the palette instead of the browser's blue. */
 ::selection {
   background: color-mix(in oklch, var(--primary) 30%, transparent);
+}
+
+/* Editorial study room primitives: hairline dividers, restrained paper surfaces, tabular monospaced figures. */
+.study-surface {
+  background: var(--card);
+  border: 1px solid var(--study-rule);
+  border-radius: var(--radius-lg);
+}
+:root[data-card-style="elevated"] .study-surface {
+  border-color: color-mix(in oklch, var(--border) 65%, transparent);
+  box-shadow: 0 2px 10px -2px rgb(0 0 0 / 0.06), 0 1px 2px 0 rgb(0 0 0 / 0.04);
+}
+:root[data-theme="dark"][data-card-style="elevated"] .study-surface {
+  box-shadow: 0 4px 16px -2px rgb(0 0 0 / 0.45), 0 1px 3px 0 rgb(0 0 0 / 0.35);
+}
+:root[data-card-style="soft"] .study-surface {
+  border-color: transparent;
+  background: var(--panel);
+}
+.study-timecode {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
 }

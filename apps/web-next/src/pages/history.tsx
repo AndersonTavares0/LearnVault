@@ -4,6 +4,8 @@ import { Link } from 'react-router';
 import { PageHeader } from '@/app/shell';
 import { routerPath } from '@/components/course-card';
 import { Panel } from '@/components/panel';
+import { buttonVariants } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import { useCatalog, useRecent } from '@/app/data';
 import { courseProgress, formatLocationContext } from '@/lib/catalog';
 import { getLocale, tr } from '@/lib/i18n';
@@ -42,23 +44,31 @@ export function HistoryPage() {
 	return (
 		<div className="space-y-8">
 			<PageHeader icon={History} title={tr('Watch history', 'Histórico de aulas')} description={tr('The lessons you opened, most recent first. Each link resumes where you stopped.', 'As aulas que você abriu, da mais recente para a mais antiga. Cada link retoma de onde você parou.')} />
-			{rows.length === 0 ? (
-				<Panel className="mx-auto max-w-xl space-y-4 text-center">
-					<History className="mx-auto size-8 text-muted-foreground" aria-hidden="true" />
-					<p className="font-heading text-2xl font-semibold">{tr('No lessons watched yet', 'Nenhuma aula assistida ainda')}</p>
-					<p className="text-muted-foreground">{tr('Open a course and the lessons you study will appear here.', 'Abra um curso e as aulas que você estudar aparecerão aqui.')}</p>
-					<Link to="/" className="inline-flex min-h-11 items-center rounded-full bg-primary px-6 font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('Browse your library', 'Ver sua biblioteca')}</Link>
-				</Panel>
-			) : (
+			{rows.length === 0 ? (() => {
+				const firstCourse = catalog.data?.nodes.find((node) => node.role === 'course');
+				return (
+					<Panel className="mx-auto max-w-xl space-y-5 p-6 text-center sm:p-10">
+						<History className="mx-auto size-8 text-muted-foreground" aria-hidden="true" />
+						<div className="space-y-2">
+							<h2 className="font-heading text-2xl font-semibold">{tr('No lessons watched yet', 'Nenhuma aula assistida ainda')}</h2>
+							<p className="mx-auto max-w-prose text-sm text-muted-foreground">{tr('Open a course and the lessons you study will appear here.', 'Abra um curso e as aulas que você estudar aparecerão aqui.')}</p>
+						</div>
+						<div className="flex flex-col justify-center gap-2.5 sm:flex-row sm:flex-wrap">
+							{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className={cn(buttonVariants(), 'w-full sm:w-auto')}>{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
+							<Link to="/" className={cn(buttonVariants({ variant: firstCourse?.courseId ? 'outline' : 'default' }), 'w-full sm:w-auto')}>{tr('Browse your library', 'Ver sua biblioteca')}</Link>
+						</div>
+					</Panel>
+				);
+			})() : (
 				<Panel className="p-0 sm:p-0">
-					<ol aria-label={tr('Watched lessons', 'Aulas assistidas')} className="divide-y">
+					<ol aria-label={tr('Watched lessons', 'Aulas assistidas')} className="divide-y divide-[var(--study-rule)]">
 						{rows.map(({ item, location, progress }) => {
 							const watchedAt = item.updatedAt ? new Date(item.updatedAt * 1000) : null;
 							const resumeAt = !item.completed && item.positionSeconds > 0 ? item.positionSeconds : undefined;
 							return (
 								<li key={`${location.courseId}/${location.lesson.path}`} className="flex flex-wrap items-center gap-x-6 gap-y-3 p-5 sm:p-6">
 									<div className="min-w-0 flex-1">
-										<p className="text-xs font-semibold tracking-[0.12em] text-muted-foreground uppercase">{formatLocationContext(location.courseTitle, location.moduleTitle)}</p>
+										<p className="text-xs font-medium text-muted-foreground">{formatLocationContext(location.courseTitle, location.moduleTitle)}</p>
 										<h2 className="mt-1 text-xl font-semibold">
 											<Link to={routerPath(href('course', location.courseId, location.lesson.path, resumeAt))} className="hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{location.lesson.title}</Link>
 										</h2>
@@ -75,7 +85,7 @@ export function HistoryPage() {
 											</div>
 										</div>
 									)}
-									<Link to={routerPath(href('course', location.courseId, location.lesson.path, resumeAt))} className="inline-flex min-h-11 items-center rounded-full border bg-card px-6 text-sm font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{item.completed ? tr('Review', 'Revisar') : tr('Resume', 'Retomar')}</Link>
+									<Link to={routerPath(href('course', location.courseId, location.lesson.path, resumeAt))} className="inline-flex min-h-11 items-center rounded-[var(--radius)] border border-[var(--study-rule)] bg-card px-5 text-sm font-medium hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{item.completed ? tr('Review', 'Revisar') : tr('Resume', 'Retomar')}</Link>
 								</li>
 							);
 						})}

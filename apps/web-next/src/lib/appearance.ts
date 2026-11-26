@@ -11,7 +11,7 @@ export const APPEARANCE_STORAGE_KEY = 'learnvault-appearance';
 export const ACCENT_PRESETS = [
 	// Warm ink, the brand's near-black. `tone` is what the page, panels and tints are mixed from on the light page:
 	// mixing from a near-black would darken them (less text contrast) and, with so little chroma, turn them pink.
-	{ id: 'ink', hex: '#1C1815', dark: '#E0A83E', tone: '#5C4229' },
+	{ id: 'ink', hex: '#1C1815', dark: '#C9B594', tone: '#5C4229' },
 	{ id: 'brown', hex: '#5C4229', dark: '#E3A857' },
 	{ id: 'amber', hex: '#A5540A', dark: '#F0B35A' },
 	{ id: 'forest', hex: '#2F6B3F', dark: '#6FBF86' },
@@ -26,7 +26,7 @@ export const THEMES = ['light', 'dark', 'system'] as const;
 export const SURFACES = ['warm', 'stone', 'crisp', 'sepia', 'sage', 'nord', 'rose', 'solarized'] as const;
 
 export const SURFACE_SWATCHES: Record<(typeof SURFACES)[number], { light: string; dark: string; edgeLight: string; edgeDark: string }> = {
-	warm: { light: '#FBF7F1', dark: '#0B0A09', edgeLight: '#E7D8C6', edgeDark: '#38322B' },
+	warm: { light: '#FBF7F1', dark: '#161719', edgeLight: '#E7D8C6', edgeDark: '#36383C' },
 	stone: { light: '#F4F5F7', dark: '#0E1014', edgeLight: '#DCE0E8', edgeDark: '#2B313E' },
 	crisp: { light: '#FFFFFF', dark: '#060607', edgeLight: '#E5E7EB', edgeDark: '#27272A' },
 	sepia: { light: '#F4ECD8', dark: '#18130D', edgeLight: '#DFD1B4', edgeDark: '#3B2F22' },
@@ -164,7 +164,7 @@ export const appearanceStore = {
 	subscribe: store.subscribe
 };
 
-const DARK_PANEL = '#1C1510';
+const DARK_PANEL = '#292B2E';
 
 /** "Follow the system" resolves to what the browser says right now. */
 export function resolveTheme(theme: Appearance['theme']): 'light' | 'dark' {
@@ -205,10 +205,10 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	root.style.setProperty('--brand-tone', dark ? accent : toneFor(appearance.accent) ?? accent);
 	root.style.setProperty('--brand-fg', dark ? '#1C1209' : '#FFFFFF');
 	const own = appearance.reward === 'accent';
-	root.style.setProperty('--reward', own ? 'var(--brand-ink)' : dark ? '#E0A83E' : '#795514');
-	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#E0A83E' : '#A8761F');
+	root.style.setProperty('--reward', own ? 'var(--brand-ink)' : dark ? '#C9B594' : '#795514');
+	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#C9B594' : '#A8761F');
 	root.style.setProperty('--reward-fill-fg', own ? 'var(--brand-fg)' : '#1C1815');
-	root.style.setProperty('--reward-tint', own ? 'var(--brand-tint)' : dark ? '#3A2A18' : '#F3E3CB');
+	root.style.setProperty('--reward-tint', own ? 'var(--brand-tint)' : dark ? '#332D25' : '#F3E3CB');
 	for (const key of ['surface', 'radius', 'cardStyle', 'density', 'textSize', 'font', 'pageWidth', 'sidebar', 'homeLayout'] as const) root.dataset[key] = appearance[key];
 	root.dataset.motion = appearance.reduceMotion ? 'reduced' : 'normal';
 }

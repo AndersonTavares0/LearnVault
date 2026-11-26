@@ -3,7 +3,7 @@ import { basicLibrary, collectCspViolations, createTest, expectNoAxeViolations, 
 
 const test = createTest(basicLibrary);
 
-test('shows the installed version and accessible seal in About', async ({ page, origin }, testInfo) => {
+test('shows the installed version and text-only branding in About', async ({ page, origin }, testInfo) => {
 	const violations = collectCspViolations(page);
 	const externalRequests: string[] = [];
 	page.on('request', (request) => {
@@ -33,12 +33,11 @@ test('shows the installed version and accessible seal in About', async ({ page, 
 			await expect(about.getByText('LearnVault only reads your course folders.')).toBeVisible();
 			await expect(about.getByRole('link', { name: 'Project repository' })).toHaveAttribute('href', 'https://github.com/AndersonTavares0/LearnVault');
 
-			const seal = about.getByRole('img', { name: 'LearnVault seal' });
-			await expect(seal).toBeVisible();
-			await expect(seal).toHaveCSS('width', '160px');
-			await expect(seal).toHaveCSS('height', '160px');
-			await expect(seal).toHaveAttribute('src', theme === 'Dark' ? /learnvault-seal-dark-/ : /learnvault-seal-(?!dark-)/);
-			await expect.poll(() => seal.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+			await expect(about.getByText('LearnVault', { exact: true })).toBeVisible();
+			await expect(about.getByRole('img')).toHaveCount(0);
+			const home = page.getByRole('link', { name: 'LearnVault home' });
+			await expect(home).toHaveText('LearnVault');
+			await expect(home.locator('svg, img')).toHaveCount(0);
 			expect(await page.locator('#main').evaluate((main) => main.scrollWidth <= main.clientWidth)).toBe(true);
 			await expectNoAxeViolations(page, `settings/about/${theme}/${width}`);
 			await page.screenshot({ path: testInfo.outputPath(`about-${theme.toLowerCase()}-${width}.png`) });
@@ -50,7 +49,7 @@ test('shows the installed version and accessible seal in About', async ({ page, 
 	await page.getByLabel('Seção dos ajustes', { exact: true }).selectOption('about');
 	const sobre = page.getByRole('region', { name: 'Sobre', exact: true });
 	await expect(sobre.getByText(`Versão ${version}`, { exact: true })).toBeVisible();
-	await expect(sobre.getByRole('img', { name: 'Selo do LearnVault' })).toBeVisible();
+	await expect(sobre.getByText('LearnVault', { exact: true })).toBeVisible();
 	await expect(sobre.getByText('Ouse saber', { exact: true })).toBeVisible();
 	await expect(sobre.getByText('O LearnVault apenas lê suas pastas de cursos.')).toBeVisible();
 	await expect(sobre.getByRole('link', { name: 'Repositório do projeto' })).toBeVisible();

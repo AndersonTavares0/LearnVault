@@ -234,7 +234,7 @@ test('mobile settings stay usable in Portuguese and the dark theme', async ({ pa
 test('a module row opens to show its lessons and closes again', async ({ page, origin }) => {
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await openCourse(page, origin);
-	const lesson = page.getByRole('link', { name: /^Lesson/ });
+	const lesson = page.getByRole('link', { name: /^Open lesson.*Video/ });
 	await page.getByRole('button', { name: 'Collapse all' }).click();
 	await expect(lesson).toBeHidden();
 	await page.locator('summary', { hasText: 'Video' }).click();

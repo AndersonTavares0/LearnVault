@@ -84,14 +84,13 @@ describe('CourseCard variants', () => {
 		expect(screen.getByRole('button', { name: 'Manage Rust from Zero' })).toBeTruthy();
 	});
 
-	it('reserves trailing title space for every visible top-right action', () => {
+	it('puts the course link before its separate favorite and management controls', () => {
 		show('grid', undefined, true);
-		const heading = screen.getByRole('heading', { name: 'Rust from Zero' });
-		expect(heading.querySelector('[data-action-reserve]')?.className).toContain('w-[5.25rem]');
-		cleanup();
-		show('grid', undefined, false);
-		const favoriteOnlyHeading = screen.getByRole('heading', { name: 'Rust from Zero' });
-		expect(favoriteOnlyHeading.querySelector('[data-action-reserve]')?.className).toContain('w-11');
+		const course = screen.getByRole('link', { name: 'Rust from Zero' });
+		const favorite = screen.getByRole('button', { name: 'Add Rust from Zero to favorites' });
+		const manage = screen.getByRole('button', { name: 'Manage Rust from Zero' });
+		expect(course.compareDocumentPosition(favorite)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+		expect(favorite.compareDocumentPosition(manage)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 	});
 });
 
