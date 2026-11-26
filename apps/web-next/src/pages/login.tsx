@@ -45,10 +45,7 @@ export function LoginPage() {
 				<div className="study-surface p-7 shadow-xs sm:p-9">
 					<p className="mb-7 text-center font-heading text-2xl font-semibold tracking-tight">LearnVault</p>
 					<form onSubmit={submit} className="space-y-5">
-						<div className="space-y-1 text-center">
-							<h1 className="font-heading text-2xl font-semibold">{tr('Sign in', 'Entrar')}</h1>
-							<p className="text-sm text-muted-foreground">{tr('Open your self-hosted study desk.', 'Abra sua mesa de estudos local.')}</p>
-						</div>
+						<h1 className="text-center font-heading text-2xl font-semibold">{tr('Sign in', 'Entrar')}</h1>
 						{error && (
 							<p id="login-error" role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
 								<CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0" />

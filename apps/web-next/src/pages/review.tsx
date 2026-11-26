@@ -148,7 +148,6 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 				{current ? (
 					<>
 						<div className="relative isolate">
-							<div aria-hidden="true" className="lamp-pool-center pointer-events-none absolute inset-0 -z-10" />
 							<div className="study-surface relative flex min-h-[20rem] flex-col p-6 sm:p-10" aria-live="polite">
 								<div className="flex items-center justify-between border-b border-[var(--study-rule)] pb-4">
 									<span className="study-timecode text-muted-foreground"># {done + 1}</span>

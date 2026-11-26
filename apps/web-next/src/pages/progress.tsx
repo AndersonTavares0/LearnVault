@@ -2,7 +2,6 @@ import { Award, ChartNoAxesColumn, Check, Lock } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ActivityHeatmap, type DayActivity } from '@/components/activity-heatmap';
-import { Motto } from '@/components/brand';
 import { CourseCover } from '@/components/course-cover';
 import { LessonSegments } from '@/components/lesson-segments';
 import { Panel } from '@/components/panel';
@@ -150,7 +149,6 @@ export function ProgressPage() {
 					</ul>
 				</section></Panel>
 			</div>
-			<Motto name="nullaDies" className="pt-10 text-center" />
 		</div>
 	);
 }

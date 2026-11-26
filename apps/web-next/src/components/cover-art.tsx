@@ -58,12 +58,12 @@ type Props = {
 
 /**
  * Generated cover for a course with no uploaded image and no video frame (ADR 0002): a dark lecture
- * title card, the opening frame of a course video, with the title in bone and a short rule under it.
+ * title card, the opening frame of a course video, with the title in bone.
  * The ground hue is stable per course. Decorative: the card beside it carries the name and progress.
  */
 export function CoverArt({ title, courseId, done, total, compact = false, map = false }: Props) {
 	const hue = FRAME_HUES[hash(courseId || title.normalize('NFD').toLowerCase()) % FRAME_HUES.length];
-	const ground: CSSProperties = { background: `radial-gradient(120% 100% at 0% 0%, oklch(0.31 0.04 ${hue}) 0%, transparent 60%), oklch(0.24 0.035 ${hue})` };
+	const ground: CSSProperties = { backgroundColor: `oklch(0.24 0.035 ${hue})` };
 	const letter = courseMonogram(title).charAt(0);
 	const lessons = total === 1 ? tr('1 lesson', '1 aula') : tr(`${total} lessons`, `${total} aulas`);
 	return (
@@ -73,7 +73,6 @@ export function CoverArt({ title, courseId, done, total, compact = false, map = 
 			{!map && !compact && (
 				<div className="absolute inset-0 flex flex-col justify-center" style={{ padding: '8cqi' }}>
 					<p className="shrink-0 line-clamp-3 text-balance font-heading font-semibold tracking-tight" style={{ color: BONE, fontSize: 'clamp(14px, 10cqi, 38px)', lineHeight: 1.2, paddingBottom: '0.06em' }}>{title}</p>
-					<span className="block shrink-0" style={{ marginTop: '5cqi', width: '12cqi', minWidth: 24, height: 3, background: `oklch(0.84 0.05 ${hue})` }} />
 					{total > 0 && <p className="font-medium" style={{ marginTop: '3cqi', color: 'rgba(236, 231, 218, 0.62)', fontSize: 'clamp(11px, 4cqi, 14px)' }}>{lessons}</p>}
 				</div>
 			)}

@@ -2,6 +2,10 @@
 
 Working tree: `redesign/premium-ui`, based on `8a28dcf4`. The before state is the existing premium working tree, not `main`. This is a presentation-only pass. Preserve course discovery, ordering, progress, authentication, theme preferences, API and routes.
 
+## Lamplight follow-up
+
+Lamplight supersedes the graphite palette recorded below; those findings and figures are historical, not validation of the current design. See [the current system](../DESIGN.md) for palette, type, shell, and layout. The branch replaces the desktop top navigation with a rail, leads the library with the next unfinished lesson, and uses a study rail for the lesson player. The notes follow-up brings prose and dates in line with the default Geist UI. Cover and browser-test refinements are verified separately before integration.
+
 ## Stack and references
 
 React 19, Vite, Tailwind CSS 4 and shadcn source components on Base UI; Lucide icons. `apps/web-next/src/styles/app.css` defines semantic colors and states, `src/lib/appearance.ts` applies theme/preferences, and `src/lib/i18n.ts` provides `tr(en, ptBr)`. The shipped default language remains English; the audit is in Brazilian Portuguese. See [reference board](references.md).

@@ -253,7 +253,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 
 			<div className={cn('grid gap-x-8 gap-y-6', !wide && 'lg:grid-cols-[minmax(0,1fr)_372px]')}>
 				{/* The lamp sits behind the player: the one thing to study now. Phones get the picture edge to edge. */}
-				<div className="lamp-pool-center min-w-0 space-y-5">
+				<div className="min-w-0 space-y-5">
 					<div className={cn('relative max-sm:-mx-5', cinema && 'rounded-[var(--radius-lg)] bg-[#141210] p-2 sm:p-5')}>
 						{/* While the break screen is up, the player under it takes no focus or keys. */}
 						<div inert={Boolean(breakPhase)}>

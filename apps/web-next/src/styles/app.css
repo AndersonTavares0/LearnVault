@@ -86,7 +86,6 @@
   --ui-font: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --heading-font: var(--ui-font);
   /* The lamp: a soft pool of the accent behind whatever the learner should study next. */
-  --glow: color-mix(in oklch, var(--brand) 18%, transparent);
   --brand: #1C1815;
   --brand-fg: #FFFFFF;
   /* The colour the page, panels and tints are mixed from. It is the accent unless a preset names another
@@ -266,7 +265,6 @@
   --sidebar-accent-foreground: #111914;
   --success: #2E7A51;
   --success-tint: #DDEBE1;
-  --glow: rgba(232, 174, 73, 0.26);
 }
 :root[data-theme="dark"][data-surface="lamplight"] {
   --background: #0D1210;
@@ -287,7 +285,6 @@
   --sidebar-accent-foreground: #ECE7DA;
   --success: #6DB58C;
   --success-tint: #1A2C21;
-  --glow: rgba(240, 190, 98, 0.15);
 }
 :root[data-surface="stone"] {
   --background: color-mix(in oklch, var(--brand-tone) 2%, #F4F5F7);
@@ -605,12 +602,6 @@ html[data-app-shell], html[data-app-shell] body { height: 100%; overflow: hidden
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.01em;
-}
-
-/* The lamp pool: a soft light behind the one thing to study next. Never on more than one region per screen. */
-@layer components {
-  .lamp-pool { background-image: radial-gradient(70% 120% at 28% 40%, var(--glow), transparent 70%); }
-  .lamp-pool-center { background-image: radial-gradient(55% 60% at 50% 42%, var(--glow), transparent 75%); }
 }
 
 /* Lesson focus mode: the course rail and the app header step back so the lamp stays on the player. Presentation only. */

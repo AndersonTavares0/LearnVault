@@ -2,7 +2,6 @@ import { Award, ChevronRight, Flame, FolderPlus, Play, RefreshCw, Search, Sparkl
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Motto } from '@/components/brand';
 import { CourseCover } from '@/components/course-cover';
 import { CourseCard, routerPath } from '@/components/course-card';
 import { lessonMediaId } from '@/components/curriculum';
@@ -223,14 +222,14 @@ function upNext(catalog: Catalog | undefined, recent: StudyProgress[]): UpNext |
 	return null;
 }
 
-/** Up next: the lesson to study next, lit like a reading lamp over its 16:9 frame. */
+/** The next unfinished lesson and its course progress. */
 function ResumeCard({ next, profile }: { next: UpNext | null; profile: string }) {
 	const look = useStore(appearanceStore);
 	if (!next || !look.showContinue) return null;
 	const { courseId, course, lesson, index, lessons, done, position } = next;
 	return (
-		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="lamp-pool grid gap-6 rounded-[18px] p-4 sm:grid-cols-[minmax(0,520px)_minmax(0,1fr)] sm:items-center sm:gap-9 sm:p-7">
-			<div className="relative aspect-video overflow-hidden rounded-xl border border-[var(--study-rule)]" aria-hidden="true">
+		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="grid rounded-xl border border-[var(--study-rule)] bg-card p-4 sm:grid-cols-[minmax(0,520px)_minmax(0,1fr)] sm:items-center sm:gap-9 sm:p-7">
+			<div className="relative hidden aspect-video overflow-hidden rounded-xl border border-[var(--study-rule)] sm:block" aria-hidden="true">
 				<CourseCover course={course} profile={profile} eager done={done} total={lessons.length} className="size-full rounded-none ring-0" />
 			</div>
 			<div className="min-w-0">
@@ -239,15 +238,15 @@ function ResumeCard({ next, profile }: { next: UpNext | null; profile: string })
 					<span>{course.title}</span>
 					<span className="tabular-nums">{tr(`Lesson ${index + 1} of ${lessons.length}`, `Aula ${index + 1} de ${lessons.length}`)}</span>
 				</p>
-				<h2 className="mt-2.5 text-3xl font-semibold tracking-tight text-balance sm:text-[38px] sm:leading-[1.05]">{lesson.title}</h2>
+				<h2 className="mt-2 text-2xl font-semibold tracking-tight text-balance sm:mt-2.5 sm:text-[38px] sm:leading-[1.05]">{lesson.title}</h2>
 				{position !== null && position > 0 && <p className="mt-3 max-w-[42ch] text-sm text-muted-foreground">{tr(`You stopped at ${formatDuration(position)}.`, `Você parou em ${formatDuration(position)}.`)}</p>}
-				<div className="mt-5 flex flex-wrap gap-2.5">
+				<div className="mt-4 flex flex-wrap gap-2.5 sm:mt-5">
 					<Link to={routerPath(href('course', courseId, lesson.path, position))} className={buttonVariants({ className: 'font-semibold' })}>
 						<Play className="size-4 fill-current" aria-hidden="true" />{position ? tr(`Resume at ${formatDuration(position)}`, `Retomar em ${formatDuration(position)}`) : tr('Start lesson', 'Começar aula')}
 					</Link>
 					<Link to={routerPath(href('course', courseId))} className={buttonVariants({ variant: 'outline' })}>{tr('Open course', 'Abrir curso')}</Link>
 				</div>
-				<LessonSegments className="mt-6 max-w-[300px]" done={done} total={lessons.length} current={index} />
+				<LessonSegments className="mt-4 max-w-[300px] sm:mt-6" done={done} total={lessons.length} current={index} />
 			</div>
 		</section>
 	);
@@ -553,9 +552,8 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 			<Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) { setImportError(''); importCourse.reset(); } }}>
 				<DialogContent className="sm:max-w-lg">
 					<DialogHeader>
-						<DialogTitle className="font-serif text-2xl">{tr('Import a course', 'Importar um curso')}</DialogTitle>
-						<DialogDescription>{tr('Point LearnVault at a folder you already own. Your files are read, never moved, renamed or changed.', 'Aponte o LearnVault para uma pasta que você já tem. Seus arquivos são lidos, nunca movidos, renomeados ou alterados.')}</DialogDescription>
-						<Motto name="adFontes" />
+						<DialogTitle className="text-2xl">{tr('Import a course', 'Importar um curso')}</DialogTitle>
+						<DialogDescription>{tr('Choose a folder for this course. Your files are never moved, renamed or changed.', 'Escolha a pasta do curso. Seus arquivos não serão movidos, renomeados nem alterados.')}</DialogDescription>
 					</DialogHeader>
 					<form onSubmit={submit} className="space-y-4">
 						<div className="space-y-2">
@@ -579,14 +577,13 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (message: string) => void }) {
 	return (
 		<div className="mx-auto max-w-xl space-y-5 rounded-2xl border border-dashed p-8 text-center sm:p-12">
-			<p className="font-serif text-2xl font-semibold text-balance">{tr('Bring in the courses you already have', 'Traga os cursos que você já tem')}</p>
+			<p className="text-2xl font-semibold text-balance">{tr('Bring in the courses you already have', 'Traga os cursos que você já tem')}</p>
 			<p className="text-muted-foreground">
 				{isAdmin
-					? tr('Pick a folder of videos and documents. LearnVault builds the lessons, remembers where you stopped and never touches your files.', 'Escolha uma pasta de vídeos e documentos. O LearnVault monta as aulas, lembra onde você parou e nunca mexe nos seus arquivos.')
+					? tr('Import a folder with videos or documents. Your files stay where they are.', 'Importe uma pasta com vídeos ou documentos. Seus arquivos ficam onde estão.')
 					: tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
 			</p>
 			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions onMessage={onMessage} /></div>}
-			<Motto name="archeHemisy" />
 		</div>
 	);
 }

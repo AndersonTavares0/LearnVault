@@ -130,10 +130,10 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 		<div className="space-y-8">
 			<section
 				data-course-hero
-				className="relative grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-4 gap-y-5 border-b border-[var(--study-rule)] pb-8 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-x-10 lg:bg-[radial-gradient(50%_60%_at_78%_40%,var(--glow),transparent_70%)] lg:pt-2"
+				className="relative grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-4 gap-y-5 border-b border-[var(--study-rule)] pb-8 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-x-10 lg:pt-2"
 			>
 				<div className="row-start-1 col-start-1 lg:col-start-2 lg:row-span-3">
-					<CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} compact className="aspect-video" />
+					<CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} className="aspect-video" />
 				</div>
 				<div className="col-start-2 row-start-1 min-w-0 space-y-3 lg:col-start-1">
 					<p className="text-[13px] text-muted-foreground">
