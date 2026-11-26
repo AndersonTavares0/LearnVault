@@ -24,10 +24,12 @@ describe('course page', () => {
 	it('shows progress, resumes the last lesson and lists modules with per-lesson state', async () => {
 		renderApp('/course/rust', { catalog, recent: [{ mediaId: 'borrow.mp4', positionSeconds: 70, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		expect(await screen.findByRole('heading', { level: 1, name: 'Rust from zero' })).toBeTruthy();
-		expect(screen.getByRole('progressbar', { name: '1 of 2 lessons completed (50%)' })).toBeTruthy();
-		expect(screen.getByRole('link', { name: /^Resume Borrowing/ }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
-		expect(screen.getByText('Next module')).toBeTruthy();
-		expect(screen.getByText('2 lessons')).toBeTruthy();
+		expect(screen.getByRole('progressbar', { name: '1 of 2 lessons done' })).toBeTruthy();
+		expect(screen.getByRole('link', { name: 'Resume Borrowing at 1:10' }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
+		expect(screen.getByText('Resume at 1:10')).toBeTruthy();
+		expect(screen.getByText('Done')).toBeTruthy();
+		expect(screen.getByText('1 of 2 done')).toBeTruthy();
+		expect(screen.getByRole('group', { name: 'Course at a glance' }).textContent).toContain('2 lessons');
 		expect(screen.getByRole('button', { name: 'Mark “Ownership” as not completed' }).getAttribute('aria-pressed')).toBe('true');
 		expect(screen.getByRole('link', { name: /^Borrowing/ }).hasAttribute('aria-current')).toBe(false);
 		expect(screen.getByText('Missing media')).toBeTruthy();
@@ -89,7 +91,7 @@ describe('course page', () => {
 		const withCover: Catalog = { complete: true, looseFiles: [], nodes: [{ ...catalog.nodes[0], coverVersion: 3 }] };
 		renderApp('/course/rust', { catalog: withCover });
 		const heading = await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
-		const hero = heading.closest('[data-panel]')!;
+		const hero = heading.closest('[data-course-hero]')!;
 		const covers = hero.querySelectorAll<HTMLImageElement>('img[src*="/cover"]');
 		expect(covers).toHaveLength(1);
 		expect(within(hero as HTMLElement).getByText('RF')).toBeTruthy();
