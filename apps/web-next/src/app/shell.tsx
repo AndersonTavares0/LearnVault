@@ -1,7 +1,9 @@
 import { BookOpen, KeyRound, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
+import { routerPath } from '@/components/course-card';
+import { CourseCover } from '@/components/course-cover';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { GlobalSearch } from '@/components/global-search';
 import { IndexingIndicator } from '@/components/indexing-indicator';
@@ -14,13 +16,15 @@ import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore, resolveTheme, updateAppearance } from '@/lib/appearance';
 import { tr } from '@/lib/i18n';
+import { buildLibrary } from '@/lib/library';
+import { href } from '@/lib/router';
 import { focusSaved, focusSync, retryFocusSessions, setFocusOutboxScope } from '@/lib/pomodoro-store';
 import { playerPreferencesScope } from '@/lib/player-preferences';
 import { progressOutbox, setProgressOutboxScope } from '@/lib/progress-outbox';
 import { SESSION_EXPIRED_EVENT } from '@/lib/session-guard';
 import { transportKind } from '@/lib/transport';
 import { cn } from '@/lib/utils';
-import { keys, useSession, useSignOut } from './data';
+import { keys, useCatalog, useRecent, useSession, useSignOut } from './data';
 import { clearUserLocalData, safeStorage } from './preferences';
 
 const navItems = () => [
@@ -30,9 +34,13 @@ const navItems = () => [
 	{ to: '/notes', label: tr('Notes', 'Notas'), icon: NotebookPen }
 ];
 
+/** The shortcut GlobalSearch listens for, labelled for the platform. */
+const searchShortcut = () => (/Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ? '⌘K' : 'Ctrl K');
+
 /**
- * App frame (docs/design/redesign.md, "Navigation"): topbar with the global destinations,
- * search and account menu; on phones a bottom tab bar replaces the topbar links.
+ * App frame (docs/design/redesign.md, "Navigation"): on phones and tablets a top bar with search
+ * and account menu, plus a bottom tab bar. From lg the same header becomes a left rail with the
+ * destinations, search, courses in progress and the account controls at its foot.
  * Server builds require a session; the desktop build has a local identity.
  */
 /**
@@ -128,32 +136,45 @@ export function AppShell() {
 			<DocumentLock />
 			<SkipLink />
 			<DesktopTitlebar />
-			<header className="shrink-0 border-b border-[var(--study-rule)] bg-background/95 print:hidden">
-				<div className="mx-auto flex h-16 max-w-[var(--container-max,88rem)] items-center gap-x-3 px-4 sm:gap-x-8 sm:px-10">
-					<Link to="/" className="inline-flex min-h-11 items-center rounded-md font-heading text-xl font-bold tracking-tight sm:text-2xl" aria-label={tr('LearnVault home', 'Início do LearnVault')}>LearnVault</Link>
-					{!locked && <nav aria-label={tr('Main', 'Principal')} className="hidden h-full flex-1 justify-center gap-1 sm:gap-2 lg:flex">
-						{navItems().map((item) => (
-							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex h-full min-h-11 items-center border-b-2 px-3 text-[0.9375rem] font-medium whitespace-nowrap transition-colors duration-150', isActive ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:border-[var(--study-rule)] hover:text-foreground')}>
-								{item.label}
-							</NavLink>
-						))}
-					</nav>}
-					<div className="ml-auto flex items-center gap-1 lg:ml-0">
-						{!locked && <GlobalSearch />}
-						{!locked && <FocusMenu />}
-						<ThemeToggle />
-						<AccountMenu username={user.username} userId={user.userId} />
+			<div className="flex min-h-0 flex-1 flex-col lg:flex-row print:block">
+				<header className="shrink-0 border-b border-[var(--study-rule)] bg-background/95 lg:w-[236px] lg:border-r lg:border-b-0 lg:bg-sidebar print:hidden">
+					<div className="mx-auto flex h-16 max-w-[var(--container-max,88rem)] items-center gap-x-3 px-4 sm:gap-x-8 sm:px-10 lg:h-full lg:max-w-none lg:flex-col lg:items-stretch lg:gap-1 lg:px-3 lg:py-4">
+						<Link to="/" className="inline-flex min-h-11 items-center rounded-md font-heading text-xl font-bold tracking-tight sm:text-2xl lg:min-h-0 lg:px-2.5 lg:pt-1 lg:pb-3.5 lg:text-base lg:font-semibold" aria-label={tr('LearnVault home', 'Início do LearnVault')}>LearnVault</Link>
+						{!locked && (
+							<div className="relative lg:[&_input]:pr-14">
+								<GlobalSearch />
+								<kbd aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-md border border-border px-1.5 font-sans text-[11px] text-muted-foreground lg:block">{searchShortcut()}</kbd>
+							</div>
+						)}
+						{!locked && (
+							<nav aria-label={tr('Main', 'Principal')} className="hidden flex-col gap-0.5 lg:flex">
+								{navItems().map((item) => (
+									<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('flex h-8 items-center gap-2.5 rounded-[7px] px-2.5 text-sm font-medium whitespace-nowrap transition-colors duration-150 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', isActive ? 'bg-foreground/[0.08] font-semibold text-foreground' : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground')}>
+										<item.icon className="size-4 shrink-0 opacity-80" aria-hidden="true" />
+										{item.label}
+									</NavLink>
+								))}
+							</nav>
+						)}
+						{!locked && <InProgress profile={user.userId} />}
+						<div className="ml-auto flex items-center gap-1 lg:mt-auto lg:ml-0 lg:w-full lg:gap-0.5 lg:border-t lg:border-[var(--study-rule)] lg:pt-2.5">
+							{!locked && <FocusMenu />}
+							<ThemeToggle />
+							<AccountMenu username={user.username} userId={user.userId} />
+						</div>
 					</div>
+				</header>
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+					{locked ? <CredentialsBanner /> : (
+						<>
+							<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
+							<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
+						</>
+					)}
+					<MainContent pathname={location.pathname} />
 				</div>
-			</header>
-			{locked ? <CredentialsBanner /> : (
-				<>
-					<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
-					<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
-				</>
-			)}
-			<MainContent pathname={location.pathname} />
-			{!locked && <MobileTabs />}
+				{!locked && <MobileTabs />}
+			</div>
 		</div>
 	);
 }
@@ -190,7 +211,7 @@ function SkipLink() {
 	);
 }
 
-function AccountMenu({ username, userId, wide }: { username: string; userId: string; wide?: boolean }) {
+function AccountMenu({ username, userId }: { username: string; userId: string }) {
 	useLocale();
 	const navigate = useNavigate();
 	const signOut = useSignOut();
@@ -200,8 +221,9 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 	return (
 		<>
 			<DropdownMenu>
-				<DropdownMenuTrigger render={wide ? <Button variant="ghost" className="min-w-0 flex-1 justify-start gap-2" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} /> : <Button variant="ghost" size="icon" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
-					<span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground" aria-hidden="true">{username.trim()[0]?.toUpperCase() ?? '?'}</span>{wide && <span className="truncate">{username}</span>}
+				<DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="lg:order-first lg:min-w-0 lg:flex-1 lg:justify-start lg:gap-2 lg:px-2" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
+					<span className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-muted text-sm font-bold text-foreground" aria-hidden="true">{username.trim()[0]?.toUpperCase() ?? '?'}</span>
+					<span className="hidden truncate text-sm font-medium lg:block">{username}</span>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-56">
 					{/* Base UI requires group labels inside a group. */}
@@ -245,6 +267,32 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 	);
 }
 
+/** The rail's quiet list: up to five started courses, most recently studied first. Desktop only; hidden when empty. */
+function InProgress({ profile }: { profile: string }) {
+	useLocale();
+	const catalog = useCatalog();
+	const recent = useRecent();
+	const courses = useMemo(() => buildLibrary({ catalog: catalog.data, recent: recent.data ?? [], favoriteCourseIds: new Set() }).entries
+		.filter((entry) => entry.status === 'in_progress')
+		.sort((a, b) => b.lastStudiedAt - a.lastStudiedAt)
+		.slice(0, 5), [catalog.data, recent.data]);
+	if (courses.length === 0) return null;
+	return (
+		<section aria-labelledby="rail-in-progress" className="hidden pt-4 lg:block">
+			<h2 id="rail-in-progress" className="px-2.5 pb-1.5 text-xs font-medium text-muted-foreground">{tr('In progress', 'Em andamento')}</h2>
+			<ul className="space-y-0.5">
+				{courses.map((entry) => (
+					<li key={entry.courseId}>
+						<Link to={routerPath(href('course', entry.courseId))} className="flex min-h-8 items-center gap-2.5 rounded-[7px] px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+							<CourseCover course={entry.course} profile={profile} compact className="aspect-video w-[34px] shrink-0 rounded-[4px] ring-0" />
+							<span className="min-w-0 truncate">{entry.course.title}</span>
+						</Link>
+					</li>
+				))}
+			</ul>
+		</section>
+	);
+}
 
 function MobileTabs() {
 	return (
@@ -270,13 +318,13 @@ function MobileTabs() {
 	);
 }
 
-/** Page title: clear display typography anchored by a quiet hairline, no decorative badge chrome. */
+/** Page title: display typography with no rule under it, so the lesson content leads. */
 export function PageHeader({ title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
 	return (
-		<div className={cn('mb-6 flex flex-wrap items-end justify-between gap-4 border-b border-[var(--study-rule)] pb-5', className)}>
-			<div className="min-w-0 space-y-1">
-				<h1 className="font-heading text-3xl font-semibold tracking-tight text-balance sm:text-[2.25rem] sm:leading-[1.1]">{title}</h1>
-				{description && <div className="text-sm text-muted-foreground sm:text-[0.9375rem]">{description}</div>}
+		<div className={cn('mb-6 flex flex-wrap items-end justify-between gap-4', className)}>
+			<div className="min-w-0 space-y-2">
+				<h1 className="font-heading text-[2rem] font-semibold tracking-tight text-balance sm:text-[2.5rem] leading-[1.05]">{title}</h1>
+				{description && <div className="text-sm text-muted-foreground">{description}</div>}
 			</div>
 			{actions && <div className="flex flex-wrap gap-2">{actions}</div>}
 		</div>
