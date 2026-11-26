@@ -18,7 +18,7 @@ type Item =
 const EMPTY: SearchResults = { notes: [], courses: [], lessons: [] };
 
 /**
- * Global search palette in the topbar. `/` and Ctrl/Cmd+K focus it, arrows move through
+ * Global search palette: the desktop rail field, or a full-screen sheet on phones. `/` and Ctrl/Cmd+K focus it, arrows move through
  * notes, courses and lessons, Enter opens the active result and Escape closes it.
  * Results render as text (snippets carry `<mark>` markers, never HTML).
  */
@@ -114,7 +114,7 @@ export function GlobalSearch() {
 	return (
 		<div ref={box} className={cn('relative', mobile
 			? 'fixed inset-0 z-50 flex flex-col bg-background p-4 lg:static lg:z-auto lg:block lg:w-44 lg:bg-transparent lg:p-0 xl:w-64 2xl:w-72'
-			: 'hidden w-44 lg:block lg:w-64 xl:w-72')}>
+			: 'hidden w-44 lg:block lg:w-full')}>
 			<div className="relative flex items-center">
 				<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
 				<Input
@@ -137,7 +137,7 @@ export function GlobalSearch() {
 				{mobile && <Button variant="ghost" size="icon" className="absolute top-0 right-0 lg:hidden" onClick={() => { close(); input.current?.blur(); }} aria-label={tr('Close search', 'Fechar busca')}><X /></Button>}
 			</div>
 			{showPanel && (
-				<div id="global-search-results" role="listbox" aria-label={tr('Search results', 'Resultados da busca')} className={cn('overflow-y-auto rounded-2xl border bg-popover p-2 shadow-lg', mobile ? 'mt-3 max-h-[calc(100dvh-6rem)]' : 'absolute top-full right-0 z-50 mt-2 max-h-[min(70vh,32rem)] w-[min(28rem,calc(100vw-2rem))]')}>
+				<div id="global-search-results" role="listbox" aria-label={tr('Search results', 'Resultados da busca')} className={cn('overflow-y-auto rounded-2xl border bg-popover p-2 shadow-lg', mobile ? 'mt-3 max-h-[calc(100dvh-6rem)]' : 'absolute top-full left-0 z-50 mt-2 max-h-[min(70vh,32rem)] w-[min(28rem,calc(100vw-2rem))]')}>
 					{search.isPending && <p role="status" className="px-3 py-4 text-sm text-muted-foreground">{tr('Searching…', 'Buscando…')}</p>}
 					{search.isError && <p role="alert" className="px-3 py-4 text-sm text-destructive">{tr('Search is unavailable right now.', 'A busca não está disponível agora.')}</p>}
 					{!search.isPending && !search.isError && total === 0 && <p role="status" className="px-3 py-4 text-sm text-muted-foreground">{tr(`No results for “${query.trim()}”.`, `Nenhum resultado para “${query.trim()}”.`)}</p>}

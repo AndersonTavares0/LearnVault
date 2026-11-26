@@ -3,8 +3,13 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { transport, type StudyNote } from '@/lib/transport';
+import { transport, type Catalog, type CatalogNode, type FileEntry, type StudyNote } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
+
+const media = (id: string): FileEntry => ({ name: `${id}.mp4`, path: `${id}.mp4`, size: 1, mediaId: id, kind: 'media', availability: 'available' });
+const lesson = (id: string, title: string): CatalogNode => ({ title, path: `m/${id}`, role: 'lesson', files: [media(id)], looseFiles: [], children: [] });
+const course = (id: string, title: string, lessons: CatalogNode[]): CatalogNode => ({ title, path: id, role: 'course', courseId: id, files: [], looseFiles: [], children: lessons });
+const catalog: Catalog = { complete: true, looseFiles: [], nodes: [course('rust', 'Rust from zero', [lesson('r1', 'Ownership'), lesson('r2', 'Borrowing')])] };
 
 afterEach(() => {
 	cleanup();
@@ -58,7 +63,7 @@ describe('app shell', () => {
 		renderApp('/');
 		const bar = screen.getByRole('banner');
 		const main = screen.getByRole('main');
-		const shell = bar.parentElement!;
+		const shell = bar.closest('.h-dvh')!;
 
 		expect(shell.className).toContain('h-dvh');
 		expect(shell.className).toContain('flex-col');
@@ -67,15 +72,50 @@ describe('app shell', () => {
 		expect(main.className).toContain('overflow-y-auto');
 		expect(main.className).toContain('min-h-0');
 
-		// The bar comes before the scroller and never sits inside it, so it cannot scroll away.
+		// The bar and the content are siblings, never nested, so the bar cannot scroll away.
 		expect(bar.contains(main)).toBe(false);
-		const order = Array.from(shell.children);
-		expect(order.indexOf(bar)).toBeLessThan(order.indexOf(main));
+		expect(shell.contains(main)).toBe(true);
+		expect(bar.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
 		// The phone tab bar floats over the bottom edge, so the scroller keeps both padding and
 		// scroll-padding clearance (including safe-area-inset-bottom) so focused controls stay visible.
 		expect(main.className).toContain('scroll-pb-[calc(4.5rem+env(safe-area-inset-bottom))]');
 		expect(main.firstElementChild?.className).toContain('pb-28');
+	});
+
+	it('turns the top bar into a left rail from lg with the destinations, search and account controls', () => {
+		renderApp('/');
+		const bar = screen.getByRole('banner');
+		expect(bar.className).toContain('lg:w-[236px]');
+		expect(bar.className).toContain('lg:bg-sidebar');
+		const rail = within(bar);
+		const nav = rail.getByRole('navigation', { name: 'Main' });
+		expect(within(nav).getByRole('link', { name: 'My learning' }).className).toContain('bg-muted font-semibold text-foreground');
+		expect(within(nav).getByRole('link', { name: 'Progress' }).className).not.toContain('font-semibold');
+		expect(rail.getByRole('combobox', { name: 'Search notes, courses and lessons' })).toBeTruthy();
+		expect(rail.getByRole('button', { name: 'Account: admin' })).toBeTruthy();
+		expect(rail.getByRole('link', { name: 'LearnVault home' })).toBeTruthy();
+	});
+
+	it('shows the platform search shortcut in the rail', () => {
+		renderApp('/');
+		expect(screen.getByText('Ctrl K', { selector: 'kbd' })).toBeTruthy();
+		cleanup();
+		vi.spyOn(navigator, 'userAgent', 'get').mockReturnValue('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)');
+		renderApp('/');
+		expect(screen.getByText('⌘K', { selector: 'kbd' })).toBeTruthy();
+	});
+
+	it('lists courses in progress in the rail and hides the group when none is started', () => {
+		renderApp('/', { catalog, recent: [{ mediaId: 'r1', positionSeconds: 95, completed: false, updatedAt: 2, recorded: true }] });
+		const rail = within(screen.getByRole('banner'));
+		expect(rail.getByRole('heading', { level: 2, name: 'In progress' })).toBeTruthy();
+		expect(rail.getByRole('link', { name: 'Rust from zero' }).getAttribute('href')).toContain('rust');
+	});
+
+	it('hides the in-progress group when no course has been started', () => {
+		renderApp('/', { catalog, recent: [] });
+		expect(screen.queryByRole('heading', { name: 'In progress' })).toBeNull();
 	});
 
 	it('locks the document only while the shell is on screen', () => {
