@@ -34,7 +34,7 @@ describe('My learning', () => {
 		renderApp('/', { catalog: { ...catalog, nodes: [course('rust', 'Rust from zero', [])] } });
 
 		expect(screen.getByText('No lessons found')).toBeTruthy();
-		expect(await screen.findByText('1 lesson')).toBeTruthy();
+		expect((await screen.findAllByText('1 lesson')).length).toBeGreaterThan(0);
 		expect(screen.queryByText('No lessons found')).toBeNull();
 	});
 

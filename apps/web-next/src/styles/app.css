@@ -207,10 +207,6 @@
   --stat-green-bg: #223026;
   --stat-green-border: #3A5440;
   --stat-green-ink: #8FC79A;
-  --cover-0: #2E3D35; --cover-1: #45342F; --cover-2: #323D49; --cover-3: #453D2E;
-}
-:root {
-  --cover-0: #DDE8DE; --cover-1: #EDDDD4; --cover-2: #DDE5EE; --cover-3: #EEE3C9;
 }
 
 /* Habit stats: scoped inside @layer components so Tailwind utility classes can override cleanly. */
