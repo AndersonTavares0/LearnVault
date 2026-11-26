@@ -71,6 +71,20 @@ describe('My learning', () => {
 		expect(screen.getAllByRole('progressbar', { name: '1 of 2 lessons done' }).length).toBeGreaterThan(0);
 	});
 
+	it('hands Up next to the next unfinished lesson once the last one is completed, and hides it when the course is done', async () => {
+		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 2, recorded: true }] });
+		const resume = await screen.findByRole('region', { name: 'Continue learning' });
+		expect(within(resume).getByRole('heading', { name: 'Borrowing' })).toBeTruthy();
+		expect(within(resume).getByText('Lesson 2 of 2')).toBeTruthy();
+		expect(within(resume).queryByText(/You stopped at/)).toBeNull();
+		expect(within(resume).getByRole('link', { name: 'Start lesson' }).getAttribute('href')).toBe('/course/rust/m%2Fr2');
+		cleanup();
+
+		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 2, recorded: true }, { mediaId: 'r2', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
+		await screen.findByRole('region', { name: 'Your library' });
+		expect(screen.queryByRole('region', { name: 'Continue learning' })).toBeNull();
+	});
+
 	it('filters by progress and offers to clear when nothing matches', async () => {
 		renderApp('/', { catalog, recent: [{ mediaId: 'a1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		const courses = await screen.findByRole('region', { name: 'Your library' });

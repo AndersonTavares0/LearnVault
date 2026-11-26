@@ -4,23 +4,25 @@ import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Motto } from '@/components/brand';
 import { CourseCover } from '@/components/course-cover';
-import { CourseCard, lessonPaths, routerPath } from '@/components/course-card';
+import { CourseCard, routerPath } from '@/components/course-card';
+import { lessonMediaId } from '@/components/curriculum';
 import { LessonSegments } from '@/components/lesson-segments';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { isLessonMissing } from '@/lib/catalog';
 import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore } from '@/lib/appearance';
 import { courseCategoriesStore } from '@/lib/course-categories';
 import { buildGamification } from '@/lib/gamification';
 import { tr } from '@/lib/i18n';
-import { buildLibrary, type CourseEntry, type LibraryFilter, type ResumeEntry } from '@/lib/library';
+import { buildLibrary, type CourseEntry, type LibraryFilter } from '@/lib/library';
 import { LIBRARY_VIEW_STORAGE_KEY, parseLibraryView, persistLibrarySort, persistLibraryView, readLibrarySort, type LibrarySort, type LibraryView } from '@/lib/library-view';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findLessonLocation, href, type LessonLocation } from '@/lib/router';
-import { isCredentialsChange, transportKind, type Catalog, type RewardSummary } from '@/lib/transport';
+import { courseIdOf, isCredentialsChange, transportKind, type Catalog, type CatalogNode, type RewardSummary, type StudyProgress } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { refreshMessage } from '@/lib/library-refresh';
 import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRewards, useSession } from '@/app/data';
@@ -94,7 +96,7 @@ export function HomePage() {
 	const resultsKey = JSON.stringify([view, query, filter, category, sort]);
 
 	const completedCourses = library.entries.filter((entry) => entry.status === 'completed').length;
-	const resume = !filtered && studySyncSupported && library.entries.length > 0 ? <ResumeCard items={library.resume} entries={library.entries} profile={profile} /> : null;
+	const resume = !filtered && studySyncSupported && library.entries.length > 0 ? <ResumeCard next={upNext(catalog.data, recent.data ?? [])} profile={profile} /> : null;
 	const pills = library.entries.length > 0 ? <FilterTabs counts={library.counts} filter={filter} onFilter={(value) => setParam('filter', value === 'all' ? null : value)} /> : null;
 	const search = (
 		<div role="search" className="relative min-w-0 flex-[1_1_15rem]">
@@ -109,11 +111,9 @@ export function HomePage() {
 			<div className="flex flex-wrap items-center justify-between gap-3">
 				<h1 className="text-2xl font-semibold tracking-tight">{tr('My learning', 'Meu aprendizado')}</h1>
 				{user?.isAdmin && library.entries.length > 0 && (
-					<div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-						<p role="status" aria-live="polite" className="order-last text-xs font-medium text-muted-foreground empty:hidden sm:order-first">{message}</p>
-						<div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
-							<LibraryActions onMessage={setMessage} />
-						</div>
+					<div className="flex flex-wrap items-center justify-end gap-2">
+						<p role="status" aria-live="polite" className="order-last w-full text-right text-xs font-medium text-muted-foreground empty:hidden sm:order-first sm:w-auto sm:text-left">{message}</p>
+						<LibraryActions onMessage={setMessage} />
 					</div>
 				)}
 			</div>
@@ -191,36 +191,65 @@ export function HomePage() {
 		);
 	}
 
-	/** Up next: the lesson to go back to, lit like a reading lamp over its 16:9 frame. */
-	function ResumeCard({ items, entries, profile }: { items: ResumeEntry[]; entries: CourseEntry[]; profile: string }) {
-		const look = useStore(appearanceStore);
-		const first = items[0];
-		if (!first || !look.showContinue) return null;
-		const entry = entries.find((course) => course.courseId === first.location.courseId);
-		const position = first.progress.positionSeconds;
-		const lessonIndex = entry ? lessonPaths(entry.course).indexOf(first.location.lesson.path) : -1;
-		return (
-			<section aria-label={tr('Continue learning', 'Continuar estudando')} className="lamp-pool grid gap-6 rounded-[18px] p-4 sm:grid-cols-[minmax(0,520px)_minmax(0,1fr)] sm:items-center sm:gap-9 sm:p-7">
-				<div className="relative aspect-video overflow-hidden rounded-xl border border-[var(--study-rule)]" aria-hidden="true">
-					{entry && <CourseCover course={entry.course} profile={profile} eager done={entry.done} total={entry.total} className="size-full rounded-none ring-0" />}
+/** Lessons of a course in order, as the course page counts them: playable lessons only. */
+const courseLessons = (course: CatalogNode): CatalogNode[] => {
+	const walk = (node: CatalogNode): CatalogNode[] => (node.role === 'lesson' ? [node] : node.children.flatMap(walk));
+	return walk(course).filter((node) => !isLessonMissing(node));
+};
+
+type UpNext = { courseId: string; course: CatalogNode; lesson: CatalogNode; index: number; lessons: CatalogNode[]; done: number; position: number | null };
+
+/**
+ * The lesson to study next. The newest study that is not finished resumes where it stopped; a
+ * finished lesson hands over to the next unfinished lesson of its course, as the course page does.
+ * Null when every studied course is complete, so the hero hides.
+ */
+function upNext(catalog: Catalog | undefined, recent: StudyProgress[]): UpNext | null {
+	if (!catalog) return null;
+	const completed = new Set(recent.filter((item) => item.completed).map((item) => item.mediaId));
+	const isDone = (node: CatalogNode) => completed.has(lessonMediaId(node) ?? '');
+	for (const item of recent) {
+		const location = findLessonLocation(catalog, item.mediaId);
+		const course = catalog.nodes.find((node) => courseIdOf(node) === location?.courseId);
+		if (!location || !course) continue;
+		const lessons = courseLessons(course);
+		const studied = lessons.findIndex((node) => node.path === location.lesson.path);
+		if (studied < 0) continue;
+		const done = lessons.filter(isDone).length;
+		const index = !item.completed ? studied : [...lessons.keys()].find((i) => i > studied && !isDone(lessons[i])) ?? lessons.findIndex((node) => !isDone(node));
+		if (index < 0) continue;
+		return { courseId: courseIdOf(course), course, lesson: lessons[index], index, lessons, done, position: !item.completed ? item.positionSeconds : null };
+	}
+	return null;
+}
+
+/** Up next: the lesson to study next, lit like a reading lamp over its 16:9 frame. */
+function ResumeCard({ next, profile }: { next: UpNext | null; profile: string }) {
+	const look = useStore(appearanceStore);
+	if (!next || !look.showContinue) return null;
+	const { courseId, course, lesson, index, lessons, done, position } = next;
+	return (
+		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="lamp-pool grid gap-6 rounded-[18px] p-4 sm:grid-cols-[minmax(0,520px)_minmax(0,1fr)] sm:items-center sm:gap-9 sm:p-7">
+			<div className="relative aspect-video overflow-hidden rounded-xl border border-[var(--study-rule)]" aria-hidden="true">
+				<CourseCover course={course} profile={profile} eager done={done} total={lessons.length} className="size-full rounded-none ring-0" />
+			</div>
+			<div className="min-w-0">
+				<p className="flex flex-wrap gap-x-3.5 text-[13px] text-muted-foreground">
+					<span>{tr('Up next', 'A seguir')}</span>
+					<span>{course.title}</span>
+					<span className="tabular-nums">{tr(`Lesson ${index + 1} of ${lessons.length}`, `Aula ${index + 1} de ${lessons.length}`)}</span>
+				</p>
+				<h2 className="mt-2.5 text-3xl font-semibold tracking-tight text-balance sm:text-[38px] sm:leading-[1.05]">{lesson.title}</h2>
+				{position !== null && position > 0 && <p className="mt-3 max-w-[42ch] text-sm text-muted-foreground">{tr(`You stopped at ${formatDuration(position)}.`, `Você parou em ${formatDuration(position)}.`)}</p>}
+				<div className="mt-5 flex flex-wrap gap-2.5">
+					<Link to={routerPath(href('course', courseId, lesson.path, position))} className={buttonVariants({ className: 'font-semibold' })}>
+						<Play className="size-4 fill-current" aria-hidden="true" />{position ? tr(`Resume at ${formatDuration(position)}`, `Retomar em ${formatDuration(position)}`) : tr('Start lesson', 'Começar aula')}
+					</Link>
+					<Link to={routerPath(href('course', courseId))} className={buttonVariants({ variant: 'outline' })}>{tr('Open course', 'Abrir curso')}</Link>
 				</div>
-				<div className="min-w-0">
-					<p className="flex flex-wrap gap-x-3.5 text-[13px] text-muted-foreground">
-						<span>{tr('Up next', 'A seguir')}</span>
-						{entry && <span>{first.location.courseTitle}</span>}
-						{entry && lessonIndex >= 0 && <span className="tabular-nums">{tr(`Lesson ${lessonIndex + 1} of ${entry.total}`, `Aula ${lessonIndex + 1} de ${entry.total}`)}</span>}
-					</p>
-					<h2 className="mt-2.5 text-3xl font-semibold tracking-tight text-balance sm:text-[38px] sm:leading-[1.05]">{first.location.lesson.title}</h2>
-					{position > 0 && <p className="mt-3 max-w-[42ch] text-sm text-muted-foreground">{tr(`You stopped at ${formatDuration(position)}.`, `Você parou em ${formatDuration(position)}.`)}</p>}
-					<div className="mt-5 flex flex-wrap gap-2.5">
-						<Link to={routerPath(href('course', first.location.courseId, first.location.lesson.path, position))} className={buttonVariants({ className: 'min-h-11 font-semibold' })}>
-							<Play className="size-4 fill-current" aria-hidden="true" />{position > 0 ? tr(`Resume at ${formatDuration(position)}`, `Retomar em ${formatDuration(position)}`) : tr('Start lesson', 'Começar aula')}
-						</Link>
-						<Link to={routerPath(href('course', first.location.courseId))} className={buttonVariants({ variant: 'outline', className: 'min-h-11' })}>{tr('Open course', 'Abrir curso')}</Link>
-					</div>
-					{entry && entry.total > 0 && <LessonSegments className="mt-6 max-w-[300px]" done={entry.done} total={entry.total} current={lessonIndex >= 0 ? lessonIndex : undefined} />}
-				</div>
-			</section>
+				<LessonSegments className="mt-6 max-w-[300px]" done={done} total={lessons.length} current={index} />
+			</div>
+		</section>
 	);
 }
 
@@ -459,21 +488,21 @@ function Filters(props: { categories: string[]; category: string | null; onCateg
 			{props.categories.length > 1 && (
 				<div className="min-w-0 max-w-full">
 					<Label htmlFor="category" className="sr-only">{tr('Category', 'Categoria')}</Label>
-					<select id="category" value={props.category ?? ''} onChange={(event) => props.onCategory(event.target.value || null)} className="h-11 max-w-full rounded-[var(--radius)] border border-[var(--study-rule)] bg-transparent px-2.5 text-sm focus-visible:outline-2 focus-visible:outline-ring sm:h-8">
+					<select id="category" value={props.category ?? ''} onChange={(event) => props.onCategory(event.target.value || null)} className="h-11 max-w-full rounded-[var(--radius)] border border-[var(--study-rule)] bg-transparent px-2 text-xs focus-visible:outline-2 focus-visible:outline-ring sm:h-8 sm:px-2.5 sm:text-sm">
 						<option value="">{tr('All categories', 'Todas as categorias')}</option>
 						{props.categories.map((name) => <option key={name} value={name}>{name}</option>)}
 					</select>
 				</div>
 			)}
 			<Label htmlFor="sort" className="sr-only">{tr('Sort', 'Ordenar')}</Label>
-			<select id="sort" value={props.sort} onChange={(event) => props.onSort(event.target.value as LibrarySort)} className="h-11 max-w-full rounded-[var(--radius)] border border-[var(--study-rule)] bg-transparent px-2.5 text-sm focus-visible:outline-2 focus-visible:outline-ring sm:h-8">
+			<select id="sort" value={props.sort} onChange={(event) => props.onSort(event.target.value as LibrarySort)} className="h-11 max-w-full rounded-[var(--radius)] border border-[var(--study-rule)] bg-transparent px-2 text-xs focus-visible:outline-2 focus-visible:outline-ring sm:h-8 sm:px-2.5 sm:text-sm">
 				<option value="recent">{tr('Sort: Recent', 'Ordem: Recentes')}</option>
 				<option value="title">{tr('Sort: Title A–Z', 'Ordem: Título A–Z')}</option>
 				<option value="progress">{tr('Sort: Progress', 'Ordem: Progresso')}</option>
 			</select>
-			<div role="group" aria-label={tr('View', 'Visualização')} className="flex max-w-full flex-wrap items-center gap-0.5 rounded-[var(--radius)] border border-[var(--study-rule)] p-0.5">
+			<div role="group" aria-label={tr('View', 'Visualização')} className="ml-auto flex max-w-full flex-wrap items-center gap-0.5 rounded-[var(--radius)] border border-[var(--study-rule)] p-0.5 sm:ml-0">
 				{views.map(([value, label]) => (
-					<button key={value} type="button" aria-pressed={props.view === value} onClick={() => props.onView(value)} className={cn('inline-flex min-h-11 min-w-11 items-center justify-center rounded-[calc(var(--radius)-2px)] px-2.5 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none sm:min-h-7 sm:px-2.5 sm:text-[13px]', props.view === value ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground')}>{label}</button>
+					<button key={value} type="button" aria-pressed={props.view === value} onClick={() => props.onView(value)} className={cn('inline-flex min-h-11 min-w-11 items-center justify-center rounded-[calc(var(--radius)-2px)] px-2 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none sm:min-h-7 sm:px-2.5 sm:text-[13px]', props.view === value ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground')}>{label}</button>
 				))}
 			</div>
 		</>
@@ -511,11 +540,15 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 
 	return (
 		<>
-			<Button variant="outline" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
-				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />{tr('Refresh courses', 'Atualizar cursos')}
+			<Button variant="outline" aria-label={tr('Refresh courses', 'Atualizar cursos')} className="px-3 sm:px-4" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
+				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />
+				<span className="hidden sm:inline">{tr('Refresh courses', 'Atualizar cursos')}</span>
+				<span className="sm:hidden" aria-hidden="true">{tr('Refresh', 'Atualizar')}</span>
 			</Button>
-			<Button variant="outline" disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
-				<FolderPlus />{tr('Import course', 'Importar curso')}
+			<Button variant="outline" aria-label={tr('Import course', 'Importar curso')} className="px-3 sm:px-4" disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
+				<FolderPlus />
+				<span className="hidden sm:inline">{tr('Import course', 'Importar curso')}</span>
+				<span className="sm:hidden" aria-hidden="true">{tr('Import', 'Importar')}</span>
 			</Button>
 			<Dialog open={importOpen} onOpenChange={(open) => { setImportOpen(open); if (!open) { setImportError(''); importCourse.reset(); } }}>
 				<DialogContent className="sm:max-w-lg">
