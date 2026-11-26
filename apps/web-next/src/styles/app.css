@@ -616,3 +616,21 @@ html[data-app-shell], html[data-app-shell] body { height: 100%; overflow: hidden
   .lamp-pool { background-image: radial-gradient(70% 120% at 28% 40%, var(--glow), transparent 70%); }
   .lamp-pool-center { background-image: radial-gradient(55% 60% at 50% 42%, var(--glow), transparent 75%); }
 }
+
+/* Lesson focus mode: the course rail and the app header step back so the lamp stays on the player. Presentation only. */
+.lesson-rail {
+  transition: opacity 200ms ease;
+}
+:root:has([data-lesson-focus='on']) :is(header.shrink-0, nav[aria-label='Sections']) {
+  transition: opacity 200ms ease;
+}
+:root:has([data-lesson-focus='on']) :is(header.shrink-0, nav[aria-label='Sections']),
+[data-lesson-focus='on'] .lesson-rail {
+  opacity: 0.25;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lesson-rail,
+  :root:has([data-lesson-focus='on']) :is(header.shrink-0, nav[aria-label='Sections']) {
+    transition: none;
+  }
+}

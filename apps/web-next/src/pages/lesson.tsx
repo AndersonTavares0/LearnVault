@@ -1,20 +1,18 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CircleCheck, Circle, Clock, FileText, PenLine, Search, SquarePlus, type LucideIcon } from 'lucide-react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronLeft, ChevronRight, CircleCheck, Circle, FileText, Focus, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { safeStorage } from '@/app/preferences';
 import { Curriculum } from '@/components/curriculum';
 import { Materials } from '@/components/materials';
-import { NoteEditor } from '@/components/note-editor';
 import { BreakOverlay } from '@/components/player/break-overlay';
 import { Bookmarks } from '@/components/player/bookmarks';
 import { Flashcards } from '@/components/player/flashcards';
 import { PdfReader } from '@/components/player/pdf-reader';
 import { MediaPlayer, type PlayerHandle } from '@/components/player/media-player';
-import { lessonNotesKey, StudyNotes, useLessonNotes } from '@/components/player/study-notes';
+import { StudyNotes, useLessonNotes } from '@/components/player/study-notes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { usePlayerPreferences } from '@/hooks/use-player-preferences';
 import { useLocale } from '@/hooks/use-locale';
@@ -22,7 +20,6 @@ import { usePageTitle } from '@/hooks/use-page-title';
 import { useStore } from '@/hooks/use-store';
 import { courseProgress, lessonStudyMediaId } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
-import { plainTextMarkdown } from '@/lib/markdown';
 import { lessonSequence, neighboringLessons } from '@/lib/navigation';
 import { findLessonPdf, formatFileSize } from '@/lib/pdf';
 import { findLessonText, loadText } from '@/lib/text-lesson';
@@ -41,9 +38,9 @@ const path = (hash: string) => hash.replace(/^#/, '');
 const AUTO_NEXT_SECONDS = 5;
 
 /**
- * Lesson page, laid out as a study workspace: the media on the left; on the right the focus
- * timer and a panel with Notes, Cards, Lessons and Materials, so what you write and the
- * course map stay beside the video. When a focus block ends the lesson pauses and a break
+ * Lesson page, laid out as a study workspace: the player and its title on the left; a rail on
+ * the right with Notes (and timestamps), Cards and Contents (course map and materials), so what
+ * you write and the course map stay beside the video. Focus mode dims everything but the player. When a focus block ends the lesson pauses and a break
  * screen covers the video (docs/design/redesign.md, "Player").
  */
 export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNode; courseId: string; lessonPath: string }) {
@@ -59,7 +56,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const setCompleted = useSetLessonCompleted();
 	const player = useRef<PlayerHandle | null>(null);
 	const [time, setTime] = useState(0);
-	const [tab, setTab] = useState('lessons');
+	const [tab, setTab] = useState('notes');
+	const [focus, setFocus] = useState(false);
 	// Cinema gives the picture the whole width; the course content can also be hidden. Both are remembered.
 	const [cinema, setCinema] = useStoredFlag('learnvault-cinema', false);
 	const [contentOpen, setContentOpen] = useStoredFlag('learnvault-lesson-content', true);
@@ -67,8 +65,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const needle = normalizeForSearch(find.trim());
 	const found = useMemo(() => (needle ? filterLessons(course.children, needle) : course.children), [course.children, needle]);
 	const wide = cinema || !contentOpen;
-	const [quickNote, setQuickNote] = useState<{ position: number; content: string } | null>(null);
-	const [cardRequest, setCardRequest] = useState(0);
+	const [noteRequest, setNoteRequest] = useState(0);
 	const [cardSeed, setCardSeed] = useState<{ key: number; back: string; position: number | null } | null>(null);
 	const [breakPhase, setBreakPhase] = useState<'break' | 'over' | null>(null);
 	const timer = useStore(pomodoro);
@@ -155,17 +152,6 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 
 	const lessonNotes = useLessonNotes(mediaId);
 	const noteCount = lessonNotes.data?.length ?? 0;
-	const createQuickNote = useMutation({
-		mutationFn: (note: { position: number; content: string }) => transport.createNote(mediaId!, note.position, note.content),
-		onSuccess: () => {
-			setQuickNote(null);
-			if (!mediaId) return;
-			void Promise.all([
-				client.invalidateQueries({ queryKey: lessonNotesKey(mediaId) }),
-				client.invalidateQueries({ queryKey: ['notes'], exact: true })
-			]);
-		}
-	});
 	const goTo = (target: string) => navigate(path(href('course', courseId, target)));
 	const finished = (id: string) => {
 		if (studySyncSupported) setCompleted.mutate({ mediaId: id, completed: true }, { onSuccess: (updated) => client.setQueryData(['progress', id], updated) });
@@ -177,7 +163,6 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	if (shownLesson !== lessonPath) {
 		setShownLesson(lessonPath);
 		setCountdown(null);
-		setQuickNote(null);
 		setTime(0);
 	}
 
@@ -208,6 +193,13 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 		if (breakPhase === 'break') player.current?.pause();
 	}, [breakPhase]);
 
+	useEffect(() => {
+		if (!focus) return;
+		const leave = (event: globalThis.KeyboardEvent) => { if (event.key === 'Escape') setFocus(false); };
+		document.addEventListener('keydown', leave);
+		return () => document.removeEventListener('keydown', leave);
+	}, [focus]);
+
 	const missingTitle = tr('Lesson not found', 'Aula não encontrada');
 	const genericLessonName = lesson && /^(lesson|aula)(\s+\d+)?$/i.test(lesson.title.trim());
 	const displayTitle = lesson ? (genericLessonName && location?.moduleTitle ? location.moduleTitle : lesson.title) : missingTitle;
@@ -228,40 +220,41 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const hasCards = studySyncSupported && Boolean(mediaId);
 	// Notes are tied to a moment in time, so a PDF lesson has cards but no timed notes.
 	const hasNotes = hasCards && !pdf;
-	const activeTab = (tab === 'notes' && !hasNotes) || (tab === 'bookmarks' && !hasNotes) || (tab === 'cards' && !hasCards) ? 'lessons' : tab;
+	const activeTab = (tab === 'notes' && !hasNotes) || (tab === 'cards' && !hasCards) ? 'contents' : tab;
 	const openNotes = () => {
 		if (hasNotes) {
-			setQuickNote((current) => current ?? { position: Math.floor(time), content: '' });
+			setTab('notes');
+			setNoteRequest((value) => value + 1);
 		}
 	};
 	const closeBreak = () => setBreakPhase(null);
 
-	const displayBreadcrumb = genericLessonName && location?.moduleTitle ? course.title : (location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title);
+	const moduleTitle = location?.moduleTitle && !genericLessonName ? location.moduleTitle : null;
+	const materialCount = lesson.materials.length + lesson.subtitles.length;
 	return (
-		<div>
-			<header className="mb-4 border-b border-[var(--study-rule)] pb-4 sm:mb-6">
-				<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-					<div className="min-w-0 space-y-1">
-						<Link to={path(href('course', courseId))} className="inline-flex min-h-11 max-w-full items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground">
-							<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="min-w-0 max-w-[28rem] truncate">{displayBreadcrumb}</span>
-						</Link>
-						<h1 className="font-heading text-3xl leading-tight font-semibold text-balance sm:text-4xl">{displayTitle}</h1>
-					</div>
-					<div className="flex flex-wrap items-center gap-2">
-						{position >= 0 && <span className="study-timecode mr-2 text-muted-foreground">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</span>}
-						<Button variant="outline" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
-						<Button variant="outline" disabled={!next} title={tr('Jump to the next lesson without marking this one completed', 'Ir para a próxima aula sem marcar esta como concluída')} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
-						{cinema && (
-							<Button variant="secondary" onClick={() => setCinema(false)}>{tr('Exit cinema', 'Sair do cinema')}</Button>
-						)}
-						<Button variant="outline" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
-					</div>
+		<div data-lesson-focus={focus ? 'on' : undefined} className="space-y-5">
+			<header className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+				<nav aria-label={tr('Breadcrumb', 'Caminho')} className="flex min-w-0 items-center gap-1.5 text-sm">
+					<Link to={path(href('course', courseId))} className="inline-flex min-h-11 min-w-0 items-center gap-1 font-medium text-muted-foreground hover:text-foreground">
+						<ChevronLeft className="size-4 shrink-0" aria-hidden="true" /><span className="truncate">{course.title}</span>
+					</Link>
+					{moduleTitle && <><span aria-hidden="true" className="text-muted-foreground/60">/</span><span className="truncate text-muted-foreground">{moduleTitle}</span></>}
+				</nav>
+				<div className="flex flex-wrap items-center gap-2">
+					<Button variant="outline" aria-pressed={focus} onClick={() => setFocus(!focus)}><Focus />{tr('Focus', 'Foco')}</Button>
+					<Button variant="outline" disabled={!previous} onClick={() => previous && goTo(previous.path)}><ChevronLeft />{tr('Previous', 'Anterior')}</Button>
+					<Button variant="outline" disabled={!next} title={tr('Jump to the next lesson without marking this one completed', 'Ir para a próxima aula sem marcar esta como concluída')} onClick={() => next && goTo(next.path)}>{tr('Next', 'Próxima')}<ChevronRight /></Button>
+					{cinema && (
+						<Button variant="secondary" onClick={() => setCinema(false)}>{tr('Exit cinema', 'Sair do cinema')}</Button>
+					)}
+					<Button variant="outline" aria-pressed={contentOpen} onClick={() => setContentOpen(!contentOpen)} aria-label={contentOpen ? tr('Hide contents', 'Ocultar conteúdo') : tr('Show contents', 'Mostrar conteúdo')}>{tr('Contents', 'Conteúdo')}</Button>
 				</div>
 			</header>
 
-			<div className={cn('grid gap-6', !wide && 'lg:grid-cols-[minmax(0,1fr)_22rem] [:root[data-sidebar=left]_&]:lg:grid-cols-[22rem_minmax(0,1fr)]')}>
-				<div className="min-w-0 space-y-4">
-					<div className={cn('relative', cinema && 'rounded-[var(--radius-lg)] bg-[#141210] p-2 sm:p-5')}>
+			<div className={cn('grid gap-x-8 gap-y-6', !wide && 'lg:grid-cols-[minmax(0,1fr)_372px]')}>
+				{/* The lamp sits behind the player: the one thing to study now. Phones get the picture edge to edge. */}
+				<div className="lamp-pool-center min-w-0 space-y-5">
+					<div className={cn('relative max-sm:-mx-5', cinema && 'rounded-[var(--radius-lg)] bg-[#141210] p-2 sm:p-5')}>
 						{/* While the break screen is up, the player under it takes no focus or keys. */}
 						<div inert={Boolean(breakPhase)}>
 						{pdf ? (
@@ -280,7 +273,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 							onEnded={finished}
 							onTime={setTime}
 							onOpenNotes={openNotes}
-							markers={bookmarks.data?.map((bookmark) => ({ id: bookmark.bookmarkId, positionSeconds: bookmark.positionSeconds, label: bookmark.label }))}
+							bookmarks={bookmarks.data?.map((bookmark) => ({ id: bookmark.bookmarkId, positionSeconds: bookmark.positionSeconds, label: bookmark.label }))}
+							markers={hasNotes ? lessonNotes.data?.map((note) => note.positionSeconds) : undefined}
 							cinema={cinema}
 							onCinema={() => setCinema(!cinema)}
 							handle={(value) => { player.current = value; }}
@@ -317,157 +311,90 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</div>
 					)}
 
-					<div className="flex flex-wrap items-center gap-2 border-b border-[var(--study-rule)] pb-4">
-						{hasNotes && <Button variant="outline" title={tr('Write a Markdown note tied to this moment without leaving the video', 'Escrever uma nota em Markdown presa a este momento sem sair do vídeo')} onClick={() => { openNotes(); }} aria-keyshortcuts="n"><PenLine />{tr('Note', 'Nota')}<kbd aria-hidden="true" className="ml-1 hidden rounded border px-1.5 text-xs text-muted-foreground sm:inline-block">N</kbd></Button>}
-						{hasCards && <Button variant="outline" onClick={() => { player.current?.pause(); setTab('cards'); setCardRequest((value) => value + 1); }}><SquarePlus />{tr('Card', 'Cartão')}</Button>}
-						{hasNotes && <Button variant="outline" title={tr('Save a labelled timestamp on the timeline', 'Salvar um marcador de tempo rotulado na linha do tempo')} onClick={() => { player.current?.pause(); setTab('bookmarks'); }}>{tr('Timestamp', 'Marcador')} <span className="study-timecode">{formatDuration(time)}</span></Button>}
+					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+						<div className="min-w-0 space-y-1">
+							{position >= 0 && <p className="text-[13px] text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</p>}
+							<h1 className="text-[26px] leading-tight font-semibold tracking-tight text-balance">{displayTitle}</h1>
+						</div>
 						{studySyncSupported && mediaId && (
 							<Button variant="outline" aria-pressed={isDone} disabled={setCompleted.isPending} title={tr('Mark or unmark this lesson completed regardless of playback position', 'Marcar ou desmarcar esta aula como concluída, independente da posição do vídeo')} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
 								{isDone ? <CircleCheck className="text-primary" /> : <Circle />}{isDone ? tr('Completed', 'Concluída') : tr('Mark as completed', 'Marcar como concluída')}
 							</Button>
 						)}
-						<div className="flex flex-wrap items-center gap-2 sm:ml-auto">
-							<label className="inline-flex min-h-11 cursor-pointer items-center gap-2.5 px-2 text-sm font-medium text-foreground/85 hover:text-foreground has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50" title={tr('When playback ends, mark completed and advance after 5 s', 'Ao chegar ao fim, marca como concluída e avança em 5 s')}>
-								<input type="checkbox" className="peer sr-only" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
-								<span aria-hidden="true" className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-border-strong/45 transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] peer-checked:bg-primary">
-									<span className={cn('size-3.5 translate-x-0.5 rounded-full bg-card shadow-xs transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]', preferences.autoNext && 'translate-x-[1.125rem]')} />
-								</span>
-								{tr('Autoplay next', 'Reproduzir a próxima')}
-							</label>
-						</div>
 					</div>
 
-
-					{hasNotes && mediaId && quickNote && (
-						<form
-							onSubmit={(event) => {
-								event.preventDefault();
-								if (quickNote.content.trim() && !createQuickNote.isPending) createQuickNote.mutate({ position: quickNote.position, content: quickNote.content.trim() });
-							}}
-							className="study-surface space-y-3 p-4"
-						>
-							<div className="flex flex-wrap items-center justify-between gap-2">
-								<Label htmlFor="quick-note-draft" className="font-semibold">
-									{tr(`Note at ${formatDuration(quickNote.position)}`, `Nota em ${formatDuration(quickNote.position)}`)}
-								</Label>
-								<span className="text-xs text-muted-foreground">{tr('Time captured when opened. Video stays in view; Ctrl+Enter saves.', 'Tempo capturado ao abrir. O vídeo continua visível; Ctrl+Enter salva.')}</span>
-							</div>
-							<NoteEditor
-								id="quick-note-draft"
-								focusOnOpen
-								rows={2}
-								value={quickNote.content}
-								onChange={(content) => setQuickNote({ ...quickNote, content })}
-								onKeyDown={(event) => {
-									if ((event.ctrlKey || event.metaKey) && event.key === 'Enter' && quickNote.content.trim() && !createQuickNote.isPending) {
-										event.preventDefault();
-										createQuickNote.mutate({ position: quickNote.position, content: quickNote.content.trim() });
-									}
-								}}
-							/>
-							{createQuickNote.error && <p role="alert" className="text-sm text-destructive">{createQuickNote.error.message}</p>}
-							<div className="flex justify-end gap-2">
-								<Button type="button" variant="outline" onClick={() => setQuickNote(null)} disabled={createQuickNote.isPending}>{tr('Cancel', 'Cancelar')}</Button>
-								<Button type="submit" disabled={createQuickNote.isPending || !quickNote.content.trim()}>{createQuickNote.isPending ? tr('Saving…', 'Salvando…') : tr('Save note', 'Salvar nota')}</Button>
-							</div>
-						</form>
-					)}
-
-					<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))}>
-						<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full flex-wrap justify-start border-b group-data-horizontal/tabs:h-auto [&>[role=tab]]:min-h-11">
-							<TabsTrigger value="lessons">{tr('Overview', 'Visão geral')}</TabsTrigger>
-							{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}{noteCount > 0 && ` (${noteCount})`}</TabsTrigger>}
-							{hasNotes && <TabsTrigger value="bookmarks">{tr('Timestamps', 'Marcadores')}{(bookmarks.data?.length ?? 0) > 0 && ` (${bookmarks.data?.length})`}</TabsTrigger>}
-							{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
-							<TabsTrigger value="materials">{tr('Materials', 'Materiais')}{lesson.materials.length + lesson.subtitles.length > 0 && ` (${lesson.materials.length + lesson.subtitles.length})`}</TabsTrigger>
-						</TabsList>
-						<TabsContent value="lessons" className="space-y-4 pt-5">
-							{!pdf && playableMedia && resumeAt !== null && time < resumeAt && (
-									<Button variant="secondary" onClick={() => player.current?.seek(resumeAt)}>{tr(`Resume from ${formatDuration(resumeAt)}`, `Retomar de ${formatDuration(resumeAt)}`)}</Button>
-								)}
-							<div className="grid gap-4 md:grid-cols-3">
-								<LessonPanel icon={PenLine} count={lessonNotes.data?.length} title={tr('Your notes', 'Suas notas')} empty={tr('Press N to add a note at the current time.', 'Aperte N para anotar neste momento.')}>
-									{(lessonNotes.data ?? []).slice(0, 3).map((note) => <li key={note.noteId} className="flex items-baseline gap-2.5"><button type="button" onClick={() => player.current?.seek(note.positionSeconds)} className="study-timecode shrink-0 text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring">{formatDuration(note.positionSeconds)}</button><span className="min-w-0 truncate text-foreground/90">{plainTextMarkdown(note.content)}</span></li>)}
-								</LessonPanel>
-								<LessonPanel icon={Clock} count={bookmarks.data?.length} title={tr('Timestamps', 'Marcadores')} empty={tr('Mark a moment to come back to it.', 'Marque um momento para voltar a ele.')}>
-									{(bookmarks.data ?? []).slice(0, 4).map((bookmark) => <li key={bookmark.bookmarkId} className="flex items-baseline gap-2.5"><button type="button" onClick={() => player.current?.seek(bookmark.positionSeconds)} className="study-timecode shrink-0 text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring">{formatDuration(bookmark.positionSeconds)}</button><span className="min-w-0 truncate text-foreground/90">{bookmark.label}</span></li>)}
-								</LessonPanel>
-								<LessonPanel icon={FileText} count={lesson.materials.length} title={tr('Materials in this lesson', 'Materiais desta aula')} empty={tr('No files with this lesson.', 'Nenhum arquivo nesta aula.')}>
-									{lesson.materials.slice(0, 4).map((file) => <li key={file.path} className="truncate text-foreground/90">{file.name}</li>)}
-								</LessonPanel>
-							</div>
-							{next && (
-								<div className="study-surface flex flex-wrap items-center gap-4 p-4">
-									<div className="min-w-0 flex-1"><p className="text-sm text-muted-foreground">{tr('Up next', 'A seguir')}</p><p className="truncate font-semibold">{next.title}</p></div>
-									<Button variant="outline" onClick={() => goTo(next.path)}>{tr('Go to next lesson', 'Ir para a próxima aula')}</Button>
-								</div>
-							)}
-						</TabsContent>
-						{hasNotes && mediaId && (
-							<TabsContent value="notes" keepMounted className="pt-5">
-								<StudyNotes
-									mediaId={mediaId}
-									currentTime={time}
-									onSeek={(seconds) => player.current?.seek(seconds)}
-									addRequest={0}
-									onMakeCard={hasCards ? (note) => {
-										player.current?.pause();
-										setTab('cards');
-										setCardSeed({ key: (cardSeed?.key ?? 0) + 1, back: note.content, position: note.positionSeconds });
-									} : undefined}
-									title={displayTitle}
-									trail={location?.moduleTitle ? `${course.title} · ${location.moduleTitle}` : course.title}
-									allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`}
-								/>
-							</TabsContent>
+					<div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[var(--study-rule)] pt-3 text-sm">
+						{!pdf && playableMedia && resumeAt !== null && time < resumeAt && (
+							<Button variant="secondary" onClick={() => player.current?.seek(resumeAt)}>{tr(`Resume from ${formatDuration(resumeAt)}`, `Retomar de ${formatDuration(resumeAt)}`)}</Button>
 						)}
-						{hasNotes && mediaId && (
-							<TabsContent value="bookmarks" keepMounted className="pt-5">
-								<Bookmarks mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} />
-							</TabsContent>
-						)}
-						{hasCards && mediaId && (
-							<TabsContent value="cards" keepMounted className="pt-5">
-								<Flashcards mediaId={mediaId} currentTime={time} addRequest={cardRequest} cardSeed={cardSeed} />
-							</TabsContent>
-						)}
-						<TabsContent value="materials" className="pt-5">
-							<Materials files={[...lesson.subtitles, ...lesson.materials]} courseId={courseId} />
-						</TabsContent>
-					</Tabs>
+						{next && <Button variant="ghost" onClick={() => goTo(next.path)} className="min-w-0 max-w-full"><span className="text-muted-foreground">{tr('Up next', 'A seguir')}</span><span className="truncate">{next.title}</span></Button>}
+						{materialCount > 0 && <Button variant="ghost" onClick={() => { setContentOpen(true); setTab('contents'); }}>{tr(`Materials (${materialCount})`, `Materiais (${materialCount})`)}</Button>}
+						<label className="ml-auto inline-flex min-h-11 cursor-pointer items-center gap-2.5 px-2 font-medium text-foreground/85 hover:text-foreground has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50" title={tr('When playback ends, mark completed and advance after 5 s', 'Ao chegar ao fim, marca como concluída e avança em 5 s')}>
+							<input type="checkbox" className="peer sr-only" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
+							<span aria-hidden="true" className="relative inline-flex h-5 w-9 shrink-0 items-center rounded-full bg-border-strong/45 transition-colors duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] peer-checked:bg-primary">
+								<span className={cn('size-3.5 translate-x-0.5 rounded-full bg-card shadow-xs transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)]', preferences.autoNext && 'translate-x-[1.125rem]')} />
+							</span>
+							{tr('Autoplay next', 'Reproduzir a próxima')}
+						</label>
+					</div>
 				</div>
 
 				{contentOpen && (
-					<aside aria-label={tr('Course content', 'Conteúdo do curso')} className={cn('study-surface min-w-0 space-y-3 p-4 [:root[data-sidebar=left]_&]:lg:order-first', !wide && 'lg:sticky lg:top-6 lg:max-h-[calc(100dvh-11rem)] lg:self-start lg:overflow-y-auto')}>
-						<div className="flex items-start justify-between gap-2 px-1">
-							<div>
-								<h2 className="text-[1.0625rem] font-bold">{tr('Course content', 'Conteúdo do curso')}</h2>
-								<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
-							</div>
-						</div>
-						<div role="search" className="relative px-1">
-							<Search className="pointer-events-none absolute top-1/2 left-4 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-							<Input type="search" value={find} onChange={(event) => setFind(event.target.value)} placeholder={tr('Find a lesson', 'Buscar aula')} aria-label={tr('Find a lesson', 'Buscar aula')} className="pl-9" />
-						</div>
-						{found.length === 0 ? <p role="status" className="px-2 py-3 text-sm text-muted-foreground">{tr('No lesson matches.', 'Nenhuma aula corresponde.')}</p> : <Curriculum compact nodes={found} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} signal={needle ? { open: true, n: needle.length } : undefined} />}
+					// Desktop: a full-height rail with tabs. Phones: the same tabs as a sheet under the lesson.
+					<aside className="lesson-rail min-w-0 border-t border-[var(--study-rule)] bg-card lg:border-t-0 lg:border-l [:root[data-sidebar=left]_&]:lg:order-first [:root[data-sidebar=left]_&]:lg:border-x-0 [:root[data-sidebar=left]_&]:lg:border-r">
+						<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))} className="gap-0">
+							<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start gap-1 border-b px-3 group-data-horizontal/tabs:h-auto [&>[role=tab]]:min-h-11">
+								{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}{noteCount > 0 && ` (${noteCount})`}</TabsTrigger>}
+								{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
+								<TabsTrigger value="contents">{tr('Contents', 'Conteúdo')}</TabsTrigger>
+							</TabsList>
+							{hasNotes && mediaId && (
+								<TabsContent value="notes" keepMounted className="space-y-6 p-4">
+									<StudyNotes
+										mediaId={mediaId}
+										currentTime={time}
+										onSeek={(seconds) => player.current?.seek(seconds)}
+										addRequest={noteRequest}
+										onMakeCard={hasCards ? (note) => {
+											player.current?.pause();
+											setTab('cards');
+											setCardSeed({ key: (cardSeed?.key ?? 0) + 1, back: note.content, position: note.positionSeconds });
+										} : undefined}
+										allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`}
+									/>
+									<section aria-label={tr('Timestamps', 'Marcadores')} className="space-y-3 border-t border-[var(--study-rule)] pt-4">
+										<h2 className="text-sm font-semibold">{tr('Timestamps', 'Marcadores')}</h2>
+										<Bookmarks mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} />
+									</section>
+								</TabsContent>
+							)}
+							{hasCards && mediaId && (
+								<TabsContent value="cards" keepMounted className="p-4">
+									<Flashcards mediaId={mediaId} currentTime={time} cardSeed={cardSeed} />
+								</TabsContent>
+							)}
+							<TabsContent value="contents" className="space-y-4 p-4">
+								<div>
+									<h2 className="text-sm font-semibold">{tr('Course content', 'Conteúdo do curso')}</h2>
+									<p className="text-sm text-muted-foreground">{tr(`${overall.done} of ${overall.total} lessons completed`, `${overall.done} de ${overall.total} aulas concluídas`)}</p>
+								</div>
+								<div role="search" className="relative">
+									<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+									<Input type="search" value={find} onChange={(event) => setFind(event.target.value)} placeholder={tr('Find a lesson', 'Buscar aula')} aria-label={tr('Find a lesson', 'Buscar aula')} className="pl-9" />
+								</div>
+								{found.length === 0 ? <p role="status" className="py-3 text-sm text-muted-foreground">{tr('No lesson matches.', 'Nenhuma aula corresponde.')}</p> : <Curriculum compact nodes={found} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={lessonPath} signal={needle ? { open: true, n: needle.length } : undefined} />}
+								{materialCount > 0 && (
+									<section aria-label={tr('Materials', 'Materiais')} className="space-y-3 border-t border-[var(--study-rule)] pt-4">
+										<h2 className="text-sm font-semibold">{tr('Materials', 'Materiais')}</h2>
+										<Materials files={[...lesson.subtitles, ...lesson.materials]} courseId={courseId} />
+									</section>
+								)}
+							</TabsContent>
+						</Tabs>
 					</aside>
 				)}
 			</div>
 		</div>
-	);
-}
-
-/** A small panel of the Overview: a title and a few rows, or one line saying how to fill it. */
-function LessonPanel({ icon: Icon, count, title, empty, children }: { icon?: LucideIcon; count?: number; title: string; empty: string; children: React.ReactNode[] }) {
-	return (
-		<section aria-label={title} className="border-t border-[var(--study-rule)] pt-4">
-			<div className="mb-3 flex items-center gap-2">
-				{Icon && <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
-				<h2 className="text-sm font-bold tracking-tight">{title}</h2>
-				{count !== undefined && count > 0 && <span className="study-timecode ml-auto text-muted-foreground">{count}</span>}
-			</div>
-			{children.length > 0 ? <ul className="space-y-2 text-sm">{children}</ul> : <p className="text-sm text-muted-foreground">{empty}</p>}
-		</section>
 	);
 }
 

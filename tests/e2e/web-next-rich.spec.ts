@@ -117,7 +117,7 @@ test('notes take formatting, show it, and are found from the course card', async
 	await page.emulateMedia({ reducedMotion: 'reduce' });
 	await openVideoLesson(page, origin);
 	await page.getByRole('tab', { name: 'Notes' }).click();
-	await page.getByRole('button', { name: /Add note at/ }).click();
+	await page.getByRole('button', { name: /Write a note at/ }).click();
 	const field = page.getByLabel(/Note at/);
 	// The editor opens focused, so typing goes straight in.
 	await expect(field).toBeFocused();
@@ -324,7 +324,7 @@ test('a note with HTML, a script and a javascript link renders as text and runs 
 	page.on('dialog', (dialog) => { dialogs.push(dialog.message()); void dialog.dismiss(); });
 	await openVideoLesson(page, origin);
 	await page.getByRole('tab', { name: 'Notes' }).click();
-	await page.getByRole('button', { name: /Add note at/ }).click();
+	await page.getByRole('button', { name: /Write a note at/ }).click();
 	const hostile = '<img src=x onerror="window.pwned=1"> <script>window.pwned=2</script> [click](javascript:window.pwned=3) **bold** and snake__case__name';
 	await page.getByLabel(/Note at/).fill(hostile);
 	await page.getByRole('button', { name: 'Save note' }).click();
@@ -394,7 +394,7 @@ test('the player shortcuts mute, change the volume and the speed, and play and p
 
 	// A shortcut typed into a field is text, not a command.
 	await page.getByRole('tab', { name: 'Notes' }).click();
-	await page.getByRole('button', { name: /Add note at/ }).click();
+	await page.getByRole('button', { name: /Write a note at/ }).click();
 	await page.getByLabel(/Note at/).fill('m] k');
 	expect((await state()).muted).toBe(false);
 	expect((await state()).rate).toBe(1);

@@ -46,7 +46,7 @@ async function openLessonWithStudyData(page: Page, origin: string) {
 	const { media_id: mediaId } = await saved.json() as { media_id: string };
 	await expect(page.getByRole('button', { name: 'Completed', exact: true, pressed: true })).toBeVisible();
 	await page.getByRole('tab', { name: 'Notes', exact: true }).click();
-	await page.getByRole('button', { name: /Add note at/ }).click();
+	await page.getByRole('button', { name: /Write a note at/ }).click();
 	await page.getByLabel(/Note at/).fill(note);
 	await page.getByRole('button', { name: 'Save note' }).click();
 	await expect(page.getByRole('tabpanel', { name: /^Notes/ }).getByText(note, { exact: true })).toBeVisible();

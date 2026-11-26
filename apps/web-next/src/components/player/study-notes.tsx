@@ -1,13 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Play, Plus, SquarePlus, Trash2 } from 'lucide-react';
+import { PenLine, SquarePlus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
-import { Eyebrow } from '@/components/panel';
 import { useState, type KeyboardEvent } from 'react';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { tr } from '@/lib/i18n';
+import { getLocale, tr } from '@/lib/i18n';
 import { formatDuration } from '@/lib/player';
 import { transport, type StudyNote } from '@/lib/transport';
 
@@ -17,8 +15,11 @@ export function useLessonNotes(mediaId: string | null) {
 	return useQuery({ queryKey: lessonNotesKey(mediaId ?? ''), enabled: Boolean(mediaId), queryFn: () => transport.listNotes(mediaId!) });
 }
 
+/** The amber timestamp chip: a note's time, and the draft's time while it is being written. */
+const chip = 'inline-flex min-h-11 items-center rounded-md border border-primary/45 px-2 text-[11.5px] font-semibold tabular-nums text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-ring lg:min-h-7 lg:px-1.5';
+
 /** Timestamped notes for one lesson; a note's time button seeks the player. */
-export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCard, title, trail, allNotesTo }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void; addRequest: number; onMakeCard?: (note: StudyNote) => void; title?: string; trail?: string; allNotesTo?: string }) {
+export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCard, allNotesTo }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void; addRequest: number; onMakeCard?: (note: StudyNote) => void; allNotesTo?: string }) {
 	const client = useQueryClient();
 	const notes = useLessonNotes(mediaId);
 	const [draft, setDraft] = useState<{ position: number; content: string } | null>(null);
@@ -48,48 +49,44 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCar
 
 	return (
 		<div className="space-y-4">
-			{title && (
-				<div className="flex flex-wrap items-start justify-between gap-3 border-b pb-4">
-					<div className="min-w-0">
-						<Eyebrow>{tr('My notes', 'Minhas notas')}</Eyebrow>
-						<p className="mt-1 truncate font-heading text-xl font-bold">{title}</p>
-						{trail && <p className="truncate text-sm text-muted-foreground">{trail}</p>}
-					</div>
-					<div className="flex items-center gap-3">
-						<p role="status" aria-live="polite" className="text-sm text-muted-foreground">{saved ? tr('Saved · just now', 'Salva · agora') : ''}</p>
-						{allNotesTo && <Link to={allNotesTo} className="inline-flex min-h-11 items-center rounded-[var(--radius)] border border-[var(--study-rule)] bg-card px-4 text-sm font-medium hover:bg-brand-tint/65">{tr('View all', 'Ver todas')}</Link>}
-					</div>
-				</div>
-			)}
-			{!draft && (
-				<Button variant="outline" onClick={() => setDraft({ position: Math.floor(currentTime), content: '' })}>
-					<Plus />{tr(`Add note at ${formatDuration(currentTime)}`, `Anotar em ${formatDuration(currentTime)}`)}
-				</Button>
-			)}
+			<div className="flex min-h-11 items-center justify-between gap-3">
+				<p role="status" aria-live="polite" className="text-sm text-muted-foreground">{saved ? tr('Note saved', 'Nota salva') : ''}</p>
+				{allNotesTo && <Link to={allNotesTo} className="inline-flex min-h-11 items-center text-sm font-medium text-muted-foreground hover:text-foreground">{tr('View all', 'Ver todas')}</Link>}
+			</div>
 			{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-			{draft && (
-				<div className="study-surface space-y-2 p-4">
-					<Label htmlFor="note-draft">{tr(`Note at ${formatDuration(draft.position)}`, `Nota em ${formatDuration(draft.position)}`)}</Label>
-					<NoteEditor id="note-draft" focusOnOpen rows={3} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} onKeyDown={onKeyDown} describedBy="note-draft-hint" />
-					<p id="note-draft-hint" className="text-xs text-muted-foreground">{tr('Ctrl+Enter saves the note.', 'Ctrl+Enter salva a nota.')}</p>
-					<div className="flex justify-end gap-2">
-						<Button variant="outline" onClick={() => setDraft(null)} disabled={create.isPending}>{tr('Cancel', 'Cancelar')}</Button>
-						<Button onClick={save} disabled={create.isPending || !draft.content.trim()}>{create.isPending ? tr('Saving…', 'Salvando…') : tr('Save note', 'Salvar nota')}</Button>
+			{draft ? (
+				<div className="space-y-3 rounded-xl border border-[var(--study-rule)] bg-background p-3">
+					<span className={chip}>{formatDuration(draft.position)}</span>
+					<NoteEditor id="note-draft" label={tr(`Note at ${formatDuration(draft.position)}`, `Nota em ${formatDuration(draft.position)}`)} focusOnOpen rows={3} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} onKeyDown={onKeyDown} describedBy="note-draft-hint" />
+					<div className="flex flex-wrap items-center justify-between gap-2">
+						<p id="note-draft-hint" className="text-xs text-muted-foreground">{tr('Ctrl+Enter saves the note.', 'Ctrl+Enter salva a nota.')}</p>
+						<div className="flex gap-2">
+							<Button variant="outline" onClick={() => setDraft(null)} disabled={create.isPending}>{tr('Cancel', 'Cancelar')}</Button>
+							<Button onClick={save} disabled={create.isPending || !draft.content.trim()}>{create.isPending ? tr('Saving…', 'Salvando…') : tr('Save note', 'Salvar nota')}</Button>
+						</div>
 					</div>
 				</div>
+			) : (
+				// Desktop: a quiet compose box. Phone: the one amber action on the sheet.
+				<button type="button" onClick={() => setDraft({ position: Math.floor(currentTime), content: '' })} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--study-rule)] bg-background px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-lg:border-primary max-lg:bg-primary max-lg:font-semibold max-lg:text-primary-foreground max-lg:hover:bg-primary/90">
+					<PenLine className="size-4 shrink-0" aria-hidden="true" />{tr(`Write a note at ${formatDuration(currentTime)}`, `Escrever uma nota em ${formatDuration(currentTime)}`)}
+				</button>
 			)}
 			{notes.isPending ? (
 				<p role="status" className="text-sm text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
 			) : items.length === 0 && !draft ? (
 				<p className="text-sm text-muted-foreground">{tr('No notes in this lesson yet. Notes are tied to the moment in the lesson, so you can jump back later.', 'Ainda não há notas nesta aula. As notas ficam presas ao momento da aula, para você voltar depois.')}</p>
 			) : (
-				<ul className="divide-y divide-[var(--study-rule)] border-t border-[var(--study-rule)]">
+				<ul className="divide-y divide-[var(--study-rule)]">
 					{items.map((note) => (
-						<li key={note.noteId} className="flex items-start gap-2 py-2.5">
-							<Button variant="ghost" size="sm" onClick={() => onSeek(note.positionSeconds)} aria-label={tr(`Play from ${formatDuration(note.positionSeconds)}`, `Reproduzir de ${formatDuration(note.positionSeconds)}`)} className="study-timecode text-primary">
-								<Play />{formatDuration(note.positionSeconds)}
-							</Button>
-							<Markdown text={note.content} className="min-w-0 flex-1 py-2.5 text-sm leading-relaxed" />
+						<li key={note.noteId} className="flex items-start gap-3 py-3">
+							<button type="button" onClick={() => onSeek(note.positionSeconds)} aria-label={tr(`Play from ${formatDuration(note.positionSeconds)}`, `Reproduzir de ${formatDuration(note.positionSeconds)}`)} className={chip}>
+								{formatDuration(note.positionSeconds)}
+							</button>
+							<div className="min-w-0 flex-1 space-y-1">
+								<Markdown text={note.content} className="text-sm leading-relaxed" />
+								<p className="text-xs text-muted-foreground">{new Date(note.createdAt * 1000).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' })}</p>
+							</div>
 							{onMakeCard && (
 								<Button variant="ghost" size="sm" onClick={() => onMakeCard(note)} title={tr('Create a review card from this note', 'Criar um cartão de revisão desta nota')} aria-label={tr(`Make card from note at ${formatDuration(note.positionSeconds)}`, `Criar cartão da nota em ${formatDuration(note.positionSeconds)}`)}>
 									<SquarePlus />{tr('Card', 'Cartão')}
