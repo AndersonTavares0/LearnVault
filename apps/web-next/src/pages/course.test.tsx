@@ -24,7 +24,9 @@ describe('course page', () => {
 	it('shows progress, resumes the last lesson and lists modules with per-lesson state', async () => {
 		renderApp('/course/rust', { catalog, recent: [{ mediaId: 'borrow.mp4', positionSeconds: 70, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		expect(await screen.findByRole('heading', { level: 1, name: 'Rust from zero' })).toBeTruthy();
-		expect(screen.getByRole('progressbar', { name: '1 of 2 lessons done' })).toBeTruthy();
+		const segments = screen.getByRole('progressbar', { name: '1 of 2 lessons done' });
+		// Ownership is done, so the amber current marker sits on Borrowing, the lesson with a saved position.
+		expect([...segments.children].map((segment) => segment.getAttribute('data-state'))).toEqual(['done', 'current']);
 		expect(screen.getByRole('link', { name: 'Resume Borrowing at 1:10' }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
 		expect(screen.getByText('Resume at 1:10')).toBeTruthy();
 		expect(screen.getByText('Done')).toBeTruthy();
@@ -33,6 +35,14 @@ describe('course page', () => {
 		expect(screen.getByRole('button', { name: 'Mark “Ownership” as not completed' }).getAttribute('aria-pressed')).toBe('true');
 		expect(screen.getByRole('link', { name: /^Borrowing/ }).hasAttribute('aria-current')).toBe(false);
 		expect(screen.getByText('Missing media')).toBeTruthy();
+	});
+
+	it('marks the next lesson after the last one studied when nothing is in progress, never a done lesson', async () => {
+		renderApp('/course/rust', { catalog, recent: [{ mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
+		const segments = await screen.findByRole('progressbar', { name: '1 of 2 lessons done' });
+		expect([...segments.children].map((segment) => segment.getAttribute('data-state'))).toEqual(['done', 'current']);
+		expect(screen.getByRole('link', { name: 'Continue studying' }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing');
+		expect(screen.queryByText(/^Resume at/)).toBeNull();
 	});
 
 	it('returns to the library with the filter and search the learner left', async () => {
