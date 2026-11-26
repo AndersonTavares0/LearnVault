@@ -128,7 +128,7 @@ export function GlobalSearch() {
 					aria-activedescendant={showPanel && active >= 0 ? `global-search-${active}` : undefined}
 					aria-label={tr('Search notes, courses and lessons', 'Buscar notas, cursos e aulas')}
 					aria-keyshortcuts="/ Control+K Meta+K"
-					placeholder={tr('Search courses, lessons and notes', 'Buscar cursos, aulas e notas')}
+					placeholder={mobile ? tr('Search courses, lessons and notes', 'Buscar cursos, aulas e notas') : tr('Search', 'Buscar')}
 					onFocus={() => setOpen(true)}
 					onChange={(event) => { setQuery(event.target.value); setOpen(true); setActive(-1); }}
 					onKeyDown={onKeyDown}

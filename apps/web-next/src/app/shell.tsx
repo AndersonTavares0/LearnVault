@@ -143,13 +143,13 @@ export function AppShell() {
 						{!locked && (
 							<div className="relative lg:[&_input]:pr-14">
 								<GlobalSearch />
-								<kbd aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-[5px] border border-border px-1.5 text-[0.6875rem] text-muted-foreground lg:block">{searchShortcut()}</kbd>
+								<kbd aria-hidden="true" className="pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded-md border border-border px-1.5 font-sans text-[11px] text-muted-foreground lg:block">{searchShortcut()}</kbd>
 							</div>
 						)}
 						{!locked && (
 							<nav aria-label={tr('Main', 'Principal')} className="hidden flex-col gap-0.5 lg:flex">
 								{navItems().map((item) => (
-									<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('flex h-8 items-center gap-2.5 rounded-[7px] px-2.5 text-sm font-medium whitespace-nowrap transition-colors duration-150 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', isActive ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground')}>
+									<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('flex h-8 items-center gap-2.5 rounded-[7px] px-2.5 text-sm font-medium whitespace-nowrap transition-colors duration-150 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', isActive ? 'bg-foreground/[0.08] font-semibold text-foreground' : 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground')}>
 										<item.icon className="size-4 shrink-0 opacity-80" aria-hidden="true" />
 										{item.label}
 									</NavLink>
@@ -222,7 +222,7 @@ function AccountMenu({ username, userId }: { username: string; userId: string })
 		<>
 			<DropdownMenu>
 				<DropdownMenuTrigger render={<Button variant="ghost" size="icon" className="lg:order-first lg:min-w-0 lg:flex-1 lg:justify-start lg:gap-2 lg:px-2" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
-					<span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground" aria-hidden="true">{username.trim()[0]?.toUpperCase() ?? '?'}</span>
+					<span className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-muted text-sm font-bold text-foreground" aria-hidden="true">{username.trim()[0]?.toUpperCase() ?? '?'}</span>
 					<span className="hidden truncate text-sm font-medium lg:block">{username}</span>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-56">
@@ -283,7 +283,7 @@ function InProgress({ profile }: { profile: string }) {
 			<ul className="space-y-0.5">
 				{courses.map((entry) => (
 					<li key={entry.courseId}>
-						<Link to={routerPath(href('course', entry.courseId))} className="flex min-h-8 items-center gap-2.5 rounded-[7px] px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+						<Link to={routerPath(href('course', entry.courseId))} className="flex min-h-8 items-center gap-2.5 rounded-[7px] px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
 							<CourseCover course={entry.course} profile={profile} compact className="aspect-video w-[34px] shrink-0 rounded-[4px] ring-0" />
 							<span className="min-w-0 truncate">{entry.course.title}</span>
 						</Link>

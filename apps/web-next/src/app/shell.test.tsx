@@ -90,7 +90,7 @@ describe('app shell', () => {
 		expect(bar.className).toContain('lg:bg-sidebar');
 		const rail = within(bar);
 		const nav = rail.getByRole('navigation', { name: 'Main' });
-		expect(within(nav).getByRole('link', { name: 'My learning' }).className).toContain('bg-muted font-semibold text-foreground');
+		expect(within(nav).getByRole('link', { name: 'My learning' }).className).toContain('bg-foreground/[0.08] font-semibold text-foreground');
 		expect(within(nav).getByRole('link', { name: 'Progress' }).className).not.toContain('font-semibold');
 		expect(rail.getByRole('combobox', { name: 'Search notes, courses and lessons' })).toBeTruthy();
 		expect(rail.getByRole('button', { name: 'Account: admin' })).toBeTruthy();
