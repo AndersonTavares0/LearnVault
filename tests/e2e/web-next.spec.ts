@@ -69,12 +69,13 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	await expect(timer).toBeHidden();
 	await page.goto(`${origin}/#/`);
 
-	await page.getByRole('link', { name: 'Course', exact: true }).click();
+	// The rail also lists courses in progress, so the click stays in the library.
+	await page.getByRole('region', { name: 'Your library' }).getByRole('link', { name: 'Course', exact: true }).click();
 	await expect(page.getByRole('heading', { level: 1, name: 'Course' })).toBeVisible();
 	// The module holding the lesson to continue starts expanded.
 	await expect(page.getByRole('link', { name: /Borrowing/ })).toBeVisible();
 	await page.getByRole('button', { name: 'Mark “Borrowing” as completed' }).click();
-	await expect(page.getByRole('progressbar', { name: /1 of 2 lessons completed/ })).toBeVisible();
+	await expect(page.getByRole('progressbar', { name: /1 of 2 lessons done/ })).toBeVisible();
 	await expectNoAxeViolations(page, 'course');
 	await page.getByRole('tab', { name: /Materials/ }).click();
 	await expect(page.getByText('No support materials in this course.')).toBeVisible();
@@ -167,13 +168,14 @@ test('keeps the sign-in page scrollable on a short viewport', async ({ page, ori
 	await expect(signInButton).toBeInViewport();
 });
 
-test('pins the top bar and scrolls the content region below it', async ({ page, origin }) => {
+test('pins the side rail or top bar and scrolls the content region beside or below it', async ({ page, origin }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
 	await signIn(page, origin);
 	await page.goto(`${origin}/#/settings`);
 	await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
 
-	// The document no longer scrolls: the region under the bar does (issue #607).
-	const bar = page.locator('header');
+	// The document no longer scrolls: the region beside the rail does (issue #607).
+	const bar = page.locator('header[data-app-chrome]');
 	const scroller = page.locator('#main');
 	expect(await page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).toBe('hidden');
 	await page.evaluate(() => window.scrollTo(0, 500));
@@ -181,24 +183,30 @@ test('pins the top bar and scrolls the content region below it', async ({ page, 
 	expect(await scroller.evaluate((main) => getComputedStyle(main).overflowY)).toBe('auto');
 	expect(await scroller.evaluate((main) => main.scrollHeight > main.clientHeight)).toBe(true);
 
-	const barBox = (await bar.boundingBox())!;
+	// Desktop: the rail is a fixed column on the left, and the content scrolls to its right.
+	const railBox = (await bar.boundingBox())!;
 	const mainBox = (await scroller.boundingBox())!;
-	// The scrollbar belongs to the region under the bar, not to the whole window.
-	expect(mainBox.y).toBeGreaterThanOrEqual(barBox.y + barBox.height);
+	expect(railBox.x).toBe(0);
+	expect(railBox.width).toBeCloseTo(236, 0);
+	expect(mainBox.x).toBeGreaterThanOrEqual(railBox.x + railBox.width);
 
 	await scroller.evaluate((main) => { main.scrollTop = main.scrollHeight; });
 	await expect.poll(() => scroller.evaluate((main) => main.scrollTop)).toBeGreaterThan(0);
-	// Scrolling to the end leaves the bar and its account menu in place.
-	expect((await bar.boundingBox())!.y).toBe(barBox.y);
+	// Scrolling to the end leaves the rail and its account menu in place.
+	expect((await bar.boundingBox())!).toEqual(railBox);
 	await expect(bar.getByRole('button', { name: 'Account: admin' })).toBeVisible();
 	await expectNoAxeViolations(page, 'settings scrolled');
 
-	// The phone tab bar keeps floating over the bottom edge, clear of the last content.
+	// Phones: the top bar is pinned above the content region, and the phone tab bar floats over the bottom edge.
 	await page.setViewportSize({ width: 375, height: 700 });
-	const tabs = page.getByRole('navigation', { name: 'Sections', exact: true });
-	await expect(tabs).toBeVisible();
+	const topBar = (await bar.boundingBox())!;
+	expect(topBar.y).toBe(0);
+	expect((await scroller.boundingBox())!.y).toBeGreaterThanOrEqual(topBar.y + topBar.height);
 	await scroller.evaluate((main) => { main.scrollTop = main.scrollHeight; });
 	await expect.poll(() => scroller.evaluate((main) => main.scrollTop)).toBeGreaterThan(0);
+	expect((await bar.boundingBox())!.y).toBe(topBar.y);
+	const tabs = page.getByRole('navigation', { name: 'Sections', exact: true });
+	await expect(tabs).toBeVisible();
 	const tabsTop = (await tabs.boundingBox())!.y;
 	expect(await page.locator('#appearance').evaluate((section) => section.getBoundingClientRect().bottom)).toBeLessThanOrEqual(tabsTop);
 });
