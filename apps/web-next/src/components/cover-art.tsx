@@ -72,7 +72,7 @@ export function CoverArt({ title, courseId, done, total, compact = false, map = 
 			{!map && compact && <span className="absolute inset-0 grid place-items-center font-heading text-sm font-semibold" style={{ color: BONE }}>{letter}</span>}
 			{!map && !compact && (
 				<div className="absolute inset-0 flex flex-col justify-center" style={{ padding: '8cqi' }}>
-					<p className="shrink-0 line-clamp-3 text-balance font-heading font-semibold tracking-tight" style={{ color: BONE, fontSize: 'clamp(14px, 10cqi, 38px)', lineHeight: 1.2, paddingBottom: '0.06em' }}>{title}</p>
+					<p className="shrink-0 line-clamp-3 text-balance font-heading font-semibold tracking-tight" style={{ color: BONE, fontSize: 'clamp(9px, 10cqi, 38px)', lineHeight: 1.2, paddingBottom: '0.06em' }}>{title}</p>
 					{total > 0 && <p className="font-medium" style={{ marginTop: '3cqi', color: 'rgba(236, 231, 218, 0.62)', fontSize: 'clamp(11px, 4cqi, 14px)' }}>{lessons}</p>}
 				</div>
 			)}
