@@ -31,7 +31,7 @@ describe('progress', () => {
 		expect(glance.getByText(/Streak: 1 day\. Busiest day: none yet\./)).toBeTruthy();
 		expect(within(await screen.findByRole('table', { name: 'Focus minutes by day', hidden: true })).getAllByRole('row')).toHaveLength(8);
 		expect(screen.getByText('First course finished').parentElement?.textContent).toContain('Earned');
-		expect(screen.getByText(/Level 2 · /)).toBeTruthy();
+		expect(screen.getByText(/Level 2/)).toBeTruthy();
 	});
 
 	it('lists the courses under way with their progress, resume target and study days heatmap', async () => {

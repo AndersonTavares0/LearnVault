@@ -3,8 +3,10 @@ import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ActivityHeatmap, type DayActivity } from '@/components/activity-heatmap';
 import { Motto } from '@/components/brand';
+import { CourseCover } from '@/components/course-cover';
+import { LessonSegments } from '@/components/lesson-segments';
 import { Panel } from '@/components/panel';
-import { progressLabel, ProgressBar, routerPath } from '@/components/course-card';
+import { progressLabel, routerPath } from '@/components/course-card';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { buildGamification, type Badge } from '@/lib/gamification';
@@ -13,7 +15,7 @@ import { buildLibrary } from '@/lib/library';
 import { studySyncSupported } from '@/lib/player';
 import { href } from '@/lib/router';
 import { cn } from '@/lib/utils';
-import { useCatalog, useClaimMission, useFavorites, useFocusSummary, useRecent, useRewards } from '@/app/data';
+import { useCatalog, useClaimMission, useFavorites, useFocusSummary, useRecent, useRewards, useSession } from '@/app/data';
 import { PageHeader } from '@/app/shell';
 
 const weekday = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { weekday: 'short' });
@@ -29,6 +31,7 @@ const localDayKey = (seconds: number) => {
 export function ProgressPage() {
 	useLocale();
 	const rewards = useRewards();
+	const profile = useSession().data?.user?.userId ?? '';
 	const focus = useFocusSummary();
 	const catalog = useCatalog();
 	const recent = useRecent();
@@ -87,35 +90,33 @@ export function ProgressPage() {
 		: routerPath(href('home'));
 
 	return (
-		<div className="space-y-6">
-			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={`${tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)} · ${game.level.xp} XP · ${tr(`${game.level.xpToNext} XP to level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o nível ${game.level.level + 1}`)}`} />
+		<div>
+			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={<span className="inline-flex flex-wrap gap-x-4 gap-y-1"><span>{tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)}</span><span>{game.level.xp} XP</span><span>{tr(`${game.level.xpToNext} XP to level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o nível ${game.level.level + 1}`)}</span></span>} />
 
-			<dl aria-label={tr('At a glance', 'Visão geral')} className="study-surface grid divide-y divide-[var(--study-rule)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+			<dl aria-label={tr('At a glance', 'Visão geral')} className="grid divide-y divide-[var(--study-rule)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
 				<Metric label={tr('Lessons completed (all time)', 'Aulas concluídas (total)')} value={String(lessonsDone)} caption={tr(`In total, across ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started.`, `No total, em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}.`)} />
 				<Metric label={tr('Active days (this week)', 'Dias ativos (esta semana)')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
 				<Metric label={range === 'week' ? tr('Focus time (this week)', 'Tempo de foco (esta semana)') : tr('Focus time (all time)', 'Tempo de foco (total)')} value={formatMinutes(total)} caption={`${range === 'week' ? '' : `${tr('In total.', 'No total.')} `}${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`}>
-				<div role="group" aria-label={tr('Focus time period', 'Período do tempo de foco')} className="mt-1 inline-flex flex-wrap rounded-[var(--radius)] border border-[var(--study-rule)] bg-panel/75 p-0.5">
-					{([['week', tr('This week', 'Esta semana')], ['all', tr('All time', 'Todo o tempo')]] as const).map(([value, text]) => (
-						<button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={cn('min-h-11 rounded-[calc(var(--radius)-2px)] px-3.5 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', range === value ? 'bg-card font-semibold text-foreground shadow-2xs' : 'font-medium text-muted-foreground hover:text-foreground')}>{text}</button>
-					))}
-				</div>
+					<div role="group" aria-label={tr('Focus time period', 'Período do tempo de foco')} className="inline-flex rounded-[var(--radius)] bg-muted p-0.5">
+						{([['week', tr('This week', 'Esta semana')], ['all', tr('All time', 'Todo o tempo')]] as const).map(([value, text]) => (
+							<button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={cn('min-h-11 rounded-[calc(var(--radius)-2px)] px-3 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', range === value ? 'bg-card font-semibold text-foreground shadow-2xs' : 'font-medium text-muted-foreground hover:text-foreground')}>{text}</button>
+						))}
+					</div>
 				</Metric>
 			</dl>
 
-			<div className="grid gap-6 lg:grid-cols-12 lg:items-stretch">
-				<div className="min-w-0 lg:col-span-8">
-					<CoursesPanel entries={library.entries} />
-				</div>
+			<div className="grid gap-x-10 lg:grid-cols-12">
+				<CoursesPanel entries={library.entries} profile={profile} />
 
-				<Panel className="min-w-0 p-5 sm:p-6 lg:col-span-4"><section aria-labelledby="missions-heading" className="space-y-3">
-					<h2 id="missions-heading" className="text-lg font-bold">{tr('Today', 'Hoje')}</h2>
-					<ul className="divide-y divide-[var(--study-rule)] border-t border-[var(--study-rule)]">
+				<Panel variant="open" className="lg:col-span-4"><section aria-labelledby="missions-heading" className="space-y-3">
+					<h2 id="missions-heading" className="text-[15px] font-semibold">{tr('Today', 'Hoje')}</h2>
+					<ul className="divide-y divide-[var(--study-rule)]">
 						{game.missions.map((mission) => {
 							const done = mission.progress >= mission.target;
 							return (
 								<li key={mission.id} className="flex items-center gap-3 py-3">
-									<span className={cn('grid size-6 shrink-0 place-items-center rounded-full border-2', done ? 'border-primary bg-primary text-primary-foreground' : 'border-border-strong')}>{done && <Check className="size-3.5" aria-hidden="true" />}</span>
-									<p className="min-w-0 flex-1 text-sm font-medium">{mission.title}</p>
+									<span className={cn('grid size-5 shrink-0 place-items-center rounded-full border', done ? 'border-success bg-success text-background' : 'border-border-strong')}>{done && <Check className="size-3" aria-hidden="true" />}</span>
+									<p className="min-w-0 flex-1 text-sm">{mission.title}</p>
 									{mission.claimed ? (
 										<span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground"><Check className="size-3.5" aria-hidden="true" />{mission.rewardXp} XP</span>
 									) : done ? (
@@ -129,29 +130,27 @@ export function ProgressPage() {
 					</ul>
 				</section></Panel>
 
-				<div className="min-w-0 lg:col-span-12">
-					<Panel className="p-5 sm:p-6"><ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} activity={dayActivity} /></Panel>
-				</div>
+				<Panel variant="open" className="lg:col-span-12"><ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} activity={dayActivity} /></Panel>
 
-				<Panel className="flex min-w-0 flex-col p-5 sm:p-6 lg:col-span-8"><section aria-labelledby="focus-heading" className="flex flex-1 flex-col space-y-4">
-					<h2 id="focus-heading" className="text-lg font-bold">{tr('Weekly breakdown', 'Detalhamento semanal')}</h2>
+				<Panel variant="open" className="flex flex-col lg:col-span-8"><section aria-labelledby="focus-heading" className="flex flex-1 flex-col space-y-4">
+					<h2 id="focus-heading" className="text-[15px] font-semibold">{tr('Weekly breakdown', 'Detalhamento semanal')}</h2>
 					{focus.isPending ? (
 						<p role="status" className="text-sm text-muted-foreground">{tr('Loading focus statistics…', 'Carregando estatísticas de foco…')}</p>
 					) : focusFailed ? (
 						<p role="alert" className="text-sm text-destructive">{tr('Focus statistics could not be loaded.', 'Não foi possível carregar as estatísticas de foco.')}</p>
 					) : (
-						<FocusChart days={weekDays} emptyAction={noFocus ? <Link to={focusHref} className={buttonVariants()}>{tr('Start a focus session', 'Iniciar uma sessão de foco')}</Link> : undefined} />
+						<FocusChart days={weekDays} emptyAction={noFocus ? <Link to={focusHref} className={buttonVariants({ variant: 'outline' })}>{tr('Start a focus session', 'Iniciar uma sessão de foco')}</Link> : undefined} />
 					)}
 				</section></Panel>
 
-				<Panel className="min-w-0 p-5 sm:p-6 lg:col-span-4"><section aria-labelledby="badges-heading" className="space-y-3">
-					<h2 id="badges-heading" className="text-lg font-bold">{tr('Badges', 'Emblemas')}<span className="ml-2 text-sm font-normal text-muted-foreground tabular-nums">{tr(`${game.badges.filter((badge) => badge.earned).length} of ${game.badges.length}`, `${game.badges.filter((badge) => badge.earned).length} de ${game.badges.length}`)}</span></h2>
+				<Panel variant="open" className="lg:col-span-4"><section aria-labelledby="badges-heading" className="space-y-3">
+					<h2 id="badges-heading" className="text-[15px] font-semibold">{tr('Badges', 'Emblemas')}<span className="ml-2 text-sm font-normal text-muted-foreground tabular-nums">{tr(`${game.badges.filter((badge) => badge.earned).length} of ${game.badges.length}`, `${game.badges.filter((badge) => badge.earned).length} de ${game.badges.length}`)}</span></h2>
 					<ul className="grid grid-cols-3 gap-x-2 gap-y-3 lg:grid-cols-2 xl:grid-cols-3">
 						{game.badges.map((badge) => <BadgeTile key={badge.id} badge={badge} />)}
 					</ul>
 				</section></Panel>
 			</div>
-			<Motto name="nullaDies" className="pt-2 text-center" />
+			<Motto name="nullaDies" className="pt-10 text-center" />
 		</div>
 	);
 }
@@ -159,12 +158,14 @@ export function ProgressPage() {
 /** One number with its label and what it counts, so lessons, active days and focus time are never confused. */
 function Metric({ label, value, suffix, caption, children }: { label: string; value: string; suffix?: string; caption: string; children?: ReactNode }) {
 	return (
-		<div className="space-y-2 p-5 sm:p-6">
-			<dt className="text-sm font-semibold text-foreground/85">{label}</dt>
+		<div className="min-w-0 space-y-2 py-5 sm:px-6 sm:first:pl-0">
+			<dt className="text-[0.8125rem] font-medium text-muted-foreground">{label}</dt>
 			<dd className="space-y-1.5">
-				<p className="font-heading text-4xl leading-none font-semibold tabular-nums">{value}{suffix && <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{suffix}</span>}</p>
-				<p className="text-sm text-muted-foreground">{caption}</p>
-				{children}
+				<div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+					<p className="font-heading text-4xl leading-none font-semibold tabular-nums">{value}{suffix && <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{suffix}</span>}</p>
+					{children}
+				</div>
+				<p className="text-xs text-muted-foreground">{caption}</p>
 			</dd>
 		</div>
 	);
@@ -173,44 +174,45 @@ function Metric({ label, value, suffix, caption, children }: { label: string; va
 type LibraryEntries = ReturnType<typeof buildLibrary>['entries'];
 
 /** Where the learner stands in the library: lessons done, courses under way and finished, most recent first. */
-function CoursesPanel({ entries }: { entries: LibraryEntries }) {
+function CoursesPanel({ entries, profile }: { entries: LibraryEntries; profile: string }) {
 	const finished = entries.filter((entry) => entry.status === 'completed').length;
 	const active = entries.filter((entry) => entry.status === 'in_progress').sort((a, b) => (b.lastStudiedAt ?? 0) - (a.lastStudiedAt ?? 0));
 	const firstCourse = entries[0];
 	return (
-		<Panel className="flex h-full flex-col justify-between gap-4 p-5 sm:p-6"><section aria-labelledby="courses-heading" className="space-y-4">
+		<Panel variant="open" className="lg:col-span-8"><section aria-labelledby="courses-heading" className="space-y-4">
 			<div className="flex flex-wrap items-end justify-between gap-2">
-				<div><h2 id="courses-heading" className="text-lg font-bold">{tr('Courses', 'Cursos')}</h2><p className="text-sm text-muted-foreground">{tr(`${active.length} in progress · ${finished} finished`, `${active.length} em andamento · ${finished} concluídos`)}</p></div>
-				<Link to={routerPath(href('home'))} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline">{tr('All courses', 'Todos os cursos')}</Link>
+				<div><h2 id="courses-heading" className="text-[15px] font-semibold">{tr('Courses', 'Cursos')}</h2><p className="text-sm text-muted-foreground">{tr(`${active.length} in progress · ${finished} finished`, `${active.length} em andamento · ${finished} concluídos`)}</p></div>
+				<Link to={routerPath(href('home'))} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline-offset-4 hover:underline">{tr('All courses', 'Todos os cursos')}</Link>
 			</div>
 			{active.length === 0 ? (
 				<div className="space-y-4">
 					<p className="text-sm text-muted-foreground">{tr('No course under way. Open a lesson and it shows up here.', 'Nenhum curso em andamento. Abra uma aula e ele aparece aqui.')}</p>
 					{firstCourse && (
-						<Link to={routerPath(href('course', firstCourse.courseId))} className="inline-flex min-h-11 items-center rounded-[var(--radius)] border border-[var(--study-rule)] bg-panel/60 px-4 text-sm font-semibold text-foreground transition-colors hover:border-[var(--border-strong)] hover:bg-brand-tint/60 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+						<Link to={routerPath(href('course', firstCourse.courseId))} className={buttonVariants({ variant: 'outline' })}>
 							{tr(`Open ${firstCourse.course.title}`, `Abrir ${firstCourse.course.title}`)}
 						</Link>
 					)}
 				</div>
 			) : (
-				<ul className="divide-y">
+				<ul className="divide-y divide-[var(--study-rule)]">
 					{active.slice(0, 6).map((entry) => {
 						const studied = entry.lastStudiedAt ? new Date(entry.lastStudiedAt * 1000).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' }) : null;
+						const context = [studied && tr(`Last studied ${studied}`, `Estudado ${studied}`), entry.next && `${tr('next:', 'próxima:')} ${entry.next.title}`].filter(Boolean).join(' · ');
 						return (
-							<li key={entry.courseId} className="flex flex-col gap-3 py-3 first:pt-0 last:pb-0 sm:flex-row sm:flex-wrap sm:items-center sm:gap-4">
-								<div className="min-w-0 flex-1 space-y-0.5">
-									<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-1 font-semibold hover:underline">{entry.course.title}</Link>
-									{(studied || entry.next) && (
-										<p className="truncate text-xs text-muted-foreground">
-											{studied ? tr(`Last studied ${studied}`, `Estudado ${studied}`) : ''}
-											{studied && entry.next ? ' · ' : ''}
-											{entry.next ? `${tr('next:', 'próxima:')} ${entry.next.title}` : ''}
-										</p>
-									)}
+							<li key={entry.courseId} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
+								<div className="w-24 shrink-0 sm:w-36">
+									<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="aspect-video w-full" />
 								</div>
-								<div className="w-52 max-w-full shrink-0 sm:w-56"><ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} /></div>
+								<div className="min-w-0 flex-1 space-y-2">
+									<div className="min-w-0 space-y-0.5">
+										<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-1 font-semibold text-foreground underline-offset-4 hover:underline">{entry.course.title}</Link>
+										<p className="text-xs text-muted-foreground">{progressLabel(entry)}</p>
+										{context && <p className="truncate text-xs text-muted-foreground">{context}</p>}
+									</div>
+									<LessonSegments done={entry.done} total={entry.total} current={entry.done} className="max-w-sm" />
+								</div>
 								{entry.next && (
-									<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className="inline-flex h-10 shrink-0 items-center justify-center rounded-xl border bg-card px-4 text-sm font-semibold hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+									<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className={cn(buttonVariants({ variant: 'outline' }), 'min-h-11 shrink-0 px-4')}>
 										{tr('Resume', 'Retomar')}
 									</Link>
 								)}
@@ -257,11 +259,11 @@ function FocusChart({ days, emptyAction }: { days: ChartDay[]; emptyAction?: Rea
 		<div className="flex flex-1 flex-col">
 			{!empty ? (
 				<svg viewBox={`0 0 ${width} ${height + 24}`} role="img" aria-label={tr('Chart of focus minutes for each day this week; the same numbers are in the table below.', 'Gráfico dos minutos de foco em cada dia desta semana; os mesmos números estão na tabela abaixo.')} className="mt-2 w-full">
-				<path d={area} className="fill-brand-soft" />
-				<path d={line} fill="none" strokeWidth="3" strokeLinecap="round" className="stroke-primary" />
+				<path d={area} className="fill-success-tint" />
+				<path d={line} fill="none" strokeWidth="2.5" strokeLinecap="round" className="stroke-success" />
 				{peak >= 0 && (
 					<g>
-						<circle cx={points[peak].x} cy={points[peak].y} r="5" className="fill-card stroke-primary" strokeWidth="3" />
+						<circle cx={points[peak].x} cy={points[peak].y} r="4.5" className="fill-card stroke-success" strokeWidth="2.5" />
 						<text x={points[peak].x} y={Math.max(14, points[peak].y - 12)} textAnchor="middle" fontSize="13" fontWeight="700" className="fill-foreground">{formatMinutes(days[peak].minutes)}</text>
 					</g>
 				)}
@@ -300,7 +302,7 @@ function FocusChart({ days, emptyAction }: { days: ChartDay[]; emptyAction?: Rea
 function BadgeTile({ badge }: { badge: Badge }) {
 	return (
 		<li className="flex flex-col items-center gap-1.5 px-1.5 py-2 text-center">
-			<span className={cn('grid size-11 place-items-center rounded-full border', badge.earned ? 'border-reward-fill/50 bg-reward-fill text-reward-fill-foreground' : 'border-[var(--study-rule)] bg-panel/45 text-muted-foreground')}>
+			<span className={cn('grid size-11 place-items-center rounded-full border', badge.earned ? 'border-success/50 bg-success-tint text-success' : 'border-[var(--study-rule)] text-muted-foreground')}>
 				{badge.earned ? <Award className="size-5" aria-hidden="true" /> : <Lock className="size-4 opacity-70" aria-hidden="true" />}
 			</span>
 			<p className="text-xs leading-tight font-semibold">{badge.title}<span className="sr-only">{badge.earned ? tr(', earned', ', conquistada') : tr(', locked', ', bloqueada')}</span></p>

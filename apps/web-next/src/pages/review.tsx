@@ -3,7 +3,7 @@ import { ArrowLeft, Download, Layers } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { CoursePicker, GONE } from '@/components/course-picker';
-import { Eyebrow, Hero, Ring } from '@/components/panel';
+import { Eyebrow, Ring } from '@/components/panel';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { useLocale } from '@/hooks/use-locale';
 import { cardsToTsv } from '@/lib/cards';
@@ -61,23 +61,13 @@ export function ReviewPage() {
 		return <Deck courseId={courseId} title={title} cards={all.filter((card) => courseOf(card) === courseId)} now={now} />;
 	}
 	if (all.length === 0) {
-		const firstCourse = catalog.data?.nodes.find((node) => node.role === 'course');
 		return (
 			<div className="space-y-8">
 				<PageHeader icon={Layers} title={tr('Cards to review', 'Cartões para revisar')} description={tr('Spaced recall linked to moments from your lessons.', 'Revisão espaçada vinculada a momentos das suas aulas.')} />
-				<div className="mx-auto max-w-xl py-4">
-					<div className="study-surface space-y-5 bg-card p-6 text-center sm:p-10">
-						<Layers className="mx-auto size-8 text-muted-foreground" aria-hidden="true" />
-						<div className="space-y-2">
-							<h2 className="font-heading text-2xl font-semibold">{tr('No cards yet', 'Nenhum cartão ainda')}</h2>
-							<p className="mx-auto max-w-prose text-sm text-muted-foreground">{tr('Open a lesson and press “Card”, or import a file in the Cards tab of a lesson. Each card comes back here when it is due.', 'Crie um cartão durante a aula ou importe um arquivo na aba Cartões. Volte aqui para revisar na data indicada.')}</p>
-						</div>
-						<div className="flex flex-col justify-center gap-2.5 pt-1 sm:flex-row sm:flex-wrap">
-							{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className={cn(buttonVariants(), 'w-full sm:w-auto')}>{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
-							<Link to="/" className={cn(buttonVariants({ variant: firstCourse ? 'outline' : 'default' }), 'w-full sm:w-auto')}>{tr('Browse your library', 'Explorar a biblioteca')}</Link>
-						</div>
-					</div>
-				</div>
+				<p className="text-muted-foreground">
+					{tr('No cards yet. Make one in a lesson and it comes back here when it is due. ', 'Nenhum cartão ainda. Crie um em uma aula e ele volta aqui quando vencer. ')}
+					<Link to="/" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Browse your library', 'Explorar a biblioteca')}</Link>
+				</p>
 			</div>
 		);
 	}
@@ -149,7 +139,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 						<p className="truncate font-heading text-lg font-bold">{title}</p>
 						{location && <p className="truncate text-sm text-muted-foreground">{courseId === ALL && `${location.courseTitle} · `}{location.lesson.title}{current?.positionSeconds == null ? '' : ` · ${formatDuration(current.positionSeconds)}`}</p>}
 					</div>
-					<div className="flex items-center gap-3 rounded-2xl border bg-card px-4 py-2">
+					<div className="flex items-center gap-3">
 						<Ring size={52} value={live.length ? done / live.length : 0} label={tr(`${done} of ${live.length} cards reviewed`, `${done} de ${live.length} cartões revisados`)} center={<span className="text-[0.7rem] font-bold tabular-nums">{Math.min(done + 1, live.length)}/{live.length}</span>} />
 						<p className="text-sm"><span className="font-bold tabular-nums">{live.length - done}</span> <span className="text-muted-foreground">{tr('left', 'restantes')}</span></p>
 					</div>
@@ -157,21 +147,24 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 				{review.error && <p role="alert" className="text-sm text-destructive">{review.error.message}</p>}
 				{current ? (
 					<>
-						<div className="study-surface relative flex min-h-[20rem] flex-col p-6 sm:p-10" aria-live="polite">
-							<div className="flex items-center justify-between border-b border-[var(--study-rule)] pb-4">
-								<span className="study-timecode text-muted-foreground"># {done + 1}</span>
-								<Eyebrow>{revealed ? tr('Answer', 'Resposta') : tr('Question', 'Pergunta')}</Eyebrow>
+						<div className="relative isolate">
+							<div aria-hidden="true" className="lamp-pool-center pointer-events-none absolute inset-0 -z-10" />
+							<div className="study-surface relative flex min-h-[20rem] flex-col p-6 sm:p-10" aria-live="polite">
+								<div className="flex items-center justify-between border-b border-[var(--study-rule)] pb-4">
+									<span className="study-timecode text-muted-foreground"># {done + 1}</span>
+									<Eyebrow>{revealed ? tr('Answer', 'Resposta') : tr('Question', 'Pergunta')}</Eyebrow>
+								</div>
+								<div className="my-auto space-y-6 py-8 text-center">
+									<h1 className="font-heading text-xl leading-snug font-semibold whitespace-pre-wrap sm:text-2xl">{current.front}</h1>
+									{revealed && (
+										<>
+											<p className="mx-auto max-w-prose border-t border-[var(--study-rule)] pt-6 text-xl leading-relaxed whitespace-pre-wrap">{current.back}</p>
+											{location && <Link to={href('course', location.courseId, location.lesson.path, current.positionSeconds).replace(/^#/, '')} className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4 hover:no-underline">{current.positionSeconds === null ? tr('Open the lesson', 'Abrir a aula') : tr(`Open the lesson at ${formatDuration(current.positionSeconds)}`, `Abrir a aula em ${formatDuration(current.positionSeconds)}`)}</Link>}
+										</>
+									)}
+								</div>
+								{!revealed && <p className="text-center text-sm text-muted-foreground">{tr('Press Space, or use the button, to show the answer.', 'Aperte Espaço, ou use o botão, para mostrar a resposta.')}</p>}
 							</div>
-							<div className="my-auto space-y-6 py-8 text-center">
-								<h1 className="font-heading text-2xl leading-snug font-semibold whitespace-pre-wrap sm:text-3xl">{current.front}</h1>
-								{revealed && (
-									<>
-										<p className="mx-auto max-w-prose border-t border-[var(--study-rule)] pt-6 text-lg leading-relaxed whitespace-pre-wrap">{current.back}</p>
-										{location && <Link to={href('course', location.courseId, location.lesson.path, current.positionSeconds).replace(/^#/, '')} className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{current.positionSeconds === null ? tr('Open the lesson', 'Abrir a aula') : tr(`Open the lesson at ${formatDuration(current.positionSeconds)}`, `Abrir a aula em ${formatDuration(current.positionSeconds)}`)}</Link>}
-									</>
-								)}
-							</div>
-							{!revealed && <p className="text-center text-sm text-muted-foreground">{tr('Press Space, or use the button, to show the answer.', 'Aperte Espaço, ou use o botão, para mostrar a resposta.')}</p>}
 						</div>
 						<ReviewHistory cardId={current.cardId} nextDue={current.nextDue} now={now} />
 						{revealed ? (
@@ -188,7 +181,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 						{revealed && <p className="text-center text-sm text-muted-foreground">{tr('1 for again, 2 for good.', '1 para de novo, 2 para bom.')}</p>}
 					</>
 				) : (
-					<div className="study-surface space-y-4 p-10 text-center">
+					<div className="space-y-4 py-10 text-center">
 						<h1 className="font-heading text-3xl font-semibold">{tr('Session done', 'Sessão concluída')}</h1>
 						<p className="text-muted-foreground">{formatCount(done, tr('card reviewed.', 'cartão revisado.'), tr('cards reviewed.', 'cartões revisados.'))}</p>
 						<Button onClick={leave}>{tr('Back to the deck', 'Voltar ao baralho')}</Button>
@@ -202,16 +195,14 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 		<div className="space-y-8">
 			<Link to="/review" className="inline-flex min-h-11 items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"><ArrowLeft className="size-4" aria-hidden="true" />{tr('All courses', 'Todos os cursos')}</Link>
 			<PageHeader icon={Layers} title={courseId === ALL ? tr('All due cards', 'Todos os cartões a vencer') : tr(`${title} cards`, `Cartões de ${title}`)} description={formatCount(cards.length, courseId === ALL ? tr('card across all courses.', 'cartão em todos os cursos.') : tr('card in this deck.', 'cartão neste baralho.'), courseId === ALL ? tr('cards across all courses.', 'cartões em todos os cursos.') : tr('cards in this deck.', 'cartões neste baralho.'))} />
-			<section aria-labelledby="due-heading">
-				<Hero className="flex flex-wrap items-center justify-between gap-6">
-					<div>
-						<h2 id="due-heading" className="font-heading text-3xl font-semibold">{due.length === 0 ? tr('Nothing is due right now', 'Nada vence agora') : formatCount(due.length, tr('card is due', 'cartão vence agora'), tr('cards are due', 'cartões vencem agora'))}</h2>
-						<p className="mt-1 text-muted-foreground">{due.length === 0 ? tr('Cards come back when they are due.', 'Os cartões voltam quando vencerem.') : tr(`About ${Math.max(1, Math.round(due.length / 3))} min.`, `Cerca de ${Math.max(1, Math.round(due.length / 3))} min.`)}</p>
-					</div>
-					{due.length > 0 && <Button size="lg" className="px-8" onClick={() => { setQueue(due.map((card) => card.cardId)); setDone(0); setRevealed(false); }}>{tr('Start review', 'Começar revisão')}</Button>}
-				</Hero>
+			<section aria-labelledby="due-heading" className="flex flex-wrap items-center justify-between gap-6 border-t border-[var(--study-rule)] pt-6">
+				<div>
+					<h2 id="due-heading" className="text-[15px] font-semibold">{due.length === 0 ? tr('Nothing is due right now', 'Nada vence agora') : formatCount(due.length, tr('card is due', 'cartão vence agora'), tr('cards are due', 'cartões vencem agora'))}</h2>
+					<p className="mt-1 text-sm text-muted-foreground">{due.length === 0 ? tr('Cards come back when they are due.', 'Os cartões voltam quando vencerem.') : tr(`About ${Math.max(1, Math.round(due.length / 3))} min.`, `Cerca de ${Math.max(1, Math.round(due.length / 3))} min.`)}</p>
+				</div>
+				{due.length > 0 && <Button size="lg" className="px-8" onClick={() => { setQueue(due.map((card) => card.cardId)); setDone(0); setRevealed(false); }}>{tr('Start review', 'Começar revisão')}</Button>}
 			</section>
-			{courseId !== GONE && courseId !== ALL && <Link to={`/course/${encodeURIComponent(courseId)}`} className="inline-flex min-h-11 items-center font-semibold text-primary hover:underline">{tr('Open the course', 'Abrir o curso')}</Link>}
+			{courseId !== GONE && courseId !== ALL && <Link to={`/course/${encodeURIComponent(courseId)}`} className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Open the course', 'Abrir o curso')}</Link>}
 		</div>
 	);
 }
@@ -228,7 +219,7 @@ function ReviewHistory({ cardId, nextDue, now }: { cardId: string; nextDue: numb
 	if (total === 0) return <p className="text-sm text-muted-foreground">{tr('This card has not been reviewed yet.', 'Este cartão ainda não foi revisado.')}</p>;
 
 	return (
-		<section aria-labelledby={`reviews-${cardId}`} className="rounded-2xl border bg-card px-4 py-3 text-sm">
+		<section aria-labelledby={`reviews-${cardId}`} className="border-t border-[var(--study-rule)] pt-3 text-sm">
 			<div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
 				<h2 id={`reviews-${cardId}`} className="font-semibold">{formatCount(total, tr('review', 'revisão'), tr('reviews', 'revisões'))}</h2>
 				<p className="text-xs text-muted-foreground">
