@@ -33,11 +33,28 @@ describe('CourseCard variants', () => {
 		expect(screen.getByRole('link', { name: 'Rust from Zero' }).getAttribute('href')).toContain('c1');
 	});
 
-	it('grid and shelf show progress and the favorite toggle; shelf is a fixed-width card', () => {
+	it('shelf shows progress and the favorite toggle in a fixed-width card', () => {
 		show('shelf');
 		expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25');
 		expect(screen.getByRole('button', { name: 'Add Rust from Zero to favorites' }).getAttribute('aria-pressed')).toBe('false');
 		expect(screen.getByRole('listitem').className).toContain('w-64');
+	});
+
+	it('grid is a borderless cover with lesson count, done count, segments and the favorite toggle', () => {
+		show('grid');
+		expect(screen.getByText('4 lessons')).toBeTruthy();
+		expect(screen.getByText('1 done')).toBeTruthy();
+		expect(screen.getByRole('progressbar', { name: '1 of 4 lessons done' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Add Rust from Zero to favorites' })).toBeTruthy();
+		expect(screen.queryByText('Resume')).toBeNull();
+	});
+
+	it('grid says Started or Not started when no lesson is finished', () => {
+		show('grid', { done: 0, status: 'in_progress' });
+		expect(screen.getByText('Started')).toBeTruthy();
+		cleanup();
+		show('grid', { done: 0, status: 'not_started' });
+		expect(screen.getByText('Not started')).toBeTruthy();
 	});
 
 	it('list shows the next lesson and Resume, without the favorite toggle', () => {

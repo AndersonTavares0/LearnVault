@@ -63,9 +63,12 @@ describe('My learning', () => {
 		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r2', positionSeconds: 95, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		const resume = await screen.findByRole('region', { name: 'Continue learning' });
 		expect(within(resume).getByRole('heading', { name: 'Borrowing' })).toBeTruthy();
-		expect(within(resume).getByRole('link', { name: 'Resume' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
+		expect(within(resume).getByText('Lesson 2 of 2')).toBeTruthy();
+		expect(within(resume).getByText('You stopped at 1:35.')).toBeTruthy();
+		expect(within(resume).getByRole('link', { name: 'Resume at 1:35' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
+		expect(within(resume).getByRole('link', { name: 'Open course' }).getAttribute('href')).toBe('/course/rust');
 		expect(screen.getByRole('list', { name: 'Your habit' }).textContent).toMatch(/Streak.*2|2.*Streak/);
-		expect(screen.getAllByRole('progressbar', { name: /^50% complete/ }).length).toBeGreaterThan(0);
+		expect(screen.getAllByRole('progressbar', { name: '1 of 2 lessons done' }).length).toBeGreaterThan(0);
 	});
 
 	it('filters by progress and offers to clear when nothing matches', async () => {
