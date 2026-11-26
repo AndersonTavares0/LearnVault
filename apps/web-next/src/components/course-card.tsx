@@ -3,12 +3,14 @@ import { useId, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CourseCover } from '@/components/course-cover';
 import { CourseManagement } from '@/components/course-management';
+import { LessonSegments } from '@/components/lesson-segments';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore } from '@/lib/appearance';
-import { formatCount } from '@/lib/catalog';
+import { formatCount, isLessonMissing } from '@/lib/catalog';
 import { getLocale, tr } from '@/lib/i18n';
 import type { CourseEntry } from '@/lib/library';
+import type { CatalogNode } from '@/lib/transport';
 import { studySyncSupported } from '@/lib/player';
 import { href } from '@/lib/router';
 import { cn } from '@/lib/utils';
@@ -16,6 +18,13 @@ import { useToggleCourseFavorite } from '@/app/data';
 
 /** Router paths drop the leading `#` of the canonical hash links built by `href()`. */
 export const routerPath = (hash: string) => hash.replace(/^#/, '');
+
+/** Lesson paths in course order, the same lessons `courseProgress` counts; the segments follow this order. */
+export function lessonPaths(node: CatalogNode, out: string[] = []): string[] {
+	if (node.role === 'lesson' && !isLessonMissing(node)) out.push(node.path);
+	for (const child of node.children) lessonPaths(child, out);
+	return out;
+}
 
 export function ProgressBar({ value, label, action, className }: { value: number; label: string; action?: ReactNode; className?: string }) {
 	const id = useId();
@@ -101,25 +110,53 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 			</li>
 		);
 	}
+	if (variant === 'grid') {
+		const current = entry.status === 'in_progress' && entry.next ? lessonPaths(entry.course).indexOf(entry.next.path) : -1;
+		const doneLabel = entry.done > 0 ? tr(`${entry.done} done`, `${entry.done} concluídas`) : entry.status === 'in_progress' ? tr('Started', 'Iniciado') : tr('Not started', 'Não iniciado');
+		return (
+			<li className="group/card relative grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-center gap-3.5 sm:block sm:gap-0">
+				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} className="aspect-video w-full rounded-[10px] border border-border ring-0" />
+				<div className="min-w-0 sm:mt-2.5">
+					<div className="flex items-start gap-1">
+						<h3 className="line-clamp-2 min-w-0 flex-1 text-sm leading-[1.3] font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">
+							<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:underline">{entry.course.title}</Link>
+						</h3>
+						{(studySyncSupported || manageable) && (
+							<div className="relative z-10 -mt-1 -mr-1.5 flex shrink-0 items-center text-muted-foreground">
+								{studySyncSupported && (
+									<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
+										aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
+										className="opacity-0 group-focus-within/card:opacity-100 group-hover/card:opacity-100 aria-pressed:text-primary aria-pressed:opacity-100 [@media(hover:none)]:opacity-100">
+										<Star className={cn(entry.favorite && 'fill-current')} aria-hidden="true" />
+									</Button>
+								)}
+								{manageable && <CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact className="opacity-0 group-focus-within/card:opacity-100 group-hover/card:opacity-100 aria-expanded:opacity-100 [@media(hover:none)]:opacity-100" />}
+							</div>
+						)}
+					</div>
+					{entry.total > 0 ? (
+						<>
+							<p className="mt-1 flex justify-between gap-3 text-[12.5px] text-muted-foreground tabular-nums">
+							<span>{formatCount(entry.total, tr('lesson', 'aula'), tr('lessons', 'aulas'))}</span>
+							<span>{doneLabel}</span>
+						</p>
+						<LessonSegments className="mt-2" done={entry.done} total={entry.total} current={current >= 0 ? current : undefined} />
+					</>
+					) : (
+						<p className="mt-1 text-[12.5px] text-muted-foreground">{tr('No lessons found', 'Sem aulas')}</p>
+					)}
+				</div>
+			</li>
+		);
+	}
 	const resumeClass = 'relative z-10 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-1 text-xs font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring';
 	return (
-		<li
-			data-card
-			className={cn(
-				'group/card study-surface relative flex flex-col justify-between transition-colors duration-150 hover:border-[color:var(--border-strong)] has-focus-visible:ring-2 has-focus-visible:ring-ring',
-				variant === 'shelf' ? 'w-64 shrink-0 snap-start items-stretch overflow-hidden p-0' : 'p-3.5'
-			)}
-		>
-			{variant === 'shelf' && (
-				<div className="relative overflow-hidden border-b border-[var(--study-rule)]">
-					<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} className="aspect-[2.4/1] w-full rounded-none ring-0 [&_img]:transition-transform [&_img]:duration-200 [&_img]:ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/card:[&_img]:scale-[1.03]" />
-				</div>
-			)}
-			<div className={cn('flex min-w-0 flex-1 flex-col justify-between gap-2', variant === 'shelf' && 'p-3.5')}>
+		<li data-card className="group/card study-surface relative flex w-64 shrink-0 snap-start flex-col items-stretch justify-between overflow-hidden p-0 transition-colors duration-150 hover:border-[color:var(--border-strong)] has-focus-visible:ring-2 has-focus-visible:ring-ring">
+			<div className="relative overflow-hidden border-b border-[var(--study-rule)]">
+				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} className="aspect-[2.4/1] w-full rounded-none ring-0 [&_img]:transition-transform [&_img]:duration-200 [&_img]:ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/card:[&_img]:scale-[1.03]" />
+			</div>
+			<div className="flex min-w-0 flex-1 flex-col justify-between gap-2 p-3.5">
 				<div className="flex items-center gap-2.5">
-					{variant !== 'shelf' && (
-						<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="size-11 shrink-0 rounded-[var(--radius-sm)]" />
-					)}
 					<h3 className="card-heading flex min-h-11 min-w-0 flex-1 items-center text-base leading-snug font-semibold">
 						<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:underline">{entry.course.title}</Link>
 					</h3>
