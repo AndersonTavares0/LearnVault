@@ -29,11 +29,12 @@ type Props = {
 function hasImageDetail(image: HTMLImageElement): boolean {
 	try {
 		const canvas = document.createElement('canvas');
-		canvas.width = canvas.height = 8;
+		// 32×32 keeps a slide's title line visible; 8×8 averaged it away and hid real lecture frames.
+		canvas.width = canvas.height = 32;
 		const context = canvas.getContext('2d');
 		if (!context) return true;
-		context.drawImage(image, 0, 0, 8, 8);
-		const { data } = context.getImageData(0, 0, 8, 8);
+		context.drawImage(image, 0, 0, 32, 32);
+		const { data } = context.getImageData(0, 0, 32, 32);
 		for (let i = 4; i < data.length; i += 4) {
 			if (Math.abs(data[i] - data[0]) > 16 || Math.abs(data[i + 1] - data[1]) > 16 || Math.abs(data[i + 2] - data[2]) > 16 || Math.abs(data[i + 3] - data[3]) > 16) return true;
 		}

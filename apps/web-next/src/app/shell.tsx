@@ -137,7 +137,7 @@ export function AppShell() {
 			<SkipLink />
 			<DesktopTitlebar />
 			<div className="flex min-h-0 flex-1 flex-col lg:flex-row print:block">
-				<header className="shrink-0 border-b border-[var(--study-rule)] bg-background/95 lg:w-[236px] lg:border-r lg:border-b-0 lg:bg-sidebar print:hidden">
+				<header data-app-chrome className="shrink-0 border-b border-[var(--study-rule)] bg-background/95 lg:w-[236px] lg:border-r lg:border-b-0 lg:bg-sidebar print:hidden">
 					<div className="mx-auto flex h-16 max-w-[var(--container-max,88rem)] items-center gap-x-3 px-4 sm:gap-x-8 sm:px-10 lg:h-full lg:max-w-none lg:flex-col lg:items-stretch lg:gap-1 lg:px-3 lg:py-4">
 						<Link to="/" className="inline-flex min-h-11 items-center rounded-md font-heading text-xl font-bold tracking-tight sm:text-2xl lg:min-h-0 lg:px-2.5 lg:pt-1 lg:pb-3.5 lg:text-base lg:font-semibold" aria-label={tr('LearnVault home', 'Início do LearnVault')}>LearnVault</Link>
 						{!locked && (
