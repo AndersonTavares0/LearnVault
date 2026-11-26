@@ -111,14 +111,19 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	// A material beside the course (a syllabus, a guide) is normal and already in Materials, so it is no warning.
 	const concerns = (course.structure?.concerns ?? []).filter((concern) => concern !== 'loose_materials' && concern !== 'lessons_without_numbering');
 	const resumeAt = lastStudied && !lastStudied.item.completed ? lastStudied.item.positionSeconds : null;
-	const continuePath = lastStudied?.location && !lastStudied.item.completed ? lastStudied.location.lesson.path : entry?.next?.path;
-	// One segment per playable lesson, in course order; the lesson to continue is the current one.
+	// One segment per playable lesson, in course order. The lesson to study next is the one with a saved
+	// position, otherwise the first lesson not yet done after the last one studied. Done lessons never are.
 	const lessons = course.children.flatMap(lessonNodes).filter((node) => !isLessonMissing(node));
-	const lessonStates: SegmentState[] = lessons.map((node) => (completed.has(lessonMediaId(node) ?? '') ? 'done' : node.path === continuePath ? 'current' : 'pending'));
+	const isDone = (node: CatalogNode) => completed.has(lessonMediaId(node) ?? '');
+	const resumeLesson = resumeAt ? lastStudied?.location?.lesson ?? null : null;
+	const lastIndex = lastStudied?.location ? lessons.findIndex((node) => node.path === lastStudied.location!.lesson.path) : -1;
+	const currentPath = (resumeLesson ?? lessons.slice(lastIndex + 1).find((node) => !isDone(node)))?.path ?? null;
+	const continuePath = currentPath ?? lastStudied?.location?.lesson.path ?? entry?.next?.path;
+	const lessonStates = lessons.map((node): SegmentState => (isDone(node) ? 'done' : node.path === currentPath ? 'current' : 'pending'));
 	const doneLessons = lessonStates.filter((state) => state === 'done').length;
 	const courseNotes = (notes.data ?? []).filter((note) => findLessonLocation(catalog.data ?? null, note.mediaId)?.courseId === courseId);
-	const primaryLabel = lastStudied?.location && resumeAt
-		? tr(`Resume ${lastStudied.location.lesson.title} at ${formatDuration(resumeAt)}`, `Retomar ${lastStudied.location.lesson.title} em ${formatDuration(resumeAt)}`)
+	const primaryLabel = resumeLesson && resumeAt
+		? tr(`Resume ${resumeLesson.title} at ${formatDuration(resumeAt)}`, `Retomar ${resumeLesson.title} em ${formatDuration(resumeAt)}`)
 		: lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso');
 
 	return (
@@ -140,34 +145,32 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 						{counts.lessons > 0 && <span><b className="font-semibold text-foreground tabular-nums">{counts.lessons}</b> {counts.lessons === 1 ? tr('lesson', 'aula') : tr('lessons', 'aulas')}</span>}
 						{materials.length > 0 && <span><b className="font-semibold text-foreground tabular-nums">{materials.length}</b> {materials.length === 1 ? tr('material', 'material') : tr('materials', 'materiais')}</span>}
 						{lessons.length > 0 && <span><b className="font-semibold text-foreground tabular-nums">{doneLessons}</b> {tr(`of ${lessons.length} done`, `de ${lessons.length} concluídas`)}</span>}
-					</div>
-					<div>
-						<button type="button" onClick={() => setCategorizing(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-[var(--radius)] border border-[var(--study-rule)] bg-panel/60 px-3 text-xs font-medium text-foreground transition-colors hover:border-[var(--border-strong)] hover:bg-brand-tint focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
-							<Tag className="size-3 text-primary" aria-hidden="true" />
+						<button type="button" onClick={() => setCategorizing(true)} className="inline-flex min-h-11 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+							<Tag className="size-3.5 shrink-0" aria-hidden="true" />
 							{category ?? tr('Add category', 'Adicionar categoria')}
 						</button>
 						<CourseCategoryDialog course={course} courseId={courseId} open={categorizing} onOpenChange={setCategorizing} />
 					</div>
 				</div>
-				<div className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 lg:col-span-1 lg:col-start-1">
+				<div className="col-span-2 row-start-2 grid grid-cols-2 gap-2 lg:col-span-1 lg:col-start-1 lg:flex lg:flex-wrap lg:items-center">
 					{continuePath ? (
-						<Link to={path(href('course', courseId, continuePath, resumeAt))} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[var(--radius)] bg-primary px-5 text-center text-base leading-snug font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:flex-none">
+						<Link to={path(href('course', courseId, continuePath, resumeLesson ? resumeAt : null))} className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-primary px-5 text-center text-base font-semibold whitespace-nowrap text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:col-span-auto lg:flex-none">
 							{primaryLabel}
 						</Link>
 					) : documents.length > 0 ? (
-						<Link to={path(href('course', courseId, documents[0].path))} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-[var(--radius)] bg-primary px-5 text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:flex-none">
+						<Link to={path(href('course', courseId, documents[0].path))} className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-primary px-5 text-base font-semibold whitespace-nowrap text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:col-span-auto lg:flex-none">
 							{tr('Start reading', 'Começar a ler')}
 						</Link>
 					) : (
 						<p className="text-sm text-muted-foreground">{tr('No lessons available', 'Nenhuma aula disponível')}</p>
 					)}
 					{studySyncSupported && entry && (
-						<Button variant="outline" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
+						<Button variant="outline" className="min-w-0 whitespace-nowrap" aria-pressed={entry.favorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ courseId, favorite: !entry.favorite })}>
 							<Star className={cn(entry.favorite && 'fill-current')} />
 							{entry.favorite ? tr('Favorited', 'Favoritado') : tr('Favorite course', 'Favoritar curso')}
 						</Button>
 					)}
-					{user?.isAdmin && !course.remote && <CourseManagement course={course} courseId={courseId} lessons={counts.lessons} onRemoved={() => navigate('/', { replace: true })} />}
+					{user?.isAdmin && !course.remote && <CourseManagement course={course} courseId={courseId} lessons={counts.lessons} className="min-w-0 whitespace-nowrap" onRemoved={() => navigate('/', { replace: true })} />}
 				</div>
 				<div className="col-span-2 row-start-3 space-y-3 lg:col-span-1 lg:col-start-1">
 					{lessons.length > 0 && <LessonSegments done={doneLessons} total={lessons.length} states={lessonStates} className="h-2.5 max-w-md" />}
@@ -197,7 +200,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 										<Button variant="ghost" size="sm" onClick={() => setSignal(({ n }) => ({ open: false, n: n + 1 }))}>{tr('Collapse all', 'Recolher tudo')}</Button>
 									</span>
 								</div>
-								<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={continuePath} resumeSeconds={resumeAt} signal={signal} />
+								<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={currentPath} resumeSeconds={resumeAt} signal={signal} />
 							</div>
 						) : documents.length === 0 ? <p className="text-muted-foreground">{tr('This course has not been indexed yet.', 'Este curso ainda não foi indexado.')}</p> : null}
 						{documents.length > 0 && (

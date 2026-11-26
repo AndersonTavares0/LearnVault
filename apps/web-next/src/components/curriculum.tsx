@@ -102,6 +102,8 @@ function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePa
 	const isDone = Boolean(mediaId && completed.has(mediaId));
 	const isFavorite = Boolean(mediaId && favorites.has(mediaId));
 	const active = activePath === node.path;
+	// Only a lesson still to study carries the amber marker; a finished one never does.
+	const current = active && !isDone;
 	const label = /^(lesson|aula)(\s+\d+)?$/i.test(node.title.trim()) && moduleTitle ? moduleTitle : node.title;
 	const displayLabel = !compact && moduleTitle === label ? tr('Open lesson', 'Abrir aula') : label;
 	const row = useRef<HTMLLIElement>(null);
@@ -116,16 +118,16 @@ function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePa
 	// The state is the mark's form as well as its colour: a filled check, a half-filled circle, a hairline.
 	const mark = isDone ? (
 		<span className="grid size-3.5 place-items-center rounded-full bg-success"><Check className="size-2.5 text-background" strokeWidth={3} aria-hidden="true" /></span>
-	) : active ? (
+	) : current ? (
 		<span className="size-3.5 rounded-full border-[1.5px] border-primary bg-[conic-gradient(var(--primary)_0_50%,transparent_50%)]" />
 	) : (
 		<span className="size-3.5 rounded-full border-[1.5px] border-border" />
 	);
-	const status = isDone ? tr('Done', 'Concluída') : active && resumeSeconds && !missing ? tr(`Resume at ${formatDuration(resumeSeconds)}`, `Retomar em ${formatDuration(resumeSeconds)}`) : null;
+	const status = isDone ? tr('Done', 'Concluída') : current && resumeSeconds && !missing ? tr(`Resume at ${formatDuration(resumeSeconds)}`, `Retomar em ${formatDuration(resumeSeconds)}`) : null;
 
 	return (
 		<li ref={row} className="relative flex min-h-11 items-center gap-1 border-b border-[var(--study-rule)] pr-1 transition-colors duration-150">
-			{active && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary" />}
+			{current && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary" />}
 			<span className="w-7 shrink-0 text-right text-[12.5px] tabular-nums text-muted-foreground" aria-hidden="true">{numbers.get(node.path)}</span>
 			{studySyncSupported && mediaId && !missing ? (
 				<Button variant="ghost" size="icon" className="shrink-0" aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone })}
@@ -142,7 +144,7 @@ function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePa
 				</div>
 			) : (
 				<>
-					<Link to={href('course', courseId, node.path).replace(/^#/, '')} aria-current={compact && active ? 'page' : undefined} className={cn('flex min-h-11 min-w-0 flex-1 items-center rounded-md py-2 text-sm hover:underline', isDone ? 'text-muted-foreground' : active ? 'font-semibold text-foreground' : 'text-foreground/85')}>
+					<Link to={href('course', courseId, node.path).replace(/^#/, '')} aria-current={compact && active ? 'page' : undefined} className={cn('flex min-h-11 min-w-0 flex-1 items-center rounded-md py-2 text-sm hover:underline', isDone ? 'text-muted-foreground' : current ? 'font-semibold text-foreground' : 'text-foreground/85')}>
 						<span className="min-w-0 flex-1">{displayLabel}</span>
 						{displayLabel !== label && <span className="sr-only">{label}</span>}
 					</Link>
