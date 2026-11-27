@@ -1197,41 +1197,39 @@ fn reviewing_a_card_does_not_suppress_a_concurrent_offline_text_edit() -> TestRe
 #[test]
 fn backfill_preserves_flashcard_text_updated_at_and_update_queue_uses_it() -> TestResult {
     let source = database();
-    push_operations(
-        &source,
-        OWNER,
-        "seed-dev",
-        &[
-            input(
-                "op-c",
-                100,
-                card_created("card-bf", "Orig Q", "Orig A", 100),
-            ),
-            input(
-                "op-e",
-                150,
-                card_updated("card-bf", "Edited Q", "Edited A", 150),
-            ),
-            input(
-                "op-r",
-                200,
-                SyncPayload::FlashcardReview {
-                    card_id: "card-bf".to_owned(),
-                    rating: "good".to_owned(),
-                    reviewed_at: 200,
-                },
-            ),
-        ],
+    let card =
+        learnvault_core::create_flashcard(&source, OWNER, "m1", "Orig Q", "Orig A", Some(10))?;
+    learnvault_core::update_flashcard(&source, OWNER, &card.card_id, "Edited Q", "Edited A")?;
+    learnvault_core::review_flashcard(&source, OWNER, &card.card_id, ReviewRating::Good)?;
+    source.connection().execute(
+        "UPDATE flashcard SET created_at = 100, text_updated_at = 150, updated_at = 200 WHERE card_id = ?1",
+        [&card.card_id],
     )?;
 
-    // First-time backfill onto a replica preserves both updated_at (200) and text_updated_at (150).
+    // First-time backfill onto a replica registers the first device while flashcard rows
+    // already exist, emitting both updated_at (200) and text_updated_at (150).
     let batch = pull_operations(&source, OWNER, "replica-dev", 0, 50)?;
+    assert_eq!(batch.items.len(), 1);
+    match &batch.items[0].payload {
+        SyncPayload::FlashcardCreated {
+            card_id,
+            updated_at,
+            text_updated_at,
+            ..
+        } => {
+            assert_eq!(card_id, &card.card_id);
+            assert_eq!(*updated_at, Some(200));
+            assert_eq!(*text_updated_at, Some(150));
+        }
+        other => panic!("expected backfilled FlashcardCreated, got {other:?}"),
+    }
+
     let replica = database();
     apply_operations(&replica, OWNER, &batch.items, batch.cursor)?;
 
     let (rep_upd, rep_text): (i64, i64) = replica.connection().query_row(
-        "SELECT updated_at, text_updated_at FROM flashcard WHERE card_id = 'card-bf'",
-        [],
+        "SELECT updated_at, text_updated_at FROM flashcard WHERE card_id = ?1",
+        [&card.card_id],
         |r| Ok((r.get(0)?, r.get(1)?)),
     )?;
     assert_eq!(rep_upd, 200);
@@ -1245,7 +1243,7 @@ fn backfill_preserves_flashcard_text_updated_at_and_update_queue_uses_it() -> Te
         &[input(
             "op-stale",
             120,
-            card_updated("card-bf", "Stale Q", "Stale A", 120),
+            card_updated(&card.card_id, "Stale Q", "Stale A", 120),
         )],
     )?;
     assert_eq!(
@@ -1253,29 +1251,53 @@ fn backfill_preserves_flashcard_text_updated_at_and_update_queue_uses_it() -> Te
         "Edited Q"
     );
 
-    // Editing a card with a far-future review timestamp keeps updated_at monotonic while queuing monotonic text_updated_at.
+    // Editing or reviewing a card with a far-future updated_at keeps updated_at monotonic
+    // locally while queuing monotonic text_updated_at and the actual reviewed_at timestamp.
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)?
         .as_secs() as i64;
     let future_ts = now + 86_400;
     source.connection().execute(
-        "UPDATE flashcard SET updated_at = ?1, text_updated_at = 150 WHERE card_id = 'card-bf'",
-        [future_ts],
+        "UPDATE flashcard SET updated_at = ?1, text_updated_at = 150 WHERE card_id = ?2",
+        rusqlite::params![future_ts, &card.card_id],
     )?;
     let updated_card = learnvault_core::queue_flashcard_update(
-        &source, OWNER, "seed-dev", "card-bf", "Local Q", "Local A",
+        &source,
+        OWNER,
+        "local-dev",
+        &card.card_id,
+        "Local Q",
+        "Local A",
     )?;
     assert_eq!(updated_card.updated_at, future_ts);
-    let queued = learnvault_core::pending_operations(&source, OWNER, 20)?;
-    let last = queued.last().expect("queued update op");
-    match &last.payload {
+    let reviewed_card = learnvault_core::queue_review(
+        &source,
+        OWNER,
+        "local-dev",
+        &card.card_id,
+        ReviewRating::Hard,
+    )?;
+    assert_eq!(reviewed_card.updated_at, future_ts);
+
+    let queued = pending_operations(&source, OWNER, 20)?;
+    assert_eq!(queued.len(), 2);
+    match &queued[0].payload {
         SyncPayload::FlashcardUpdated { updated_at, .. } => {
             assert!(
                 *updated_at < future_ts,
                 "must emit text_updated_at, not future review updated_at"
             );
         }
-        other => panic!("unexpected queued payload: {other:?}"),
+        other => panic!("unexpected first queued payload: {other:?}"),
+    }
+    match &queued[1].payload {
+        SyncPayload::FlashcardReview { reviewed_at, .. } => {
+            assert!(
+                *reviewed_at < future_ts,
+                "must emit actual review timestamp, not clamped future updated_at"
+            );
+        }
+        other => panic!("unexpected second queued payload: {other:?}"),
     }
     Ok(())
 }
