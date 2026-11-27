@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CourseCard, progressLabel } from '@/components/course-card';
+import { transport } from '@/lib/transport';
 import type { CourseEntry } from '@/lib/library';
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.restoreAllMocks();
+});
 
 const entry = (patch: Partial<CourseEntry> = {}): CourseEntry => ({
 	course: { title: 'Rust from Zero', path: 'rust', role: 'course', courseId: 'c1', files: [], looseFiles: [], children: [] },
@@ -42,8 +46,8 @@ describe('CourseCard variants', () => {
 
 	it('grid is a borderless cover with lesson count, done count, segments and the favorite toggle', () => {
 		show('grid');
-		// The generated cover names the lesson count and the card meta repeats it.
-		expect(screen.getAllByText('4 lessons')).toHaveLength(2);
+		expect(screen.getAllByText('4 lessons')).toHaveLength(1);
+		expect(screen.getAllByText('Rust from Zero')).toHaveLength(1);
 		expect(screen.getByText('1 done')).toBeTruthy();
 		expect(screen.getByRole('progressbar', { name: '1 of 4 lessons done' })).toBeTruthy();
 		expect(screen.getByRole('button', { name: 'Add Rust from Zero to favorites' })).toBeTruthy();
@@ -84,6 +88,20 @@ describe('CourseCard variants', () => {
 	it('marks a favorite as pressed and offers removal', () => {
 		show('grid', { favorite: true });
 		expect(screen.getByRole('button', { name: 'Remove Rust from Zero from favorites' }).getAttribute('aria-pressed')).toBe('true');
+	});
+
+	it('announces a failed favorite change and lets the learner retry', async () => {
+		const save = vi.spyOn(transport, 'setCourseFavorite')
+			.mockRejectedValueOnce(new Error('Offline'))
+			.mockResolvedValueOnce(true);
+		show('grid');
+		const favorite = screen.getByRole('button', { name: 'Add Rust from Zero to favorites' });
+		fireEvent.click(favorite);
+		expect((await screen.findByRole('alert')).textContent).toContain('Try again');
+		expect(favorite.getAttribute('aria-pressed')).toBe('false');
+		fireEvent.click(favorite);
+		await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+		expect(save).toHaveBeenCalledTimes(2);
 	});
 
 	it('never offers local-only management for a course on a remote source', () => {

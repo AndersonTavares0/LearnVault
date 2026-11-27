@@ -64,18 +64,18 @@ describe('appearance', () => {
 });
 
 describe('brand palette', () => {
-	it('defaults to the lamp accent: bronze on the light page and lamplight on the dark one', () => {
-		expect(DEFAULT_APPEARANCE).toMatchObject({ theme: 'dark', surface: 'lamplight', accent: '#8A5A0C' });
-		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'lamp', hex: '#8A5A0C', dark: '#F0BE62' });
-		expect(darkAccent('#8A5A0C')).toBe('#F0BE62');
-		expect(contrast('#FFFFFF', readableAccent('#8A5A0C'))).toBeGreaterThanOrEqual(4.5);
+	it('defaults to the petrol accent: deep petrol on cool paper and mint-teal on the dark slate', () => {
+		expect(DEFAULT_APPEARANCE).toMatchObject({ theme: 'dark', surface: 'paper', accent: '#115E59', reward: 'accent' });
+		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'petrol', hex: '#115E59', dark: '#4EC0B3' });
+		expect(darkAccent('#115E59')).toBe('#4EC0B3');
+		expect(contrast('#FFFFFF', readableAccent('#115E59'))).toBeGreaterThanOrEqual(4.5);
 	});
 
-	it('keeps white text on the ink accent and the brass accent on the dark panel above 4.5:1', () => {
+	it('keeps white text on the ink accent and the petrol accent on the dark panel above 4.5:1', () => {
 		expect(contrast('#FFFFFF', readableAccent('#1C1815'))).toBeGreaterThanOrEqual(4.5);
 		const accent = darkAccent(DEFAULT_APPEARANCE.accent);
 		expect(contrast('#292B2E', accent)).toBeGreaterThanOrEqual(4.5);
-		expect(contrast('#1C1209', accent)).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#0A1A18', accent)).toBeGreaterThanOrEqual(4.5);
 		expect(contrast('#292B2E', darkAccent('#222222'))).toBeGreaterThanOrEqual(4.5);
 	});
 
@@ -86,9 +86,9 @@ describe('brand palette', () => {
 		}
 	});
 
-	it.each(['light', 'dark'] as const)('keeps small reward text at least 4.5:1 on its %s tint', (theme) => {
+	it.each(['light', 'dark'] as const)('keeps small amber reward text at least 4.5:1 on its %s tint', (theme) => {
 		const root = document.createElement('html');
-		applyAppearance({ ...DEFAULT_APPEARANCE, theme }, root);
+		applyAppearance({ ...DEFAULT_APPEARANCE, reward: 'amber', theme }, root);
 		expect(contrast(root.style.getPropertyValue('--reward'), root.style.getPropertyValue('--reward-tint'))).toBeGreaterThanOrEqual(4.5);
 	});
 

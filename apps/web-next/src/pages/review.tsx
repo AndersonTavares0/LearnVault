@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, Layers } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Download, Layers } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { CoursePicker, GONE } from '@/components/course-picker';
@@ -14,6 +14,7 @@ import { findLessonLocation, href } from '@/lib/router';
 import { transport, type Flashcard, type ReviewRating } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { useCatalog } from '@/app/data';
+import { QueryFailure } from '@/components/query-failure';
 import { PageHeader } from '@/app/shell';
 
 const nowSeconds = () => Math.floor(Date.now() / 1000);
@@ -54,20 +55,29 @@ export function ReviewPage() {
 
 	if (!studySyncSupported) return <PageHeader icon={Layers} title={tr('Review', 'Revisão')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	if (cards.isPending || catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading cards…', 'Carregando cartões…')}</p>;
-	if (cards.error) return <p role="alert" className="text-destructive">{cards.error.message}</p>;
+	if (cards.isError || (catalog.isError && !catalog.data)) {
+		const failed = cards.isError ? cards : catalog;
+		return <QueryFailure message={tr('Could not load your review cards.', 'Não foi possível carregar seus cartões de revisão.')} retry={() => void failed.refetch()} />;
+	}
 	if (courseId === ALL) return <Deck courseId={ALL} title={tr('All courses', 'Todos os cursos')} cards={all} now={now} />;
 	if (courseId) {
 		const title = courseId === GONE ? tr('Lessons no longer in the library', 'Aulas que não estão mais na biblioteca') : (catalog.data?.nodes ?? []).find((node) => node.courseId === courseId)?.title ?? courseId;
 		return <Deck courseId={courseId} title={title} cards={all.filter((card) => courseOf(card) === courseId)} now={now} />;
 	}
 	if (all.length === 0) {
+		const firstCourse = catalog.data?.nodes.find((node) => node.role === 'course');
 		return (
 			<div className="space-y-8">
-				<PageHeader icon={Layers} title={tr('Cards to review', 'Cartões para revisar')} description={tr('Spaced recall linked to moments from your lessons.', 'Revisão espaçada vinculada a momentos das suas aulas.')} />
-				<p className="text-muted-foreground">
-					{tr('No cards yet. Make one in a lesson and it comes back here when it is due. ', 'Nenhum cartão ainda. Crie um em uma aula e ele volta aqui quando vencer. ')}
-					<Link to="/" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Browse your library', 'Explorar a biblioteca')}</Link>
-				</p>
+				<PageHeader icon={Layers} title={tr('Cards to review', 'Cartões para revisar')} description={tr('Revisit what you learned in your lessons.', 'Relembre o que você estudou nas aulas.')} />
+				<div className="study-empty">
+					<span aria-hidden="true" className="mb-1 inline-flex size-11 items-center justify-center rounded-xl border border-primary/20 bg-brand-soft text-brand-ink"><Layers className="size-5" /></span>
+					<h2 className="text-lg font-semibold tracking-tight">{tr('No cards yet', 'Nenhum cartão ainda')}</h2>
+					<p className="text-sm text-muted-foreground">{tr('Create a card during a lesson. It will appear here when it is time to review.', 'Crie um cartão durante uma aula. Ele aparecerá aqui na hora de revisar.')}</p>
+					<div className="flex flex-wrap items-center justify-start gap-2 pt-2">
+						{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className={buttonVariants({ variant: 'default' })}>{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
+						<Link to="/" className={buttonVariants({ variant: firstCourse?.courseId ? 'outline' : 'default' })}>{tr('Browse your library', 'Explorar a biblioteca')}</Link>
+					</div>
+				</div>
 			</div>
 		);
 	}
@@ -76,7 +86,7 @@ export function ReviewPage() {
 	return (
 		<CoursePicker
 			icon={Layers}
-			title={tr('Choose a course to review its Cards', 'Escolha um curso para revisar seus Cartões')}
+			title={tr('Choose a course to review its cards', 'Escolha um curso para revisar os cartões')}
 			description={due === 0 ? tr('Nothing is due right now. Cards come back when they are due.', 'Nada vence agora. Os cartões voltam quando vencerem.') : formatCount(due, tr('card is due', 'cartão vence agora'), tr('cards are due', 'cartões vencem agora'))}
 			actions={<>
 				{due > 0 && <Link to={`/review?course=${ALL}`} className={cn(buttonVariants())}>{tr(`Review all due cards (${due})`, `Revisar todos os cartões a vencer (${due})`)}</Link>}
@@ -158,7 +168,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 									{revealed && (
 										<>
 											<p className="mx-auto max-w-prose border-t border-[var(--study-rule)] pt-6 text-xl leading-relaxed whitespace-pre-wrap">{current.back}</p>
-											{location && <Link to={href('course', location.courseId, location.lesson.path, current.positionSeconds).replace(/^#/, '')} className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4 hover:no-underline">{current.positionSeconds === null ? tr('Open the lesson', 'Abrir a aula') : tr(`Open the lesson at ${formatDuration(current.positionSeconds)}`, `Abrir a aula em ${formatDuration(current.positionSeconds)}`)}</Link>}
+											{location && <Link to={href('course', location.courseId, location.lesson.path, current.positionSeconds).replace(/^#/, '')} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{current.positionSeconds === null ? tr('Open the lesson', 'Abrir a aula') : tr(`Open the lesson at ${formatDuration(current.positionSeconds)}`, `Abrir a aula em ${formatDuration(current.positionSeconds)}`)}<ArrowUpRight aria-hidden="true" /></Link>}
 										</>
 									)}
 								</div>
@@ -201,7 +211,7 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 				</div>
 				{due.length > 0 && <Button size="lg" className="px-8" onClick={() => { setQueue(due.map((card) => card.cardId)); setDone(0); setRevealed(false); }}>{tr('Start review', 'Começar revisão')}</Button>}
 			</section>
-			{courseId !== GONE && courseId !== ALL && <Link to={`/course/${encodeURIComponent(courseId)}`} className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Open the course', 'Abrir o curso')}</Link>}
+			{courseId !== GONE && courseId !== ALL && <Link to={`/course/${encodeURIComponent(courseId)}`} className={buttonVariants({ variant: 'outline' })}>{tr('Open the course', 'Abrir o curso')}<ArrowUpRight aria-hidden="true" /></Link>}
 		</div>
 	);
 }

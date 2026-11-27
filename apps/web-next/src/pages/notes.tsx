@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Download, NotebookPen, Search } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Download, NotebookPen, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { GONE } from '@/components/course-picker';
@@ -7,9 +7,10 @@ import { ConfirmDelete } from '@/components/confirm-delete';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
 import { Panel } from '@/components/panel';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
+import { displayLessonTitle } from '@/lib/catalog';
 import { getLocale, tr } from '@/lib/i18n';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findLessonLocation, href, type LessonLocation } from '@/lib/router';
@@ -18,12 +19,16 @@ import { normalizeForSearch } from '@/lib/search';
 import { transport, type StudyNote } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { useCatalog, useNotes } from '@/app/data';
+import { QueryFailure } from '@/components/query-failure';
 import { PageHeader } from '@/app/shell';
 
 type Entry = { note: StudyNote; location: LessonLocation | null };
 
 const goneTitle = () => tr('Lessons no longer in the library', 'Aulas que não estão mais na biblioteca');
 const noteCourse = (location: LessonLocation | null) => location?.courseId ?? GONE;
+const noteTitle = ({ location, note }: Entry) => location
+	? displayLessonTitle(location.lesson.title, location.moduleTitle)
+	: note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida');
 
 /** Notes start from the notes: every note, newest lesson first, filtered by course on demand. */
 export function NotesPage() {
@@ -34,7 +39,10 @@ export function NotesPage() {
 	if (!studySyncSupported) return <PageHeader icon={NotebookPen} title={tr('Notes', 'Notas')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	// Wait for both lists: without the catalog every note would look like it belongs to a lesson that is gone.
 	if (notes.isPending || catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>;
-	if (notes.isError) return <p role="alert" className="text-destructive">{notes.error.message}</p>;
+	if (notes.isError || (catalog.isError && !catalog.data)) {
+		const failed = notes.isError ? notes : catalog;
+		return <QueryFailure message={tr('Could not load your notebook.', 'Não foi possível carregar seu caderno.')} retry={() => void failed.refetch()} />;
+	}
 	return <Notebook courseId={params.get('course')} />;
 }
 
@@ -67,10 +75,10 @@ function Notebook({ courseId }: { courseId: string | null }) {
 		const courses = [...named].map(([id, value]) => ({ id, ...value })).sort((a, b) => a.title.localeCompare(b.title, getLocale()));
 		const courseTitle = courseId === null ? tr('All courses', 'Todos os cursos') : named.get(courseId)?.title ?? (courseId === GONE ? goneTitle() : (catalog.data?.nodes ?? []).find((node) => node.courseId === courseId)?.title ?? courseId);
 		const inScope = entries.filter(({ location }) => courseId === null || noteCourse(location) === courseId).length;
-		const matches = entries.filter(({ note, location }) => (courseId === null || noteCourse(location) === courseId) && (!needle || [note.content, location?.courseTitle, location?.lesson.title, note.relativePath].some((text) => text && normalizeForSearch(text).includes(needle))));
+		const matches = entries.filter((entry) => (courseId === null || noteCourse(entry.location) === courseId) && (!needle || [entry.note.content, entry.location?.courseTitle, noteTitle(entry), entry.note.relativePath].some((text) => text && normalizeForSearch(text).includes(needle))));
 		const byLesson = new Map<string, { lesson: string; location: LessonLocation | null; updatedAt: number; items: Entry[] }>();
 		for (const entry of matches) {
-			const group = byLesson.get(entry.note.mediaId) ?? { lesson: entry.location?.lesson.title ?? entry.note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida'), location: entry.location, updatedAt: 0, items: [] };
+			const group = byLesson.get(entry.note.mediaId) ?? { lesson: noteTitle(entry), location: entry.location, updatedAt: 0, items: [] };
 			group.items.push(entry);
 			group.updatedAt = Math.max(group.updatedAt, entry.note.updatedAt);
 			byLesson.set(entry.note.mediaId, group);
@@ -103,7 +111,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 				const cTitle = entry.location?.courseTitle ?? goneTitle();
 				const course = byCourse.get(cId) ?? { id: cId, title: cTitle, lessons: new Map() };
 				const lKey = entry.note.mediaId;
-				const lTitle = entry.location?.lesson.title ?? entry.note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida');
+				const lTitle = noteTitle(entry);
 				const lesson = course.lessons.get(lKey) ?? { title: lTitle, location: entry.location, items: [] };
 				lesson.items.push(entry);
 				course.lessons.set(lKey, lesson);
@@ -171,20 +179,22 @@ function Notebook({ courseId }: { courseId: string | null }) {
 						<Download />
 						{isFiltered
 							? tr(`Export ${total} filtered ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar ${total} ${total === 1 ? 'nota filtrada' : 'notas filtradas'} em Markdown`)
-							: tr(`Export all ${total} ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar todas as notas (${total}) em Markdown`)}
+							: total === 1
+								? tr('Export 1 note as Markdown', 'Exportar 1 nota em Markdown')
+								: tr(`Export all ${total} notes as Markdown`, `Exportar todas as ${total} notas em Markdown`)}
 					</Button>
 				) : undefined}
 			/>
 			<div className={cn('grid items-start gap-8', courses.length > 1 && 'lg:grid-cols-[15rem_minmax(0,1fr)]')}>
 				{courses.length > 1 && (
 					<aside aria-label={tr('Courses', 'Cursos')} className="hidden space-y-1 lg:block">
-						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 border-b px-3.5 py-2 text-left text-sm', courseId === null ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
+						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-[var(--radius)] px-3.5 py-2 text-left text-sm transition-colors', courseId === null ? 'bg-brand-soft font-semibold text-brand-ink' : 'text-muted-foreground hover:bg-panel/65 hover:text-foreground')}>
 							<span className="truncate">{tr('All courses', 'Todos os cursos')}</span>
 							<span className="shrink-0 text-xs tabular-nums">{totalNotes}</span>
 						</button>
 						{courses.map((course) => (
-							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 border-b px-3.5 py-2 text-left text-sm', courseId === course.id ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
-								<span className="line-clamp-2 min-w-0">{course.title}</span>
+							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-[var(--radius)] px-3.5 py-2 text-left text-sm transition-colors', courseId === course.id ? 'bg-brand-soft font-semibold text-brand-ink' : 'text-muted-foreground hover:bg-panel/65 hover:text-foreground')}>
+								<span className="line-clamp-2 min-w-0 [overflow-wrap:anywhere]">{course.title}</span>
 								<span className="shrink-0 text-xs tabular-nums">{course.count}</span>
 							</button>
 						))}
@@ -214,14 +224,15 @@ function Notebook({ courseId }: { courseId: string | null }) {
 						<p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
 					) : inScope === 0 ? (
 						(
-							<div className="space-y-3">
-								<h2 className="text-[15px] font-semibold">{tr('Your study notebook', 'Seu caderno de estudo')}</h2>
-								<p className="text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open Notes to write one tied to that moment.', 'Durante uma aula, use “Nota” para registrar uma ideia e voltar a esse trecho depois.')}</p>
-								<p className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-									{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
-									<Link to="/" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Browse your library', 'Explorar a biblioteca')}</Link>
-									{courseId !== null && <Link to="/notes" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
-								</p>
+							<div className="study-empty">
+								<span aria-hidden="true" className="mb-1 inline-flex size-11 items-center justify-center rounded-xl border border-primary/20 bg-brand-soft text-brand-ink"><NotebookPen className="size-5" /></span>
+								<h2 className="text-lg font-semibold tracking-tight">{tr('Your study notebook', 'Seu caderno de estudo')}</h2>
+								<p className="text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open Notes to write one tied to that moment.', 'Durante uma aula, use “Notas” para registrar uma ideia e voltar a esse trecho depois.')}</p>
+								<div className="flex flex-wrap items-center justify-start gap-2 pt-2">
+									{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className={buttonVariants({ variant: 'default' })}>{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
+									<Link to="/" className={buttonVariants({ variant: firstCourse?.courseId ? 'outline' : 'default' })}>{tr('Browse your library', 'Explorar a biblioteca')}</Link>
+									{courseId !== null && <Link to="/notes" className={buttonVariants({ variant: 'ghost' })}>{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
+								</div>
 							</div>
 						)
 					) : groups.length === 0 ? (
@@ -242,7 +253,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 													<div key={lesson.items[0].note.mediaId} className="space-y-1">
 														<div className="flex flex-wrap items-baseline justify-between gap-2">
 															<h4 className="text-sm font-medium text-muted-foreground text-balance">{lesson.title}</h4>
-															{lesson.location && <Link to={href('course', lesson.location.courseId, lesson.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+															{lesson.location && <Link to={href('course', lesson.location.courseId, lesson.location.lesson.path).replace(/^#/, '')} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{tr('Open lesson', 'Abrir aula')}<ArrowUpRight aria-hidden="true" /></Link>}
 														</div>
 														<ul className="divide-y">{lesson.items.map((entry) => renderItem(entry))}</ul>
 													</div>
@@ -259,7 +270,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 								<section key={group.items[0].note.mediaId} aria-label={group.lesson} className="pt-4">
 									<div className="flex flex-wrap items-baseline justify-between gap-2">
 										<h3 className="text-sm font-medium text-muted-foreground text-balance">{group.lesson}<span className="ml-2.5 text-xs font-normal tabular-nums">{tr(`${group.items.length} ${group.items.length === 1 ? 'note' : 'notes'}`, `${group.items.length} ${group.items.length === 1 ? 'nota' : 'notas'}`)}</span></h3>
-										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{tr('Open lesson', 'Abrir aula')}<ArrowUpRight aria-hidden="true" /></Link>}
 									</div>
 									<ul className="divide-y divide-[var(--study-rule)]">{group.items.map((entry) => renderItem(entry))}</ul>
 								</section>

@@ -40,6 +40,8 @@ export type StudyProgress = { mediaId: string; positionSeconds: number; complete
 /** Per-user playback preferences. Speeds arrive as percentages of normal speed. */
 export type PlaybackPreferences = { videoSpeed: number; audioSpeed: number; subtitleLanguage: string };
 export type RecentStudy = { items: StudyProgress[] };
+/** One page of the complete study state; `nextCursor` is opaque and `null` on the last page. */
+export type StudyStatePage = { items: StudyProgress[]; nextCursor: string | null };
 export type StudyDay = { day: string; active: boolean };
 export type StudySummary = {
 	currentStreak: number;
@@ -267,6 +269,8 @@ export interface Transport {
 	getPlaybackPreferences?(): Promise<PlaybackPreferences>;
 	savePlaybackPreferences?(preferences: PlaybackPreferences): Promise<PlaybackPreferences>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
+	/** The whole authorized study state, newest first, one page per call (recentStudy stops at 100). */
+	studyState(cursor?: string | null, limit?: number): Promise<StudyStatePage>;
 	studySummary(): Promise<StudySummary>;
 	listNotes(mediaId?: string): Promise<StudyNote[]>;
 	/** Global search: the owner's notes plus shared course and lesson titles. */
@@ -649,6 +653,12 @@ export function normalizeStudyProgress(value: unknown): StudyProgress {
 export function normalizeRecentStudy(value: unknown): RecentStudy {
 	if (!value || typeof value !== 'object' || !Array.isArray((value as { items?: unknown }).items)) throw invalidPayload('invalid study history.', 'histórico de estudo inválido.');
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
+}
+
+export function normalizeStudyState(value: unknown): StudyStatePage {
+	const next = (value as { next_cursor?: unknown } | null)?.next_cursor;
+	if (next !== undefined && next !== null && typeof next !== 'string') throw invalidPayload('invalid study state.', 'estado de estudo inválido.');
+	return { items: normalizeRecentStudy(value).items, nextCursor: next ?? null };
 }
 
 export function normalizePlaybackPreferences(value: unknown): PlaybackPreferences {
@@ -1314,6 +1324,14 @@ export class HttpTransport implements Transport {
 	}
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? credentialsChangeMessage() : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : response.status === 422 ? tr('Invalid position.', 'Posição inválida.') : tr('Could not save progress.', 'Não foi possível salvar o progresso.')); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? credentialsChangeMessage() : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : tr('Could not update completion.', 'Não foi possível atualizar a conclusão.')); return normalizeStudyProgress(await response.json()); }
+	async studyState(cursor?: string | null, limit?: number) {
+		const query = new URLSearchParams();
+		if (limit !== undefined) query.set('limit', String(limit));
+		if (cursor) query.set('cursor', cursor);
+		const response = await fetch(`/api/study/state${query.size ? `?${query}` : ''}`);
+		if (!response.ok) throw response.status === 404 ? Object.assign(new Error(tr('Study not available on this server.', 'Estudo não disponível neste servidor.')), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? credentialsChangeMessage() : tr('Could not load history.', 'Não foi possível carregar o histórico.'));
+		return normalizeStudyState(await response.json());
+	}
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error(tr('Study not available on this server.', 'Estudo não disponível neste servidor.')), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? credentialsChangeMessage() : tr('Could not load history.', 'Não foi possível carregar o histórico.')); return normalizeRecentStudy(await response.json()); }
 	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw new Error(response.status === 403 ? credentialsChangeMessage() : tr('Could not load your evolution.', 'Não foi possível carregar sua evolução.')); return normalizeStudySummary(await response.json()); }
 	async listNotes(mediaId?: string) {
@@ -1680,6 +1698,7 @@ export class DesktopStub implements Transport {
 	async setCompleted(mediaId: string, completed: boolean) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_set_completed', { mediaId, completed })); } catch (cause) { throw desktopError(cause, tr('Could not update completion status.', 'Não foi possível atualizar a conclusão.')); } }
 	// Without a limit given, the command uses the contract's default; that is why the argument is
 	// omitted instead of being sent as `undefined`.
+	async studyState(cursor?: string | null, limit?: number) { try { return normalizeStudyState(await invoke<unknown>('desktop_study_state', { ...(limit === undefined ? {} : { limit }), ...(cursor ? { cursor } : {}) })); } catch (cause) { throw desktopError(cause, tr('Could not load study history.', 'Não foi possível carregar o histórico de estudo.')); } }
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, tr('Could not load study history.', 'Não foi possível carregar o histórico de estudo.')); } }
 	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your progress summary.', 'Não foi possível carregar sua evolução.')); } }
 	// Preferences live in the local database and enter the sync queue; the

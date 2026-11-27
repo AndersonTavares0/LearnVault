@@ -23,8 +23,22 @@ export function useCatalog(enabled = true) {
 	return useQuery({ queryKey: keys.catalog, queryFn: () => transport.catalog(), enabled, staleTime: 30_000 });
 }
 
-// The history covers the whole user: 100 items find the last lesson of any course.
-const RECENT_LIMIT = 100;
+// The history covers the whole user: every page of the authorized study state, so a course of
+// more than 100 lessons still shows all its progress. Pages are 500; the guard bounds a broken cursor.
+const STATE_PAGE = 500;
+const MAX_STATE_PAGES = 100;
+
+async function loadStudyState(): Promise<StudyProgress[]> {
+	const items: StudyProgress[] = [];
+	let cursor: string | null = null;
+	for (let page = 0; page < MAX_STATE_PAGES; page++) {
+		const result = await transport.studyState(cursor, STATE_PAGE);
+		items.push(...result.items);
+		if (!result.nextCursor) break;
+		cursor = result.nextCursor;
+	}
+	return items;
+}
 
 export function useRecent(enabled = true) {
 	return useQuery({
@@ -32,7 +46,7 @@ export function useRecent(enabled = true) {
 		enabled: enabled && studySyncSupported,
 		queryFn: async (): Promise<StudyProgress[]> => {
 			try {
-				return (await transport.recentStudy(RECENT_LIMIT)).items;
+				return await loadStudyState();
 			} catch (cause) {
 				// Study sync can be off on the server; the library still works without it.
 				if ((cause as { code?: string } | null)?.code === STUDY_NOT_AVAILABLE) return [];

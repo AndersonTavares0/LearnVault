@@ -15,6 +15,24 @@ const test = createTest(async (course) => {
 	}
 });
 
+for (const [route, dependency, message, recovered] of [
+	['history', '**/api/study/**', 'Could not load your history.', 'Watch history'],
+	['notes', '**/api/catalog', 'Could not load your notebook.', 'Notes'],
+	['review', '**/api/catalog', 'Could not load your review cards.', 'Cards to review']
+] as const) {
+	test(`${route} distinguishes a failed request from an empty collection and retries`, async ({ page, origin }) => {
+		await signIn(page, origin);
+		await page.route(dependency, (request) => request.fulfill({ status: 503, body: '' }));
+		await page.goto(`${origin}/#/${route}`);
+		await page.reload();
+		await expect(page.getByRole('alert').filter({ hasText: message })).toBeVisible();
+		await page.unroute(dependency);
+		await page.getByRole('button', { name: 'Try again' }).click();
+		await expect(page.getByRole('heading', { level: 1, name: recovered })).toBeVisible();
+		await expect(page.getByRole('alert').filter({ hasText: message })).toHaveCount(0);
+	});
+}
+
 async function manifest(root: string) {
 	const paths = (await readdir(root, { recursive: true, withFileTypes: true }))
 		.filter((entry) => !entry.isDirectory())

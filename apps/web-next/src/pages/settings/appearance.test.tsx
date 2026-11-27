@@ -53,10 +53,10 @@ describe('AppearanceSettings', () => {
 		render(<AppearanceSettings />);
 		press('Theme', 'Dark');
 		expect(root.dataset.theme).toBe('dark');
-		expect(root.style.getPropertyValue('--brand')).toBe('#F0BE62');
+		expect(root.style.getPropertyValue('--brand')).toBe('#4EC0B3');
 		press('Theme', 'Light');
 		expect(root.dataset.theme).toBe('light');
-		expect(root.style.getPropertyValue('--brand')).toBe('#8A5A0C');
+		expect(root.style.getPropertyValue('--brand')).toBe('#115E59');
 	});
 
 	it('follows the reward colour choice', () => {

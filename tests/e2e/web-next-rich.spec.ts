@@ -222,6 +222,30 @@ test('main pages keep their content inside narrow and desktop viewports', async 
 	}
 });
 
+test('the Portuguese library keeps its active navigation in both Lamplight themes', async ({ page, origin }, testInfo) => {
+	await signIn(page, origin);
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await expect(page.getByText('Catalog updated.')).toBeVisible();
+	await page.goto(`${origin}/#/settings`);
+	await page.getByRole('button', { name: 'Português (Brasil)' }).click();
+	await page.goto(`${origin}/#/`);
+	for (const theme of ['dark', 'light']) {
+		if (theme === 'light') await page.getByRole('button', { name: /tema claro/i }).click();
+		await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+		for (const width of [390, 1440]) {
+			await page.setViewportSize({ width, height: 900 });
+			const nav = page.getByRole('navigation', { name: width === 390 ? 'Seções' : 'Principal', exact: true });
+			await expect(nav.locator('a[aria-current="page"]')).toHaveText(/Biblioteca|Meu aprendizado/);
+			const filters = page.getByRole('group', { name: 'Mostrar', exact: true });
+			for (const filter of await filters.getByRole('button').all()) {
+				await expect(filter).toBeInViewport({ ratio: 1 });
+			}
+			await expectNoAxeViolations(page, `library pt-BR ${theme} ${width}`);
+			await page.screenshot({ path: testInfo.outputPath(`library-pt-${theme}-${width}.png`) });
+		}
+	}
+});
+
 test('mobile settings stay usable in Portuguese and the dark theme', async ({ page, origin }, testInfo) => {
 	await signIn(page, origin);
 	await setTheme(page, 'dark');

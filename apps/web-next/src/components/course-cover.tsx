@@ -76,6 +76,7 @@ export function CourseCover({ course, profile, className, eager = false, done = 
 	return (
 		<span ref={element} aria-hidden="true" className={cn('relative block aspect-[4/3] overflow-hidden rounded-[var(--radius)] bg-muted ring-1 ring-inset ring-foreground/10', className)}>
 			<CoverArt title={course.title} courseId={courseIdOf(course)} done={done} total={total} compact={compact} map={map} />
+			{map && !compact && <span className="sr-only">{course.title}</span>}
 			{image && <img key={image} src={image} alt="" width={600} height={400} loading={eager ? 'eager' : 'lazy'} decoding="async" className="absolute inset-0 size-full object-cover opacity-0 data-[ready]:opacity-100" onLoad={({ currentTarget }) => {
 				if (hasImageDetail(currentTarget)) currentTarget.dataset.ready = '';
 			}} />}

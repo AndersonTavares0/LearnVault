@@ -269,6 +269,17 @@ pub struct RecentStudyDto {
     pub items: Vec<StudyProgressDto>,
 }
 
+/// One page of the local owner's whole study state, newest first.
+///
+/// `next_cursor` is the opaque value to send back for the following page; `None` ends the walk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyStateDto {
+    /// Progress items of this page.
+    pub items: Vec<StudyProgressDto>,
+    /// Where the next page starts, when there is one.
+    pub next_cursor: Option<String>,
+}
+
 /// Playback preferences of the local owner.
 ///
 /// Speeds use the same contract as the HTTP adapter (percentages of normal speed), so

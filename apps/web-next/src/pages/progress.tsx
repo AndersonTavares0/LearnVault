@@ -1,4 +1,4 @@
-import { Award, ChartNoAxesColumn, Check, Lock } from 'lucide-react';
+import { ArrowRight, Award, ChartNoAxesColumn, Check, Lock } from 'lucide-react';
 import { type ReactNode, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 import { ActivityHeatmap, type DayActivity } from '@/components/activity-heatmap';
@@ -90,18 +90,26 @@ export function ProgressPage() {
 
 	return (
 		<div>
-			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={<span className="inline-flex flex-wrap gap-x-4 gap-y-1"><span>{tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)}</span><span>{game.level.xp} XP</span><span>{tr(`${game.level.xpToNext} XP to level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o nível ${game.level.level + 1}`)}</span></span>} />
+			<PageHeader icon={ChartNoAxesColumn} title={tr('Your progress', 'Seu progresso')} description={game.level.xp > 0
+				? <span className="inline-flex flex-wrap gap-x-4 gap-y-1"><span>{tr(`Level ${game.level.level}`, `Nível ${game.level.level}`)}</span><span>{game.level.xp} XP</span><span>{tr(`${game.level.xpToNext} XP to level ${game.level.level + 1}`, `${game.level.xpToNext} XP para o nível ${game.level.level + 1}`)}</span></span>
+				: tr(`Level ${game.level.level} · 0 of ${game.level.xpToNext} XP until the next level`, `Nível ${game.level.level} · 0 de ${game.level.xpToNext} XP para o próximo nível`)} />
 
-			<dl aria-label={tr('At a glance', 'Visão geral')} className="grid divide-y divide-[var(--study-rule)] sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-				<Metric label={tr('Lessons completed (all time)', 'Aulas concluídas (total)')} value={String(lessonsDone)} caption={tr(`In total, across ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started.`, `No total, em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}.`)} />
-				<Metric label={tr('Active days (this week)', 'Dias ativos (esta semana)')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={`${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia mais forte: ${best ? best.label : 'nenhum ainda'}.`)}`} />
-				<Metric label={range === 'week' ? tr('Focus time (this week)', 'Tempo de foco (esta semana)') : tr('Focus time (all time)', 'Tempo de foco (total)')} value={formatMinutes(total)} caption={`${range === 'week' ? '' : `${tr('In total.', 'No total.')} `}${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`}>
-					<div role="group" aria-label={tr('Focus time period', 'Período do tempo de foco')} className="inline-flex rounded-[var(--radius)] bg-muted p-0.5">
-						{([['week', tr('This week', 'Esta semana')], ['all', tr('All time', 'Todo o tempo')]] as const).map(([value, text]) => (
-							<button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={cn('min-h-11 rounded-[calc(var(--radius)-2px)] px-3 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none', range === value ? 'bg-card font-semibold text-foreground shadow-2xs' : 'font-medium text-muted-foreground hover:text-foreground')}>{text}</button>
-						))}
-					</div>
-				</Metric>
+			<div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+				<h2 className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">{tr('At a glance', 'Visão geral')}</h2>
+				<div role="group" aria-label={tr('Focus time period', 'Período do tempo de foco')} className="inline-flex rounded-[var(--radius)] border border-[var(--study-rule)] bg-panel p-0.5">
+					{([['week', tr('This week', 'Esta semana')], ['all', tr('All time', 'Todo o tempo')]] as const).map(([value, text]) => (
+						<button key={value} type="button" aria-pressed={range === value} onClick={() => setRange(value)} className={cn('min-h-11 rounded-[calc(var(--radius)-2px)] px-3 text-xs font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/60 focus-visible:outline-none sm:min-h-9 sm:text-sm', range === value ? 'bg-card font-semibold text-foreground shadow-2xs' : 'text-muted-foreground hover:text-foreground')}>{text}</button>
+					))}
+				</div>
+			</div>
+			<dl aria-label={tr('At a glance', 'Visão geral')} className="study-surface study-metrics mb-6 grid grid-cols-2 sm:grid-cols-3 [&>*:last-child]:max-sm:col-span-2">
+				<Metric label={tr('Lessons completed (all time)', 'Aulas concluídas (total)')} value={String(lessonsDone)} caption={startedCourses
+					? tr(`In total, across ${startedCourses} ${startedCourses === 1 ? 'course' : 'courses'} you started.`, `No total, em ${startedCourses} ${startedCourses === 1 ? 'curso iniciado' : 'cursos iniciados'}.`)
+					: tr('No courses started yet.', 'Nenhum curso iniciado.')} />
+				<Metric label={tr('Active days (this week)', 'Dias ativos (esta semana)')} value={String(Math.min(study.weekActiveDays, goal))} suffix={tr(`of ${goal}-day goal`, `da meta de ${goal} dias`)} caption={study.currentStreak || best
+					? `${missing === 0 ? tr('Goal reached. ', 'Meta atingida. ') : ''}${tr(`Streak: ${study.currentStreak} ${study.currentStreak === 1 ? 'day' : 'days'}. Busiest day: ${best ? best.label : 'none yet'}.`, `Sequência: ${study.currentStreak} ${study.currentStreak === 1 ? 'dia' : 'dias'}. Dia com mais foco: ${best ? best.label : 'nenhum ainda'}.`)}`
+					: tr('No study streak yet.', 'Sem sequência de estudo.')} />
+				<Metric label={range === 'week' ? tr('Focus time (this week)', 'Tempo de foco (esta semana)') : tr('Focus time (all time)', 'Tempo de foco (total)')} value={formatMinutes(total)} caption={`${range === 'week' ? '' : `${tr('In total.', 'No total.')} `}${tr('Only the Pomodoro timer counts here.', 'Só o cronômetro Pomodoro conta aqui.')}`} />
 			</dl>
 
 			<div className="grid gap-x-10 lg:grid-cols-12">
@@ -113,8 +121,8 @@ export function ProgressPage() {
 						{game.missions.map((mission) => {
 							const done = mission.progress >= mission.target;
 							return (
-								<li key={mission.id} className="flex items-center gap-3 py-3">
-									<span className={cn('grid size-5 shrink-0 place-items-center rounded-full border', done ? 'border-success bg-success text-background' : 'border-border-strong')}>{done && <Check className="size-3" aria-hidden="true" />}</span>
+								<li key={mission.id} className="flex items-center gap-3 py-2.5">
+									<span className={cn('grid size-5 shrink-0 place-items-center rounded-full border', done ? 'border-primary bg-primary text-primary-foreground' : 'border-border-strong')}>{done && <Check className="size-3" aria-hidden="true" />}</span>
 									<p className="min-w-0 flex-1 text-sm">{mission.title}</p>
 									{mission.claimed ? (
 										<span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground"><Check className="size-3.5" aria-hidden="true" />{mission.rewardXp} XP</span>
@@ -156,14 +164,14 @@ export function ProgressPage() {
 /** One number with its label and what it counts, so lessons, active days and focus time are never confused. */
 function Metric({ label, value, suffix, caption, children }: { label: string; value: string; suffix?: string; caption: string; children?: ReactNode }) {
 	return (
-		<div className="min-w-0 space-y-2 py-5 sm:px-6 sm:first:pl-0">
+		<div className="min-w-0 space-y-2 px-4 py-4 sm:p-5">
 			<dt className="text-[0.8125rem] font-medium text-muted-foreground">{label}</dt>
 			<dd className="space-y-1.5">
 				<div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-					<p className="font-heading text-4xl leading-none font-semibold tabular-nums">{value}{suffix && <span className="ml-2 font-sans text-base font-medium text-muted-foreground">{suffix}</span>}</p>
+					<p className="font-heading text-[clamp(1.65rem,5vw,2.25rem)] leading-none font-semibold tabular-nums">{value}{suffix && <span className="ml-1.5 font-sans text-xs leading-snug font-medium whitespace-nowrap text-muted-foreground sm:text-sm">{suffix}</span>}</p>
 					{children}
 				</div>
-				<p className="text-xs text-muted-foreground">{caption}</p>
+				<p className="max-w-[42ch] text-sm leading-snug text-muted-foreground">{caption}</p>
 			</dd>
 		</div>
 	);
@@ -178,15 +186,15 @@ function CoursesPanel({ entries, profile }: { entries: LibraryEntries; profile: 
 	const firstCourse = entries[0];
 	return (
 		<Panel variant="open" className="lg:col-span-8"><section aria-labelledby="courses-heading" className="space-y-4">
-			<div className="flex flex-wrap items-end justify-between gap-2">
+			<div className="flex flex-wrap items-center justify-between gap-2">
 				<div><h2 id="courses-heading" className="text-[15px] font-semibold">{tr('Courses', 'Cursos')}</h2><p className="text-sm text-muted-foreground">{tr(`${active.length} in progress · ${finished} finished`, `${active.length} em andamento · ${finished} concluídos`)}</p></div>
-				<Link to={routerPath(href('home'))} className="inline-flex min-h-11 items-center text-sm font-medium text-foreground underline-offset-4 hover:underline">{tr('All courses', 'Todos os cursos')}</Link>
+				<Link to={routerPath(href('home'))} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{tr('All courses', 'Todos os cursos')}<ArrowRight aria-hidden="true" /></Link>
 			</div>
 			{active.length === 0 ? (
 				<div className="space-y-4">
 					<p className="text-sm text-muted-foreground">{tr('No course under way. Open a lesson and it shows up here.', 'Nenhum curso em andamento. Abra uma aula e ele aparece aqui.')}</p>
 					{firstCourse && (
-						<Link to={routerPath(href('course', firstCourse.courseId))} className={buttonVariants({ variant: 'outline' })}>
+						<Link to={routerPath(href('course', firstCourse.courseId))} className={buttonVariants({ variant: 'default' })}>
 							{tr(`Open ${firstCourse.course.title}`, `Abrir ${firstCourse.course.title}`)}
 						</Link>
 					)}
@@ -257,11 +265,11 @@ function FocusChart({ days, emptyAction }: { days: ChartDay[]; emptyAction?: Rea
 		<div className="flex flex-1 flex-col">
 			{!empty ? (
 				<svg viewBox={`0 0 ${width} ${height + 24}`} role="img" aria-label={tr('Chart of focus minutes for each day this week; the same numbers are in the table below.', 'Gráfico dos minutos de foco em cada dia desta semana; os mesmos números estão na tabela abaixo.')} className="mt-2 w-full">
-				<path d={area} className="fill-success-tint" />
-				<path d={line} fill="none" strokeWidth="2.5" strokeLinecap="round" className="stroke-success" />
+				<path d={area} className="fill-brand-tint" />
+				<path d={line} fill="none" strokeWidth="2.5" strokeLinecap="round" className="stroke-primary" />
 				{peak >= 0 && (
 					<g>
-						<circle cx={points[peak].x} cy={points[peak].y} r="4.5" className="fill-card stroke-success" strokeWidth="2.5" />
+						<circle cx={points[peak].x} cy={points[peak].y} r="4.5" className="fill-card stroke-primary" strokeWidth="2.5" />
 						<text x={points[peak].x} y={Math.max(14, points[peak].y - 12)} textAnchor="middle" fontSize="13" fontWeight="700" className="fill-foreground">{formatMinutes(days[peak].minutes)}</text>
 					</g>
 				)}
@@ -300,7 +308,7 @@ function FocusChart({ days, emptyAction }: { days: ChartDay[]; emptyAction?: Rea
 function BadgeTile({ badge }: { badge: Badge }) {
 	return (
 		<li className="flex flex-col items-center gap-1.5 px-1.5 py-2 text-center">
-			<span className={cn('grid size-11 place-items-center rounded-full border', badge.earned ? 'border-success/50 bg-success-tint text-success' : 'border-[var(--study-rule)] text-muted-foreground')}>
+			<span className={cn('grid size-11 place-items-center rounded-full border', badge.earned ? 'border-primary/40 bg-brand-soft text-brand-ink' : 'border-[var(--study-rule)] text-muted-foreground')}>
 				{badge.earned ? <Award className="size-5" aria-hidden="true" /> : <Lock className="size-4 opacity-70" aria-hidden="true" />}
 			</span>
 			<p className="text-xs leading-tight font-semibold">{badge.title}<span className="sr-only">{badge.earned ? tr(', earned', ', conquistada') : tr(', locked', ', bloqueada')}</span></p>

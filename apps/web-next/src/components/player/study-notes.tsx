@@ -1,10 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PenLine, SquarePlus, Trash2 } from 'lucide-react';
+import { PenLine, Pencil, SquarePlus, Trash2 } from 'lucide-react';
 import { Link } from 'react-router';
 import { useState, type KeyboardEvent } from 'react';
+import { ConfirmDelete } from '@/components/confirm-delete';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { getLocale, tr } from '@/lib/i18n';
 import { formatDuration } from '@/lib/player';
 import { transport, type StudyNote } from '@/lib/transport';
@@ -23,11 +24,15 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCar
 	const client = useQueryClient();
 	const notes = useLessonNotes(mediaId);
 	const [draft, setDraft] = useState<{ position: number; content: string } | null>(null);
+	const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
+	const [deleting, setDeleting] = useState<StudyNote | null>(null);
 	const [lastRequest, setLastRequest] = useState(addRequest);
 	const [saved, setSaved] = useState(false);
 	const refresh = () => Promise.all([client.invalidateQueries({ queryKey: lessonNotesKey(mediaId) }), client.invalidateQueries({ queryKey: ['notes'], exact: true })]);
 	const create = useMutation({ mutationFn: (note: { position: number; content: string }) => transport.createNote(mediaId, note.position, note.content), onSuccess: () => { setDraft(null); setSaved(true); return refresh(); } });
-	const remove = useMutation({ mutationFn: (noteId: string) => transport.deleteNote(noteId), onSuccess: () => { setSaved(false); return refresh(); } });
+	// The lesson's timestamp is not part of an edit: updateNote changes only the text.
+	const update = useMutation({ mutationFn: ({ id, content }: { id: string; content: string }) => transport.updateNote(id, content), onSuccess: () => { setEditing(null); setSaved(true); return refresh(); } });
+	const remove = useMutation({ mutationFn: (noteId: string) => transport.deleteNote(noteId), onSuccess: () => { setDeleting(null); setSaved(false); return refresh(); } });
 
 	// The `n` shortcut asks the panel to open a draft at the current time.
 	if (addRequest !== lastRequest) {
@@ -38,14 +43,23 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCar
 	const save = () => {
 		if (draft?.content.trim() && !create.isPending) create.mutate({ position: draft.position, content: draft.content.trim() });
 	};
+	const saveEdit = () => {
+		if (editing?.content.trim() && !update.isPending) update.mutate({ id: editing.id, content: editing.content.trim() });
+	};
 	const onKeyDown = (event: KeyboardEvent) => {
 		if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
 			event.preventDefault();
 			save();
 		}
 	};
+	const onEditKeyDown = (event: KeyboardEvent) => {
+		if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+			event.preventDefault();
+			saveEdit();
+		}
+	};
 	const items: StudyNote[] = [...(notes.data ?? [])].sort((a, b) => a.positionSeconds - b.positionSeconds);
-	const error = notes.error?.message || create.error?.message || remove.error?.message;
+	const error = notes.error?.message || create.error?.message || update.error?.message || remove.error?.message;
 
 	return (
 		<div className="space-y-4">
@@ -67,8 +81,8 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCar
 					</div>
 				</div>
 			) : (
-				// Desktop: a quiet compose box. Phone: the one amber action on the sheet.
-				<button type="button" onClick={() => setDraft({ position: Math.floor(currentTime), content: '' })} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl border border-[var(--study-rule)] bg-background px-3 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring max-lg:border-primary max-lg:bg-primary max-lg:font-semibold max-lg:text-primary-foreground max-lg:hover:bg-primary/90">
+				// Desktop: standard secondary outline trigger. Phone: primary filled action.
+				<button type="button" onClick={() => setDraft({ position: Math.floor(currentTime), content: '' })} className={`${buttonVariants({ variant: 'outline' })} w-full justify-center max-lg:border-primary max-lg:bg-primary max-lg:font-semibold max-lg:text-primary-foreground max-lg:hover:bg-primary/90 dark:max-lg:border-primary dark:max-lg:bg-primary dark:max-lg:text-primary-foreground dark:max-lg:hover:bg-primary/90`}>
 					<PenLine className="size-4 shrink-0" aria-hidden="true" />{tr(`Write a note at ${formatDuration(currentTime)}`, `Escrever uma nota em ${formatDuration(currentTime)}`)}
 				</button>
 			)}
@@ -84,7 +98,17 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCar
 								{formatDuration(note.positionSeconds)}
 							</button>
 							<div className="min-w-0 flex-1 space-y-1">
-								<Markdown text={note.content} className="text-sm leading-relaxed" />
+								{editing?.id === note.noteId ? (
+									<form className="space-y-2" onSubmit={(event) => { event.preventDefault(); saveEdit(); }}>
+										<NoteEditor id={`edit-${note.noteId}`} label={tr('Note text', 'Texto da nota')} focusOnOpen rows={3} value={editing.content} onChange={(content) => setEditing({ ...editing, content })} onKeyDown={onEditKeyDown} />
+										<div className="flex justify-end gap-2">
+											<Button type="button" variant="outline" onClick={() => setEditing(null)} disabled={update.isPending}>{tr('Cancel', 'Cancelar')}</Button>
+											<Button type="submit" disabled={update.isPending || !editing.content.trim()}>{update.isPending ? tr('Saving…', 'Salvando…') : tr('Save', 'Salvar')}</Button>
+										</div>
+									</form>
+								) : (
+									<Markdown text={note.content} className="text-sm leading-relaxed" />
+								)}
 								<p className="text-xs text-muted-foreground">{new Date(note.createdAt * 1000).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' })}</p>
 							</div>
 							{onMakeCard && (
@@ -92,13 +116,25 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCar
 									<SquarePlus />{tr('Card', 'Cartão')}
 								</Button>
 							)}
-							<Button variant="ghost" size="icon" onClick={() => remove.mutate(note.noteId)} disabled={remove.isPending} aria-label={tr(`Delete note at ${formatDuration(note.positionSeconds)}`, `Excluir nota em ${formatDuration(note.positionSeconds)}`)}>
+							<Button variant="ghost" size="icon" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr(`Edit note at ${formatDuration(note.positionSeconds)}`, `Editar nota em ${formatDuration(note.positionSeconds)}`)}>
+								<Pencil />
+							</Button>
+							<Button variant="ghost" size="icon" onClick={() => setDeleting(note)} disabled={remove.isPending} aria-label={tr(`Delete note at ${formatDuration(note.positionSeconds)}`, `Excluir nota em ${formatDuration(note.positionSeconds)}`)}>
 								<Trash2 />
 							</Button>
 						</li>
 					))}
 				</ul>
 			)}
+			<ConfirmDelete
+				open={deleting !== null}
+				onOpenChange={(open) => !open && setDeleting(null)}
+				title={tr('Delete this note?', 'Excluir esta nota?')}
+				description={tr('The note is removed for good. The lesson and your progress stay as they are.', 'A nota será removida para sempre. A aula e o progresso continuam como estão.')}
+				label={tr('Delete note', 'Excluir nota')}
+				pending={remove.isPending}
+				onConfirm={() => { if (deleting) remove.mutate(deleting.noteId); }}
+			/>
 		</div>
 	);
 }

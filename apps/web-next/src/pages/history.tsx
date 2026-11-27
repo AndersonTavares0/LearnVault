@@ -1,12 +1,13 @@
 import { History } from 'lucide-react';
 import { useMemo } from 'react';
 import { Link } from 'react-router';
+import { QueryFailure } from '@/components/query-failure';
 import { PageHeader } from '@/app/shell';
 import { routerPath } from '@/components/course-card';
 import { buttonVariants } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useCatalog, useRecent } from '@/app/data';
-import { courseProgress, formatLocationContext } from '@/lib/catalog';
+import { courseProgress, displayLessonTitle, formatLocationContext } from '@/lib/catalog';
 import { getLocale, tr } from '@/lib/i18n';
 import { useLocale } from '@/hooks/use-locale';
 import { formatDuration } from '@/lib/player';
@@ -38,7 +39,10 @@ export function HistoryPage() {
 	}, [catalog.data, recent.data, completed]);
 
 	if (catalog.isPending || recent.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading your history…', 'Carregando seu histórico…')}</p>;
-	if (catalog.isError) return <p role="alert" className="text-destructive">{catalog.error.message}</p>;
+	if (catalog.isError || recent.isError) {
+		const failed = catalog.isError ? catalog : recent;
+		return <QueryFailure message={tr('Could not load your history.', 'Não foi possível carregar seu histórico.')} retry={() => void failed.refetch()} />;
+	}
 
 	return (
 		<div className="space-y-8">
@@ -46,13 +50,14 @@ export function HistoryPage() {
 			{rows.length === 0 ? (() => {
 				const firstCourse = catalog.data?.nodes.find((node) => node.role === 'course');
 				return (
-					<div className="space-y-3">
-						<h2 className="text-[15px] font-semibold">{tr('No lessons watched yet', 'Nenhuma aula assistida ainda')}</h2>
+					<div className="study-empty">
+						<span aria-hidden="true" className="mb-1 inline-flex size-11 items-center justify-center rounded-xl border border-primary/20 bg-brand-soft text-brand-ink"><History className="size-5" /></span>
+						<h2 className="text-lg font-semibold tracking-tight">{tr('No lessons watched yet', 'Nenhuma aula assistida ainda')}</h2>
 						<p className="text-sm text-muted-foreground">{tr('Open a course and the lessons you study will appear here.', 'Abra um curso e as aulas que você estudar aparecerão aqui.')}</p>
-						<p className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
-							{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
-							<Link to="/" className="font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Browse your library', 'Ver sua biblioteca')}</Link>
-						</p>
+						<div className="flex flex-wrap items-center justify-start gap-2 pt-2">
+							{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className={buttonVariants({ variant: 'default' })}>{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
+							<Link to="/" className={buttonVariants({ variant: firstCourse?.courseId ? 'outline' : 'default' })}>{tr('Browse your library', 'Ver sua biblioteca')}</Link>
+						</div>
 					</div>
 				);
 			})() : (
@@ -65,7 +70,7 @@ export function HistoryPage() {
 								<div className="min-w-0 flex-1">
 									<p className="text-xs font-medium text-muted-foreground">{formatLocationContext(location.courseTitle, location.moduleTitle)}</p>
 									<h2 className="mt-1 text-base font-semibold">
-										<Link to={routerPath(href('course', location.courseId, location.lesson.path, resumeAt))} className="underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{location.lesson.title}</Link>
+										<Link to={routerPath(href('course', location.courseId, location.lesson.path, resumeAt))} className="underline-offset-4 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">{displayLessonTitle(location.lesson.title, location.moduleTitle)}</Link>
 									</h2>
 									<p className="mt-1 flex flex-wrap gap-x-3 text-sm text-muted-foreground">
 										<span>{item.completed ? tr('Completed', 'Concluída') : item.positionSeconds > 0 ? tr(`Stopped at ${formatDuration(item.positionSeconds)}`, `Parou em ${formatDuration(item.positionSeconds)}`) : tr('Opened, not started', 'Aberta, não iniciada')}</span>
@@ -76,7 +81,7 @@ export function HistoryPage() {
 									<div className="w-full sm:w-44">
 										<div className="flex justify-between text-xs text-muted-foreground"><span>{tr('Course progress', 'Progresso do curso')}</span><span className="tabular-nums">{progress.done}/{progress.total}</span></div>
 										<div role="progressbar" aria-label={tr(`Course progress: ${progress.done} of ${progress.total} lessons`, `Progresso do curso: ${progress.done} de ${progress.total} aulas`)} aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done} className="mt-1.5 h-1 overflow-hidden rounded-full bg-muted">
-											<div className="h-full rounded-full bg-success" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
+											<div className="h-full rounded-full bg-primary" style={{ width: `${(progress.done / progress.total) * 100}%` }} />
 										</div>
 									</div>
 								)}

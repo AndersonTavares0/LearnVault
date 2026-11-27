@@ -22,6 +22,7 @@
     "allow-desktop-record-position",
     "allow-desktop-set-completed",
     "allow-desktop-recent-study",
+    "allow-desktop-study-state",
     "allow-desktop-study-summary",
     "allow-desktop-list-notes",
     "allow-desktop-create-note",

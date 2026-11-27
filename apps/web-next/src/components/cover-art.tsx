@@ -12,36 +12,40 @@ function hash(value: string): number {
 	return h >>> 0;
 }
 
-// Calm, low-chroma grounds for a dark title card. Amber is kept for the current lesson, so no warm yellow here.
-const FRAME_HUES = [25, 55, 145, 175, 215, 265, 320];
-// Lecture frames are always dark, in both app themes, so the library reads as one set of videos.
-const BONE = '#ECE7DA';
+// Calm, harmonious hues for generated course plates.
+const FRAME_HUES = [165, 195, 220, 145, 260, 35, 325];
 
-/** One block per lesson in rows, the finished ones lit and the next one marked. */
-function lessonMap(done: number, total: number, hue: number) {
-	// A course with no playable lessons yet still gets a cover: a few dim blocks.
+/** One block per lesson in rows, the finished ones lit in the primary accent and the next one ringed. */
+function lessonMap(done: number, total: number) {
+	// A course with no playable lessons yet still gets a structured architectural plate.
 	const empty = total <= 0;
-	const shown = empty ? 6 : Math.min(total, 60);
-	const columns = Math.min(shown, shown > 24 ? 12 : 8);
+	const shown = empty ? 8 : Math.min(total, 60);
+	const columns = Math.min(shown, shown > 24 ? 12 : 6);
 	const rows = Math.ceil(shown / columns);
-	const gap = 3;
+	const gap = 4;
 	const width = (140 - gap * (columns - 1)) / columns;
-	const height = Math.min(26, (76 - gap * (rows - 1)) / rows);
-	// Centered, so a short course does not leave the map stuck to the top.
+	const height = Math.min(24, (74 - gap * (rows - 1)) / rows);
 	const top = (100 - (rows * height + gap * (rows - 1))) / 2;
 	const finished = Math.min(done, total);
-	return Array.from({ length: shown }, (_, index) => (
-		<rect
-			key={index}
-			x={10 + (index % columns) * (width + gap)}
-			y={top + Math.floor(index / columns) * (height + gap)}
-			width={width}
-			height={height}
-			rx="3"
-			fill={index === finished && !empty ? `oklch(0.9 0.05 ${hue})` : BONE}
-			fillOpacity={empty ? 0.12 : index < finished ? 0.9 : index === finished ? 1 : 0.18}
-		/>
-	));
+	return Array.from({ length: shown }, (_, index) => {
+		const isDone = !empty && index < finished;
+		const isCurrent = !empty && finished > 0 && index === finished;
+		return (
+			<rect
+				key={index}
+				x={10 + (index % columns) * (width + gap)}
+				y={top + Math.floor(index / columns) * (height + gap)}
+				width={width}
+				height={height}
+				rx="3"
+				fill={isDone ? 'var(--primary)' : 'currentColor'}
+				fillOpacity={isDone ? 0.92 : isCurrent ? 0.24 : 0.14}
+				stroke={isCurrent ? 'var(--primary)' : 'currentColor'}
+				strokeOpacity={isCurrent ? 0.95 : 0.18}
+				strokeWidth={isCurrent ? 1.5 : 0.75}
+			/>
+		);
+	});
 }
 
 type Props = {
@@ -50,30 +54,36 @@ type Props = {
 	/** Lessons finished and total lessons; the map draws the course as its own lessons. */
 	done: number;
 	total: number;
-	/** Small thumbnails show only the first letter on the ground. */
+	/** Small thumbnails show only the monogram on the paper/slate plate. */
 	compact?: boolean;
 	/** Draws one block per lesson instead of the title, for places where the name is already the heading. */
 	map?: boolean;
 };
 
 /**
- * Generated cover for a course with no uploaded image and no video frame (ADR 0002): a dark lecture
- * title card, the opening frame of a course video, with the title in bone.
- * The ground hue is stable per course. Decorative: the card beside it carries the name and progress.
+ * Generated cover for a course with no uploaded image and no video frame (ADR 0002): a surface-aware
+ * studio plate matching Light paper or Dark slate, with crisp monogram or lesson-map geometry.
  */
 export function CoverArt({ title, courseId, done, total, compact = false, map = false }: Props) {
 	const hue = FRAME_HUES[hash(courseId || title.normalize('NFD').toLowerCase()) % FRAME_HUES.length];
-	const ground: CSSProperties = { backgroundColor: `oklch(0.24 0.035 ${hue})` };
+	const ground = { '--cover-hue': hue } as CSSProperties;
 	const letter = courseMonogram(title).charAt(0);
 	const lessons = total === 1 ? tr('1 lesson', '1 aula') : tr(`${total} lessons`, `${total} aulas`);
 	return (
-		<div aria-hidden="true" className="absolute inset-0 @container overflow-hidden" style={ground}>
-			{map && <svg viewBox="0 0 160 100" focusable="false" className="absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">{lessonMap(done, total, hue)}</svg>}
-			{!map && compact && <span className="absolute inset-0 grid place-items-center font-heading text-sm font-semibold" style={{ color: BONE }}>{letter}</span>}
+		<div aria-hidden="true" className="cover-plate absolute inset-0 @container overflow-hidden" style={ground}>
+			{map && (
+				<svg viewBox="0 0 160 100" focusable="false" className="pointer-events-none absolute inset-0 size-full" preserveAspectRatio="xMidYMid slice">
+					<path d="M0 78 L160 32 M0 96 L160 50" stroke="var(--cover-rule)" strokeWidth="1" fill="none" />
+					{lessonMap(done, total)}
+				</svg>
+			)}
+			{!map && compact && (
+				<span className="absolute inset-0 grid place-items-center font-heading text-base font-bold tracking-tight" style={{ color: 'var(--cover-ink)' }}>{letter}</span>
+			)}
 			{!map && !compact && (
 				<div className="absolute inset-0 flex flex-col justify-center" style={{ padding: '8cqi' }}>
-					<p className="shrink-0 line-clamp-3 text-balance font-heading font-semibold tracking-tight" style={{ color: BONE, fontSize: 'clamp(9px, 10cqi, 38px)', lineHeight: 1.2, paddingBottom: '0.06em' }}>{title}</p>
-					{total > 0 && <p className="font-medium" style={{ marginTop: '3cqi', color: 'rgba(236, 231, 218, 0.62)', fontSize: 'clamp(11px, 4cqi, 14px)' }}>{lessons}</p>}
+					<p className="shrink-0 line-clamp-3 text-balance font-heading font-semibold tracking-tight" style={{ color: 'var(--cover-ink)', fontSize: 'clamp(11px, 9.5cqi, 28px)', lineHeight: 1.18, paddingBottom: '0.06em' }}>{title}</p>
+					{total > 0 && <p className="font-medium" style={{ marginTop: '2.5cqi', color: 'var(--cover-sub)', fontSize: 'clamp(11px, 4cqi, 13px)' }}>{lessons}</p>}
 				</div>
 			)}
 		</div>

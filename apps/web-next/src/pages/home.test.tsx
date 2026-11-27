@@ -204,7 +204,7 @@ describe('Sign in', () => {
 		// A successful refresh invalidates the catalog and the recent study, which are fetched again.
 		beforeEach(() => {
 			vi.spyOn(transport, 'catalog').mockResolvedValue(catalog);
-			vi.spyOn(transport, 'recentStudy').mockResolvedValue({ items: [] });
+			vi.spyOn(transport, 'studyState').mockResolvedValue({ items: [], nextCursor: null });
 		});
 
 		it('also reads the remote sources and says so', async () => {

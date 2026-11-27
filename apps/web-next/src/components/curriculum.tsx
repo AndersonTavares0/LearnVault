@@ -105,7 +105,7 @@ function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePa
 	// Only a lesson still to study carries the amber marker; a finished one never does.
 	const current = active && !isDone;
 	const label = /^(lesson|aula)(\s+\d+)?$/i.test(node.title.trim()) && moduleTitle ? moduleTitle : node.title;
-	const displayLabel = !compact && moduleTitle === label ? tr('Open lesson', 'Abrir aula') : label;
+	const singleInModule = !compact && moduleTitle === label;
 	const row = useRef<HTMLLIElement>(null);
 	// In the player sidebar, bring the open lesson into view inside the panel (never the page).
 	useEffect(() => {
@@ -115,15 +115,18 @@ function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePa
 		box.scrollTop += element.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientHeight / 2 + element.clientHeight / 2;
 	}, [active, compact]);
 
-	// The state is the mark's form as well as its colour: a filled check, a half-filled circle, a hairline.
+	// Solid means completed; an outline marks the next or open lesson without implying completion.
 	const mark = isDone ? (
-		<span className="grid size-3.5 place-items-center rounded-full bg-success"><Check className="size-2.5 text-background" strokeWidth={3} aria-hidden="true" /></span>
+		<span className="grid size-3.5 place-items-center rounded-full bg-primary"><Check className="size-2.5 text-primary-foreground" strokeWidth={3} aria-hidden="true" /></span>
 	) : current ? (
-		<span className="size-3.5 rounded-full border-[1.5px] border-primary bg-[conic-gradient(var(--primary)_0_50%,transparent_50%)]" />
+		<span className="size-3.5 rounded-full border-2 border-primary" />
 	) : (
 		<span className="size-3.5 rounded-full border-[1.5px] border-border" />
 	);
-	const status = isDone ? tr('Done', 'Concluída') : current && resumeSeconds && !missing ? tr(`Resume at ${formatDuration(resumeSeconds)}`, `Retomar em ${formatDuration(resumeSeconds)}`) : null;
+	const status = isDone ? tr('Done', 'Concluída') : current && !missing
+		? resumeSeconds ? tr(`Resume at ${formatDuration(resumeSeconds)}`, `Retomar em ${formatDuration(resumeSeconds)}`)
+			: compact ? null : tr('Up next', 'A seguir')
+		: null;
 
 	return (
 		<li ref={row} className="relative flex min-h-11 items-center gap-1 border-b border-[var(--study-rule)] pr-1 transition-colors duration-150">
@@ -145,8 +148,8 @@ function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePa
 			) : (
 				<>
 					<Link to={href('course', courseId, node.path).replace(/^#/, '')} aria-current={compact && active ? 'page' : undefined} className={cn('flex min-h-11 min-w-0 flex-1 items-center rounded-md py-2 text-sm hover:underline', isDone ? 'text-muted-foreground' : current ? 'font-semibold text-foreground' : 'text-foreground/85')}>
-						<span className="min-w-0 flex-1">{displayLabel}</span>
-						{displayLabel !== label && <span className="sr-only">{label}</span>}
+						{singleInModule && <span className="sr-only">{tr('Open lesson ', 'Abrir aula ')}</span>}
+						<span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{label}</span>
 					</Link>
 					{status && <span className={cn('shrink-0 text-[12.5px] tabular-nums', isDone ? 'text-muted-foreground' : 'text-primary')}>{status}</span>}
 				</>

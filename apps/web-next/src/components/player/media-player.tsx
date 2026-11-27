@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { Captions, Clapperboard, ExternalLink, Maximize, Minimize, Pause, PictureInPicture2, Play, Repeat, Rewind, FastForward, Settings, Volume2, VolumeX, Zap } from 'lucide-react';
+import { Captions, Clapperboard, ExternalLink, Keyboard, Maximize, Minimize, Pause, PictureInPicture2, Play, Repeat, Rewind, FastForward, Settings, Volume2, VolumeX, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router';
@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioG
 import { Label } from '@/components/ui/label';
 import { tr } from '@/lib/i18n';
 import {
-	formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, requiresTranscodingProbe,
+	formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction,
 	resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, subtitleFormat, subtitleLanguage, type PlaybackSpeed
 } from '@/lib/player';
 import { lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from '@/lib/player-preferences';
@@ -287,17 +287,19 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const errorMessage = useMemo(() => {
 		if (serverBusy) return [tr('The server is busy right now.', 'O servidor está ocupado agora.'), tr('Too many streams are open or the server is under load. Wait a moment and try again; nothing is lost.', 'Há muitas reproduções abertas ou o servidor está sobrecarregado. Espere um momento e tente de novo; nada foi perdido.')];
 		if (errorCode === 4) {
-			const suggestSystemPlayer = capabilities.data?.systemPlayer === true && requiresTranscodingProbe(playable?.name ?? '');
+			const recovery = capabilities.data?.transcoding
+				? tr('Try compatibility mode.', 'Tente o modo de compatibilidade.')
+				: capabilities.data?.systemPlayer
+					? tr('Try opening the file in the system player.', 'Tente abrir o arquivo no reprodutor do sistema.')
+					: tr('Try opening the file in another player.', 'Tente abrir o arquivo em outro reprodutor.');
 			return [
-				tr('This media format or codec is not supported here.', 'Este formato ou codec de mídia não é suportado aqui.'),
-				suggestSystemPlayer
-					? tr('This kind of file usually needs on-demand transcoding or the system player.', 'Esse tipo de arquivo geralmente precisa de transcodificação sob demanda ou do player do sistema.')
-					: tr('Examples: HEVC/H.265 video or AC3 audio.', 'Exemplos: vídeo HEVC/H.265 ou áudio AC3.')
+				tr('This media format or codec is not supported here.', 'Este formato não pode ser reproduzido aqui.'),
+				recovery
 			];
 		}
-		if (errorCode === 3) return [tr('The media could not be decoded.', 'Não foi possível decodificar a mídia.'), tr('The file may be damaged or use a codec your hardware cannot decode.', 'O arquivo pode estar corrompido ou usar um codec que seu hardware não decodifica.')];
+		if (errorCode === 3) return [tr('The media could not be decoded.', 'Não foi possível reproduzir o arquivo.'), tr('The file may be damaged or use a codec your hardware cannot decode.', 'O arquivo pode estar danificado ou usar um formato incompatível com este dispositivo.')];
 		return [tr('Could not load this media.', 'Não foi possível carregar esta mídia.'), tr('The file may have moved or its drive may be disconnected. Reconnect it and use Refresh courses in My learning; your progress is kept.', 'O arquivo pode ter sido movido ou o disco desconectado. Reconecte e use Atualizar cursos em Meu aprendizado; seu progresso fica salvo.')];
-	}, [capabilities.data?.systemPlayer, errorCode, playable?.name, serverBusy]);
+	}, [capabilities.data?.systemPlayer, capabilities.data?.transcoding, errorCode, serverBusy]);
 
 	if (!activeSource) {
 		const missing = mediaAvailability(lesson.media) === 'missing';
@@ -437,8 +439,20 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 								</DropdownMenuSub>
 							)}
 							{onVideo && supportsPip && <DropdownMenuItem onClick={togglePip}><PictureInPicture2 />{pip ? tr('Close picture-in-picture', 'Fechar picture-in-picture') : tr('Picture-in-picture', 'Picture-in-picture')}</DropdownMenuItem>}
-							{capabilities.data?.transcoding && <DropdownMenuItem onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}><Zap />{transcode ? tr('Stop transcoding', 'Parar a transcodificação') : tr('Play with transcoding', 'Reproduzir com transcodificação')}</DropdownMenuItem>}
-							{capabilities.data?.systemPlayer && <DropdownMenuItem onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no player do sistema')}</DropdownMenuItem>}
+							{capabilities.data?.transcoding && <DropdownMenuItem onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}><Zap />{transcode ? tr('Stop transcoding', 'Sair do modo de compatibilidade') : tr('Play with transcoding', 'Usar modo de compatibilidade')}</DropdownMenuItem>}
+							{capabilities.data?.systemPlayer && <DropdownMenuItem onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no reprodutor do sistema')}</DropdownMenuItem>}
+							<DropdownMenuSub>
+								<DropdownMenuSubTrigger><Keyboard />{tr('Keyboard shortcuts', 'Atalhos de teclado')}</DropdownMenuSubTrigger>
+								<DropdownMenuSubContent container={stage} className="w-64 p-2 text-xs">
+									<dl className="space-y-1.5 px-1.5 py-1">
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Play / Pause', 'Reproduzir / Pausar')}</dt><dd className="font-mono font-semibold">{tr('Space / K', 'Espaço / K')}</dd></div>
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Seek 10s', 'Avançar / Voltar 10s')}</dt><dd className="font-mono font-semibold">J / L</dd></div>
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Playback speed', 'Velocidade')}</dt><dd className="font-mono font-semibold">[ / ]</dd></div>
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Add note', 'Nova nota')}</dt><dd className="font-mono font-semibold">N</dd></div>
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Mute / Fullscreen', 'Silenciar / Tela cheia')}</dt><dd className="font-mono font-semibold">M / F</dd></div>
+									</dl>
+								</DropdownMenuSubContent>
+							</DropdownMenuSub>
 						</DropdownMenuContent>
 					</DropdownMenu>
 					{onVideo && onCinema && <Button variant="ghost" size="icon" className={cn(look, 'hidden lg:inline-flex')} aria-pressed={cinema} onClick={onCinema} aria-label={tr('Cinema mode', 'Modo cinema')} aria-keyshortcuts="t"><Clapperboard /></Button>}
@@ -457,9 +471,9 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 					<p className="text-sm text-muted-foreground">{errorMessage[1]}</p>
 					<div className="flex flex-wrap gap-2">
 						{(serverBusy || errorCode !== 4) && <Button variant="outline" onClick={retry}>{tr('Try again', 'Tentar de novo')}</Button>}
-						{capabilities.data?.transcoding && <Button onClick={() => startTranscode(false)}><Zap />{tr('Play with on-demand transcoding', 'Reproduzir com transcodificação sob demanda')}</Button>}
-						{capabilities.data?.transcoding && showReencode && <Button variant="outline" onClick={() => startTranscode(true)}>{tr('Re-encode video (H.264)', 'Recodificar vídeo (H.264)')}</Button>}
-						{capabilities.data?.systemPlayer && <Button variant="outline" onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no player do sistema')}</Button>}
+						{capabilities.data?.transcoding && <Button onClick={() => startTranscode(false)}><Zap />{tr('Play with on-demand transcoding', 'Usar modo de compatibilidade')}</Button>}
+						{capabilities.data?.transcoding && showReencode && <Button variant="outline" onClick={() => startTranscode(true)}>{tr('Re-encode video (H.264)', 'Tentar em outro formato')}</Button>}
+						{capabilities.data?.systemPlayer && <Button variant="outline" onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no reprodutor do sistema')}</Button>}
 						<Link to="/" className={buttonVariants({ variant: 'ghost' })}>{tr('Go to My learning', 'Ir para Meu aprendizado')}</Link>
 					</div>
 				</div>

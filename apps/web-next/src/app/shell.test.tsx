@@ -90,11 +90,27 @@ describe('app shell', () => {
 		expect(bar.className).toContain('lg:bg-sidebar');
 		const rail = within(bar);
 		const nav = rail.getByRole('navigation', { name: 'Main' });
-		expect(within(nav).getByRole('link', { name: 'My learning' }).className).toContain('bg-foreground/[0.08] font-semibold text-foreground');
+		expect(within(nav).getByRole('link', { name: 'My learning' }).getAttribute('aria-current')).toBe('page');
 		expect(within(nav).getByRole('link', { name: 'Progress' }).className).not.toContain('font-semibold');
 		expect(rail.getByRole('combobox', { name: 'Search notes, courses and lessons' })).toBeTruthy();
 		expect(rail.getByRole('button', { name: 'Account: admin' })).toBeTruthy();
 		expect(rail.getByRole('link', { name: 'LearnVault home' })).toBeTruthy();
+	});
+
+	it('lets the user collapse and expand the desktop left rail', () => {
+		renderApp('/');
+		const bar = screen.getByRole('banner');
+		const toggle = within(bar).getByRole('button', { name: 'Collapse sidebar' });
+		expect(toggle.getAttribute('aria-expanded')).toBe('true');
+		expect(bar.className).toContain('lg:w-[236px]');
+		fireEvent.click(toggle);
+		expect(bar.className).toContain('lg:w-[68px]');
+		expect(within(bar).getByRole('button', { name: 'Expand sidebar' }).getAttribute('aria-expanded')).toBe('false');
+		expect(localStorage.getItem('learnvault-sidebar-collapsed')).toBe('1');
+		fireEvent.click(within(bar).getByRole('button', { name: 'Expand sidebar' }));
+		expect(bar.className).toContain('lg:w-[236px]');
+		expect(localStorage.getItem('learnvault-sidebar-collapsed')).toBe('0');
+		localStorage.removeItem('learnvault-sidebar-collapsed');
 	});
 
 	it('shows the platform search shortcut in the rail', () => {

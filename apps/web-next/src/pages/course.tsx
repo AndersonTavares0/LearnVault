@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLocale } from '@/hooks/use-locale';
 import { usePageTitle } from '@/hooks/use-page-title';
 import { useStore } from '@/hooks/use-store';
-import { collectMaterials, countCatalogNode, isLessonMissing } from '@/lib/catalog';
+import { collectMaterials, countCatalogNode, displayLessonTitle, isLessonMissing } from '@/lib/catalog';
 import { courseCategoriesStore, resolveCourseCategory } from '@/lib/course-categories';
 import { tr } from '@/lib/i18n';
 import { buildLibrary } from '@/lib/library';
@@ -115,13 +115,17 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	// position, otherwise the first lesson not yet done after the last one studied. Done lessons never are.
 	const lessons = course.children.flatMap(lessonNodes).filter((node) => !isLessonMissing(node));
 	const isDone = (node: CatalogNode) => completed.has(lessonMediaId(node) ?? '');
+	// Untouched courses (0% done and never opened) stay calm and unhighlighted until study begins.
+	const hasStarted = Boolean(lastStudied) || lessons.some(isDone);
 	const resumeLesson = resumeAt ? lastStudied?.location?.lesson ?? null : null;
 	const lastIndex = lastStudied?.location ? lessons.findIndex((node) => node.path === lastStudied.location!.lesson.path) : -1;
-	const currentPath = (resumeLesson ?? lessons.slice(lastIndex + 1).find((node) => !isDone(node)))?.path ?? null;
+	const currentPath = hasStarted ? (resumeLesson ?? lessons.slice(lastIndex + 1).find((node) => !isDone(node)))?.path ?? null : null;
 	const continuePath = currentPath ?? lastStudied?.location?.lesson.path ?? entry?.next?.path;
 	const lessonStates = lessons.map((node): SegmentState => (isDone(node) ? 'done' : node.path === currentPath ? 'current' : 'pending'));
 	const doneLessons = lessonStates.filter((state) => state === 'done').length;
 	const courseNotes = (notes.data ?? []).filter((note) => findLessonLocation(catalog.data ?? null, note.mediaId)?.courseId === courseId);
+	const customCategory = customCategories[course.courseId || course.path]?.trim() || null;
+	const shownCategory = customCategory ?? (category && category.toLowerCase() !== 'library' ? category : null);
 	const primaryLabel = resumeLesson && resumeAt
 		? tr(`Resume ${resumeLesson.title} at ${formatDuration(resumeAt)}`, `Retomar ${resumeLesson.title} em ${formatDuration(resumeAt)}`)
 		: lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso');
@@ -130,24 +134,24 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 		<div className="space-y-8">
 			<section
 				data-course-hero
-				className="relative grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-x-4 gap-y-5 border-b border-[var(--study-rule)] pb-8 lg:grid-cols-[minmax(0,1fr)_440px] lg:gap-x-10 lg:pt-2"
+				className="relative grid grid-cols-[minmax(0,1fr)_5.5rem] items-start gap-x-4 gap-y-5 border-b border-[var(--study-rule)] pb-7 sm:grid-cols-[minmax(0,1fr)_12rem] lg:grid-cols-[minmax(0,1fr)_272px] lg:gap-x-10 lg:pt-2"
 			>
-				<div className="row-start-1 col-start-1 lg:col-start-2 lg:row-span-3">
-					<CourseCover course={course} profile={user?.userId ?? ''} eager done={entry?.done ?? 0} total={entry?.total ?? 0} className="aspect-video" />
+				<div className="col-start-2 row-start-1 pt-2 lg:row-span-3 lg:pt-0">
+					<CourseCover course={course} profile={user?.userId ?? ''} eager map done={doneLessons} total={lessons.length} className="aspect-[16/10] w-full rounded-[var(--radius-lg)]" />
 				</div>
-				<div className="col-start-2 row-start-1 min-w-0 space-y-3 lg:col-start-1">
+				<div className="col-start-1 row-start-1 min-w-0 space-y-2.5">
 					<p className="text-[13px] text-muted-foreground">
 						<Link to={libraryReturn()} className="inline-flex min-h-11 items-center hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('My learning', 'Meu aprendizado')}</Link> / {course.title}
 					</p>
-					<h1 className="font-heading text-2xl leading-tight font-semibold tracking-tight text-balance sm:text-[2.75rem] sm:leading-[1.05]">{course.title}</h1>
-					<div role="group" aria-label={tr('Course at a glance', 'Resumo do curso')} className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+					<h1 className="font-heading text-2xl leading-tight font-semibold tracking-tight text-balance sm:text-[2.5rem] sm:leading-[1.08]">{course.title}</h1>
+					<div role="group" aria-label={tr('Course at a glance', 'Resumo do curso')} className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-sm text-muted-foreground">
 						{counts.modules > 0 && <span><b className="font-semibold text-foreground tabular-nums">{counts.modules}</b> {counts.modules === 1 ? tr('module', 'módulo') : tr('modules', 'módulos')}</span>}
 						{counts.lessons > 0 && <span><b className="font-semibold text-foreground tabular-nums">{counts.lessons}</b> {counts.lessons === 1 ? tr('lesson', 'aula') : tr('lessons', 'aulas')}</span>}
 						{materials.length > 0 && <span><b className="font-semibold text-foreground tabular-nums">{materials.length}</b> {materials.length === 1 ? tr('material', 'material') : tr('materials', 'materiais')}</span>}
 						{lessons.length > 0 && <span><b className="font-semibold text-foreground tabular-nums">{doneLessons}</b> {tr(`of ${lessons.length} done`, `de ${lessons.length} concluídas`)}</span>}
-						<button type="button" onClick={() => setCategorizing(true)} className="inline-flex min-h-11 items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
-							<Tag className="size-3.5 shrink-0" aria-hidden="true" />
-							{category ?? tr('Add category', 'Adicionar categoria')}
+						<button type="button" onClick={() => setCategorizing(true)} className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-[var(--study-rule)] bg-card px-3 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:border-[var(--border-strong)] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:min-h-9 sm:px-2.5">
+							<Tag className="size-3 shrink-0" aria-hidden="true" />
+							{shownCategory ?? tr('Add category', 'Adicionar categoria')}
 						</button>
 						<CourseCategoryDialog course={course} courseId={courseId} open={categorizing} onOpenChange={setCategorizing} />
 					</div>
@@ -171,13 +175,14 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 						</Button>
 					)}
 					{user?.isAdmin && !course.remote && <CourseManagement course={course} courseId={courseId} lessons={counts.lessons} className="min-w-0 whitespace-nowrap" onRemoved={() => navigate('/', { replace: true })} />}
+					{toggleFavorite.isError && <p role="alert" className="col-span-2 w-full text-sm text-destructive">{tr('Could not update favorites. Try again.', 'Não foi possível atualizar os favoritos. Tente novamente.')}</p>}
 				</div>
 				<div className="col-span-2 row-start-3 space-y-3 lg:col-span-1 lg:col-start-1">
 					{lessons.length > 0 && <LessonSegments done={doneLessons} total={lessons.length} states={lessonStates} className="h-2.5 max-w-md" />}
 					{lessons.length > 0 && doneLessons === lessons.length && <p role="status" className="text-sm font-medium text-primary">{tr('Course complete. Well done.', 'Curso concluído. Muito bem.')}</p>}
 					{lastStudied?.location && (
 						<p className="text-sm text-muted-foreground">
-							{tr('Last lesson:', 'Última aula:')} <span className="text-foreground">{lastStudied.location.lesson.title}</span>, {lastStudied.item.completed ? tr('completed', 'concluída') : tr(`stopped at ${formatDuration(lastStudied.item.positionSeconds)}`, `parou em ${formatDuration(lastStudied.item.positionSeconds)}`)}
+							{tr('Last lesson:', 'Última aula:')} <span className="text-foreground">{displayLessonTitle(lastStudied.location.lesson.title, lastStudied.location.moduleTitle)}</span>, {lastStudied.item.completed ? tr('completed', 'concluída') : tr(`stopped at ${formatDuration(lastStudied.item.positionSeconds)}`, `parou em ${formatDuration(lastStudied.item.positionSeconds)}`)}
 						</p>
 					)}
 				</div>
@@ -202,7 +207,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 								</div>
 								<Curriculum nodes={course.children} courseId={courseId} completed={completed} favorites={favoriteMedia} activePath={currentPath} resumeSeconds={resumeAt} signal={signal} />
 							</div>
-						) : documents.length === 0 ? <p className="text-muted-foreground">{tr('This course has not been indexed yet.', 'Este curso ainda não foi indexado.')}</p> : null}
+						) : documents.length === 0 ? <p className="text-muted-foreground">{tr('No lessons found in this course yet.', 'Ainda não encontramos aulas neste curso.')}</p> : null}
 						{documents.length > 0 && (
 							<section aria-labelledby="course-documents" className="space-y-4">
 								<h2 id="course-documents" className="flex items-baseline gap-2 text-lg font-bold">
@@ -271,8 +276,8 @@ function CourseAside({ course, materials, notes }: { course: CatalogNode; materi
 			)}
 			{course.sourceFolder && (
 				<section aria-labelledby="course-aside-folder" className="space-y-1 border-t border-[var(--study-rule)] pt-5 first:border-t-0 first:pt-0">
-					<h2 id="course-aside-folder" className="text-[12.5px] font-medium text-muted-foreground">{tr('Folder', 'Pasta')}</h2>
-					<p className="break-all text-foreground/85">{course.sourceFolder}</p>
+					<h2 id="course-aside-folder" className="text-[12.5px] font-medium text-muted-foreground">{tr('Source folder', 'Pasta de origem')}</h2>
+					<p className="break-all text-foreground/85">{course.sourceFolder === 'library' ? tr('Main library', 'Biblioteca principal') : course.sourceFolder}</p>
 					<p className="text-muted-foreground">{tr('Read only. Your files are never changed.', 'Somente leitura. Seus arquivos nunca são alterados.')}</p>
 				</section>
 			)}
@@ -329,6 +334,6 @@ function concernText(concern: string): string {
 	switch (concern) {
 		case 'no_lessons': return tr('No lesson has a video, so the lesson list may be empty.', 'Nenhuma aula tem vídeo, então a lista de aulas pode estar vazia.');
 		case 'loose_media': return tr('Some videos are outside any lesson, so they are not listed as lessons.', 'Alguns vídeos estão fora de qualquer aula, então não aparecem como aulas.');
-		default: return tr('Some files could not be classified.', 'Alguns arquivos não puderam ser classificados.');
+		default: return tr('Some files aren’t listed as lessons or materials.', 'Alguns arquivos não aparecem como aulas nem como materiais.');
 	}
 }

@@ -6,9 +6,9 @@
 
 use learnvault_core::paths::relative_path_key;
 use learnvault_core::{
-    Database, Error, KeyMode, MAX_RECENT_STUDY, create_study_note, delete_study_note,
+    Database, Error, KeyMode, MAX_RECENT_STUDY, StudyCursor, create_study_note, delete_study_note,
     list_all_study_notes, list_study_notes, recent_study, record_position, set_completed,
-    study_progress, study_summary_on, update_study_note,
+    study_page, study_progress, study_summary_on, update_study_note,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -974,5 +974,86 @@ fn study_favorites_courses_and_lessons_round_trip_and_isolate_owners() -> TestRe
         Err(Error::MediaNotFound { .. })
     ));
 
+    Ok(())
+}
+
+/// 101 lessons: the recents ceiling hides one, the paged state returns every one in the same order.
+#[test]
+fn study_page_walks_more_than_the_recent_ceiling_without_gaps() -> TestResult {
+    let db = library_db()?;
+    for n in 0..=MAX_RECENT_STUDY {
+        let id = format!("m{n:03}");
+        insert_media(&db, &id, "available")?;
+        let at = SEEDED_AT + i64::try_from(n / 2)?; // pairs share an instant: the tie-break matters
+        seed(&db, OWNER, &id, 5, n % 3 == 0, at)?;
+    }
+    seed_other_owner_row(&db)?;
+
+    let all = recent_study(&db, OWNER, usize::MAX)?;
+    assert_eq!(all.len(), MAX_RECENT_STUDY, "recents keep their ceiling");
+
+    let mut seen = Vec::new();
+    let mut after: Option<StudyCursor> = None;
+    let mut pages = 0;
+    loop {
+        let page = study_page(&db, OWNER, None, after.as_ref(), 40)?;
+        pages += 1;
+        seen.extend(page.items.into_iter().map(|state| state.media_id));
+        match page.next {
+            Some(cursor) => after = Some(StudyCursor::parse(&cursor.encode()).expect("cursor")),
+            None => break,
+        }
+    }
+    assert_eq!(pages, 3);
+    assert_eq!(seen.len(), MAX_RECENT_STUDY + 1);
+    let mut unique = seen.clone();
+    unique.sort();
+    unique.dedup();
+    assert_eq!(unique.len(), seen.len(), "no duplicate across pages");
+    let head: Vec<String> = all.into_iter().map(|state| state.media_id).collect();
+    assert_eq!(seen[..MAX_RECENT_STUDY], head[..], "same order as recents");
+    Ok(())
+}
+
+fn seed_other_owner_row(db: &Database) -> TestResult {
+    seed(db, OTHER, "m000", 9, true, SEEDED_AT + 500)?;
+    Ok(())
+}
+
+#[test]
+fn study_page_applies_authorization_removal_and_keeps_missing_media() -> TestResult {
+    let db = library_db()?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('bib-2', 1)",
+        [],
+    )?;
+    insert_media(&db, "ok", "available")?;
+    insert_media(&db, "gone", "missing")?;
+    insert_media(&db, "removed", "available")?;
+    let other = format!("outra/{}.mp4", "x");
+    db.connection().execute(
+        "INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+         VALUES ('forbidden', 'bib-2', ?1, ?2, 1, 1, 'available')",
+        rusqlite::params![other, key(&other)],
+    )?;
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at) VALUES (?1, 'removed', 1)",
+        [LIB],
+    )?;
+    for (i, id) in ["ok", "gone", "removed", "forbidden"].iter().enumerate() {
+        seed(&db, OWNER, id, 1, false, SEEDED_AT + i64::try_from(i)?)?;
+    }
+
+    let ids = |allowed: Option<&[String]>| -> Result<Vec<String>, Box<dyn std::error::Error>> {
+        Ok(study_page(&db, OWNER, allowed, None, 10)?
+            .items
+            .into_iter()
+            .map(|state| state.media_id)
+            .collect())
+    };
+    assert_eq!(ids(None)?, ["forbidden", "gone", "ok"]);
+    assert_eq!(ids(Some(&[LIB.to_owned()]))?, ["gone", "ok"]);
+    assert!(ids(Some(&[]))?.is_empty(), "an empty grant allows nothing");
+    assert!(StudyCursor::parse("nope").is_none() && StudyCursor::parse("1.").is_none());
     Ok(())
 }

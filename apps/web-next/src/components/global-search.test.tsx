@@ -27,6 +27,7 @@ beforeEach(() => {
 afterEach(() => {
 	cleanup();
 	vi.restoreAllMocks();
+	vi.unstubAllGlobals();
 });
 
 describe('global search', () => {
@@ -105,5 +106,35 @@ describe('global search', () => {
 		renderApp('/', {});
 		fireEvent.change(searchbox(), { target: { value: 'r' } });
 		await waitFor(() => expect(transport.search).not.toHaveBeenCalled());
+	});
+
+	it('opens the full-screen phone palette from / when the rail field is hidden', async () => {
+		vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false })));
+		renderApp('/', {});
+		fireEvent.keyDown(window, { key: '/' });
+		expect(document.activeElement).toBe(searchbox());
+		expect(searchbox().getAttribute('placeholder')).toBe('Search courses, lessons and notes');
+	});
+
+	it('returns focus to the tab bar Search tab when the phone palette is dismissed from its close button', async () => {
+		renderApp('/', {});
+		const tab = screen.getByRole('button', { name: 'Search' });
+		tab.focus();
+		fireEvent.click(tab);
+		expect(document.activeElement).toBe(searchbox());
+		fireEvent.keyDown(screen.getByRole('button', { name: 'Close search' }), { key: 'Escape' });
+		expect(document.activeElement).toBe(tab);
+		expect(searchbox().getAttribute('placeholder')).toBe('Search');
+	});
+
+	it('keeps Tab inside the phone palette', async () => {
+		renderApp('/', {});
+		fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+		const close = screen.getByRole('button', { name: 'Close search' });
+		close.focus();
+		fireEvent.keyDown(close, { key: 'Tab' });
+		expect(document.activeElement).toBe(searchbox());
+		fireEvent.keyDown(searchbox(), { key: 'Tab', shiftKey: true });
+		expect(document.activeElement).toBe(close);
 	});
 });

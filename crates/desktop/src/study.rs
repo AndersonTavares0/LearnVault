@@ -20,7 +20,7 @@ use crate::dto::{
     FlashcardDto, FlashcardReviewDto, FlashcardReviewsDto, FocusSessionDto, FocusSummaryDto,
     MediaBookmarkDto, NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto,
     RecentStudyDto, RewardSummaryDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto,
-    StudySummaryDto,
+    StudyStateDto, StudySummaryDto,
 };
 use crate::error::IpcError;
 
@@ -98,6 +98,33 @@ pub fn recent(database: &Database, limit: Option<usize>) -> Result<RecentStudyDt
     )
     .map(|states| RecentStudyDto {
         items: states.into_iter().map(StudyProgressDto::from).collect(),
+    })
+    .map_err(study_error)
+}
+
+/// Pages through the local owner's whole progress, newest first.
+///
+/// The cursor is the opaque `next_cursor` of the previous page; the core clamps the limit.
+pub fn state(
+    database: &Database,
+    limit: Option<usize>,
+    cursor: Option<&str>,
+) -> Result<StudyStateDto, IpcError> {
+    let after = match cursor.map(learnvault_core::StudyCursor::parse) {
+        None => None,
+        Some(Some(cursor)) => Some(cursor),
+        Some(None) => return Err(IpcError::study_unavailable()),
+    };
+    learnvault_core::study_page(
+        database,
+        LOCAL_OWNER_ID,
+        None,
+        after.as_ref(),
+        limit.unwrap_or(learnvault_core::MAX_STUDY_PAGE),
+    )
+    .map(|page| StudyStateDto {
+        items: page.items.into_iter().map(StudyProgressDto::from).collect(),
+        next_cursor: page.next.map(|cursor| cursor.encode()),
     })
     .map_err(study_error)
 }

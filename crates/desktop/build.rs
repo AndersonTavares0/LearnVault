@@ -23,6 +23,7 @@ fn main() {
             "desktop_record_position",
             "desktop_set_completed",
             "desktop_recent_study",
+            "desktop_study_state",
             "desktop_study_summary",
             "desktop_list_notes",
             "desktop_create_note",

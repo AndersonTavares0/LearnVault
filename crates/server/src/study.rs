@@ -18,7 +18,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use learnvault_core::{
-    AuthSession, Database, FocusKind, FocusSessionInput, StudyProgress, StudySummary,
+    AuthSession, Database, FocusKind, FocusSessionInput, StudyCursor, StudyProgress, StudySummary,
 };
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +48,12 @@ pub(crate) struct CompletedRequest {
 #[derive(Debug, Deserialize)]
 struct RecentQuery {
     limit: Option<usize>,
+}
+
+#[derive(Debug, Deserialize)]
+struct StateQuery {
+    limit: Option<usize>,
+    cursor: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -362,6 +368,12 @@ struct RecentResponse {
 }
 
 #[derive(Serialize)]
+struct StateResponse {
+    items: Vec<ProgressResponse>,
+    next_cursor: Option<String>,
+}
+
+#[derive(Serialize)]
 struct SummaryResponse {
     current_streak: i64,
     longest_streak: i64,
@@ -516,6 +528,54 @@ pub(crate) async fn recent(
         Ok(states) => private_no_store(
             Json(RecentResponse {
                 items: states.into_iter().map(ProgressResponse::recorded).collect(),
+            })
+            .into_response(),
+        ),
+        Err(failure) => study_failure_response(failure),
+    }
+}
+
+/// One page of the whole study state the session may see, for views that need more than the
+/// ceiling of [`recent`]. Authorization is applied by the query, so a page is never short.
+pub(crate) async fn state(
+    State(state): State<AppState>,
+    RawQuery(raw): RawQuery,
+    headers: HeaderMap,
+) -> Response {
+    let user = match user_or_response(&state, &headers).await {
+        Ok(user) => user,
+        Err(failure) => return failure.into_response(),
+    };
+    let Ok(query) = serde_urlencoded::from_str::<StateQuery>(raw.as_deref().unwrap_or_default())
+    else {
+        return invalid_query();
+    };
+    let after = match query.cursor.as_deref().map(StudyCursor::parse) {
+        None => None,
+        Some(Some(cursor)) => Some(cursor),
+        Some(None) => return invalid_query(),
+    };
+    let limit = query.limit.unwrap_or(learnvault_core::MAX_STUDY_PAGE);
+    let owner = user.user_id;
+    let admin = user.is_admin;
+    match run_study(&state, move |db| {
+        let allowed = if admin {
+            None
+        } else {
+            learnvault_core::list_user_course_access(db, &owner)?
+        };
+        learnvault_core::study_page(db, &owner, allowed.as_deref(), after.as_ref(), limit)
+    })
+    .await
+    {
+        Ok(page) => private_no_store(
+            Json(StateResponse {
+                items: page
+                    .items
+                    .into_iter()
+                    .map(ProgressResponse::recorded)
+                    .collect(),
+                next_cursor: page.next.map(|cursor| cursor.encode()),
             })
             .into_response(),
         ),

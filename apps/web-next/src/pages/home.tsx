@@ -10,13 +10,13 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { isLessonMissing } from '@/lib/catalog';
+import { displayLessonTitle, isLessonMissing } from '@/lib/catalog';
 import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore } from '@/lib/appearance';
 import { courseCategoriesStore } from '@/lib/course-categories';
 import { buildGamification } from '@/lib/gamification';
-import { tr } from '@/lib/i18n';
+import { getLocale, tr } from '@/lib/i18n';
 import { buildLibrary, type CourseEntry, type LibraryFilter } from '@/lib/library';
 import { LIBRARY_VIEW_STORAGE_KEY, parseLibraryView, persistLibrarySort, persistLibraryView, readLibrarySort, type LibrarySort, type LibraryView } from '@/lib/library-view';
 import { formatDuration, studySyncSupported } from '@/lib/player';
@@ -79,10 +79,11 @@ export function HomePage() {
 		persistLibrarySort(safeStorage(), next);
 	};
 	const sorted = useMemo(() => {
+		const collator = new Intl.Collator(getLocale(), { sensitivity: 'base', numeric: true });
 		const list = [...library.visible];
-		if (sort === 'title') list.sort((a, b) => a.course.title.localeCompare(b.course.title));
-		else if (sort === 'progress') list.sort((a, b) => (b.total ? b.done / b.total : 0) - (a.total ? a.done / a.total : 0));
-		else list.sort((a, b) => b.lastStudiedAt - a.lastStudiedAt || a.course.title.localeCompare(b.course.title));
+		if (sort === 'title') list.sort((a, b) => collator.compare(a.course.title, b.course.title));
+		else if (sort === 'progress') list.sort((a, b) => (b.total ? b.done / b.total : 0) - (a.total ? a.done / a.total : 0) || collator.compare(a.course.title, b.course.title));
+		else list.sort((a, b) => b.lastStudiedAt - a.lastStudiedAt || collator.compare(a.course.title, b.course.title));
 		return list;
 	}, [library.visible, sort]);
 
@@ -106,9 +107,9 @@ export function HomePage() {
 	const tools = <Filters categories={library.categories} category={category} onCategory={(value) => setParam('category', value)} view={view} onView={changeView} sort={sort} onSort={changeSort} />;
 
 	return (
-		<div className="space-y-6">
-			<div className="flex flex-wrap items-center justify-between gap-3">
-				<h1 className="text-2xl font-semibold tracking-tight">{tr('My learning', 'Meu aprendizado')}</h1>
+		<div className="space-y-7 sm:space-y-8">
+			<div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-3">
+				<h1 className="study-page-title">{tr('My learning', 'Meu aprendizado')}</h1>
 				{user?.isAdmin && library.entries.length > 0 && (
 					<div className="flex flex-wrap items-center justify-end gap-2">
 						<p role="status" aria-live="polite" className="order-last w-full text-right text-xs font-medium text-muted-foreground empty:hidden sm:order-first sm:w-auto sm:text-left">{message}</p>
@@ -128,7 +129,15 @@ export function HomePage() {
 			) : resume}
 
 			<section aria-labelledby="courses-heading" className="space-y-4">
-				<h2 id="courses-heading" className="sr-only">{filtered ? tr('Results', 'Resultados') : tr('Your library', 'Sua biblioteca')}</h2>
+				<div className="flex flex-wrap items-baseline justify-between gap-2">
+					<h2 id="courses-heading" className={library.entries.length ? 'text-lg font-semibold tracking-tight' : 'sr-only'}>{filtered ? tr('Results', 'Resultados') : tr('Your library', 'Sua biblioteca')}</h2>
+					{filtered && library.visible.length > 0 && (
+						<div className="flex items-center gap-2 text-xs text-muted-foreground">
+							<span className="tabular-nums">{tr(`${sorted.length} shown`, `${sorted.length} exibidos`)}</span>
+							<Button type="button" variant="ghost" size="xs" onClick={() => setParams({}, { replace: true })}>{tr('Clear filters', 'Limpar filtros')}</Button>
+						</div>
+					)}
+				</div>
 				{pills}
 				{library.entries.length > 0 && <div className="flex flex-wrap items-center gap-2">{search}{tools}</div>}
 				{library.entries.length === 0 ? (
@@ -155,7 +164,7 @@ export function HomePage() {
 							profile={profile}
 							canManage={Boolean(user?.isAdmin)}
 							variant={view === 'covers' ? 'grid' : view}
-							className={view === 'covers' ? 'grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2 sm:gap-y-7 lg:grid-cols-3 xl:grid-cols-4' : view === 'compact' ? 'divide-y divide-[var(--study-rule)] border-y border-[var(--study-rule)]' : ''}
+							className={view === 'covers' ? 'grid grid-cols-1 gap-x-6 sm:grid-cols-2 xl:grid-cols-3' : view === 'compact' ? 'divide-y divide-[var(--study-rule)] border-y border-[var(--study-rule)]' : ''}
 						/>
 					</div>
 				)}
@@ -170,25 +179,44 @@ export function HomePage() {
 	);
 }
 
-	/** Quiet underline tabs: which courses to show, with tabular counts. */
-	function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter, number>; filter: LibraryFilter; onFilter: (value: LibraryFilter) => void }) {
-		const options: [LibraryFilter, string][] = [
-			['all', tr('All courses', 'Todos os cursos')],
-			['in_progress', tr('In progress', 'Em andamento')],
-			['not_started', tr('Not started', 'Não iniciados')],
-			['completed', tr('Completed', 'Concluídos')],
-			...(studySyncSupported ? [['favorites', tr('Favorites', 'Favoritos')] as [LibraryFilter, string]] : [])
-		];
-		return (
-			<div role="group" aria-label={tr('Show', 'Mostrar')} className="flex gap-x-4 overflow-x-auto border-b border-[var(--study-rule)] [scrollbar-width:thin] sm:gap-x-6">
-				{options.map(([value, label]) => (
-					<button key={value} type="button" aria-pressed={filter === value} onClick={() => onFilter(value)} className={cn('-mb-px inline-flex min-h-11 shrink-0 items-center gap-1.5 border-b-2 px-0.5 text-sm whitespace-nowrap transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none', filter === value ? 'border-foreground font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground')}>
-						{label}{counts[value] > 0 && <span className="text-xs text-muted-foreground tabular-nums">{counts[value]}</span>}
-					</button>
-				))}
-			</div>
-		);
-	}
+/** Status filters stay on a single clean horizontal baseline without wrapping on mobile. */
+function FilterTabs({ counts, filter, onFilter }: { counts: Record<LibraryFilter, number>; filter: LibraryFilter; onFilter: (value: LibraryFilter) => void }) {
+	const options: [LibraryFilter, string, string][] = [
+		['all', tr('All courses', 'Todos os cursos'), tr('All', 'Todos')],
+		['in_progress', tr('In progress', 'Em andamento'), tr('In progress', 'Em curso')],
+		['not_started', tr('Not started', 'Não iniciados'), tr('Not started', 'Por iniciar')],
+		['completed', tr('Completed', 'Concluídos'), tr('Completed', 'Concluídos')],
+		...(studySyncSupported ? [['favorites', tr('Favorites', 'Favoritos'), tr('Favorites', 'Favoritos')] as [LibraryFilter, string, string]] : [])
+	];
+	return (
+		<div role="group" aria-label={tr('Show', 'Mostrar')} className="flex flex-nowrap items-center gap-x-1.5 overflow-x-auto border-b border-[var(--study-rule)] sm:gap-x-5">
+			{options.map(([value, label, compact]) => (
+				<button
+					key={value}
+					type="button"
+					aria-pressed={filter === value}
+					onClick={() => onFilter(value)}
+					className={cn(
+						'inline-flex min-h-11 shrink-0 items-center gap-0.5 border-b-2 px-0 text-[11px] whitespace-nowrap transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none sm:gap-1.5 sm:px-0.5 sm:text-sm',
+						filter === value ? 'border-primary font-semibold text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'
+					)}
+				>
+					{compact !== label ? (
+						<>
+							<span className="sm:hidden">{compact}</span>
+							<span className="hidden sm:inline">{label}</span>
+						</>
+					) : label}
+					{counts[value] > 0 && (
+						<span className="rounded-full bg-muted px-1 py-0.5 text-[10px] font-medium text-muted-foreground tabular-nums sm:px-1.5 sm:text-[11px]">
+							{counts[value]}
+						</span>
+					)}
+				</button>
+			))}
+		</div>
+	);
+}
 
 /** Lessons of a course in order, as the course page counts them: playable lessons only. */
 const courseLessons = (course: CatalogNode): CatalogNode[] => {
@@ -196,7 +224,7 @@ const courseLessons = (course: CatalogNode): CatalogNode[] => {
 	return walk(course).filter((node) => !isLessonMissing(node));
 };
 
-type UpNext = { courseId: string; course: CatalogNode; lesson: CatalogNode; index: number; lessons: CatalogNode[]; done: number; position: number | null };
+type UpNext = { courseId: string; course: CatalogNode; lesson: CatalogNode; title: string; index: number; lessons: CatalogNode[]; done: number; position: number | null };
 
 /**
  * The lesson to study next. The newest study that is not finished resumes where it stopped; a
@@ -217,7 +245,10 @@ function upNext(catalog: Catalog | undefined, recent: StudyProgress[]): UpNext |
 		const done = lessons.filter(isDone).length;
 		const index = !item.completed ? studied : [...lessons.keys()].find((i) => i > studied && !isDone(lessons[i])) ?? lessons.findIndex((node) => !isDone(node));
 		if (index < 0) continue;
-		return { courseId: courseIdOf(course), course, lesson: lessons[index], index, lessons, done, position: !item.completed ? item.positionSeconds : null };
+		const lesson = lessons[index];
+		const media = [...lesson.files, ...lesson.looseFiles].find((file) => file.kind === 'media' && file.mediaId);
+		const source = index === studied ? location : findLessonLocation(catalog, media?.mediaId ?? null);
+		return { courseId: courseIdOf(course), course, lesson, title: displayLessonTitle(lesson.title, source?.moduleTitle), index, lessons, done, position: !item.completed ? item.positionSeconds : null };
 	}
 	return null;
 }
@@ -226,9 +257,9 @@ function upNext(catalog: Catalog | undefined, recent: StudyProgress[]): UpNext |
 function ResumeCard({ next, profile }: { next: UpNext | null; profile: string }) {
 	const look = useStore(appearanceStore);
 	if (!next || !look.showContinue) return null;
-	const { courseId, course, lesson, index, lessons, done, position } = next;
+	const { courseId, course, lesson, title, index, lessons, done, position } = next;
 	return (
-		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="grid rounded-xl border border-[var(--study-rule)] bg-card p-4 sm:grid-cols-[minmax(0,520px)_minmax(0,1fr)] sm:items-center sm:gap-9 sm:p-7">
+		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="grid rounded-xl border border-[var(--study-rule)] bg-card p-4 sm:grid-cols-[minmax(9rem,22%)_minmax(0,1fr)] sm:items-center sm:gap-6 sm:p-5">
 			<div className="relative hidden aspect-video overflow-hidden rounded-xl border border-[var(--study-rule)] sm:block" aria-hidden="true">
 				<CourseCover course={course} profile={profile} eager done={done} total={lessons.length} className="size-full rounded-none ring-0" />
 			</div>
@@ -238,7 +269,7 @@ function ResumeCard({ next, profile }: { next: UpNext | null; profile: string })
 					<span>{course.title}</span>
 					<span className="tabular-nums">{tr(`Lesson ${index + 1} of ${lessons.length}`, `Aula ${index + 1} de ${lessons.length}`)}</span>
 				</p>
-				<h2 className="mt-2 text-2xl font-semibold tracking-tight text-balance sm:mt-2.5 sm:text-[38px] sm:leading-[1.05]">{lesson.title}</h2>
+				<h2 className="mt-2 text-2xl font-semibold tracking-tight break-words text-balance sm:text-3xl sm:leading-tight">{title}</h2>
 				{position !== null && position > 0 && <p className="mt-3 max-w-[42ch] text-sm text-muted-foreground">{tr(`You stopped at ${formatDuration(position)}.`, `Você parou em ${formatDuration(position)}.`)}</p>}
 				<div className="mt-4 flex flex-wrap gap-2.5 sm:mt-5">
 					<Link to={routerPath(href('course', courseId, lesson.path, position))} className={buttonVariants({ className: 'font-semibold' })}>
@@ -390,7 +421,7 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 			<li key="g" className="flex flex-col justify-between gap-2 border-t border-[var(--study-rule)] pt-3">
 				<div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
 					<span>{tr('Goal', 'Meta')}</span>
-					<Target className="size-3.5 text-[var(--stat-green-ink)]" aria-hidden="true" />
+					<Target className="size-3.5 text-primary" aria-hidden="true" />
 				</div>
 				<p className="flex items-baseline gap-1 tabular-nums">
 					<span className="font-heading text-xl leading-none font-semibold text-foreground">{days}/{rewards.weeklyGoal}</span>
@@ -398,7 +429,7 @@ function Habit({ rewards, completedCourses }: { rewards: RewardSummary | undefin
 				</p>
 				<div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${Math.max(1, rewards.weeklyGoal)}, minmax(0, 1fr))` }} aria-hidden="true">
 					{Array.from({ length: Math.max(1, rewards.weeklyGoal) }, (_, i) => (
-						<span key={i} className={cn('h-1 rounded-full', i < days ? 'bg-[var(--stat-green-ink)]' : 'bg-border-strong/30')} />
+						<span key={i} className={cn('h-1 rounded-full', i < days ? 'bg-primary' : 'bg-border-strong/30')} />
 					))}
 				</div>
 			</li>
@@ -496,19 +527,19 @@ function Filters(props: { categories: string[]; category: string | null; onCateg
 			<Label htmlFor="sort" className="sr-only">{tr('Sort', 'Ordenar')}</Label>
 			<select id="sort" value={props.sort} onChange={(event) => props.onSort(event.target.value as LibrarySort)} className="h-11 max-w-full rounded-[var(--radius)] border border-[var(--study-rule)] bg-transparent px-2 text-xs focus-visible:outline-2 focus-visible:outline-ring sm:h-8 sm:px-2.5 sm:text-sm">
 				<option value="recent">{tr('Sort: Recent', 'Ordem: Recentes')}</option>
-				<option value="title">{tr('Sort: Title A–Z', 'Ordem: Título A–Z')}</option>
+				<option value="title">{props.view === 'shelf' ? tr('Sort: Title within each shelf', 'Ordem: Título por estante') : tr('Sort: Title', 'Ordem: Título')}</option>
 				<option value="progress">{tr('Sort: Progress', 'Ordem: Progresso')}</option>
 			</select>
-			<div role="group" aria-label={tr('View', 'Visualização')} className="ml-auto flex max-w-full flex-wrap items-center gap-0.5 rounded-[var(--radius)] border border-[var(--study-rule)] p-0.5 sm:ml-0">
+			<div role="group" aria-label={tr('View', 'Visualização')} className="flex w-full max-w-full flex-wrap items-center gap-0.5 rounded-[var(--radius)] border border-[var(--study-rule)] p-0.5 sm:w-auto">
 				{views.map(([value, label]) => (
-					<button key={value} type="button" aria-pressed={props.view === value} onClick={() => props.onView(value)} className={cn('inline-flex min-h-11 min-w-11 items-center justify-center rounded-[calc(var(--radius)-2px)] px-2 text-xs transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none sm:min-h-7 sm:px-2.5 sm:text-[13px]', props.view === value ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground')}>{label}</button>
+					<button key={value} type="button" aria-pressed={props.view === value} onClick={() => props.onView(value)} className={cn('inline-flex min-h-11 min-w-11 flex-1 items-center justify-center rounded-[calc(var(--radius)-2px)] px-2 text-xs sm:flex-none transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none sm:min-h-7 sm:px-2.5 sm:text-[13px]', props.view === value ? 'bg-muted font-semibold text-foreground' : 'text-muted-foreground hover:text-foreground')}>{label}</button>
 				))}
 			</div>
 		</>
 	);
 }
 
-export function LibraryActions({ onMessage }: { onMessage: (message: string) => void }) {
+export function LibraryActions({ onMessage, primaryImport = false }: { onMessage: (message: string) => void; primaryImport?: boolean }) {
 	const rescan = useRescan();
 	const importCourse = useImportCourse();
 	const navigate = useNavigate();
@@ -539,12 +570,12 @@ export function LibraryActions({ onMessage }: { onMessage: (message: string) => 
 
 	return (
 		<>
-			<Button variant="outline" aria-label={tr('Refresh courses', 'Atualizar cursos')} className="px-3 sm:px-4" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
+			<Button variant="ghost" aria-label={tr('Refresh courses', 'Atualizar cursos')} className="px-3 sm:px-3.5" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
 				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />
 				<span className="hidden sm:inline">{tr('Refresh courses', 'Atualizar cursos')}</span>
 				<span className="sm:hidden" aria-hidden="true">{tr('Refresh', 'Atualizar')}</span>
 			</Button>
-			<Button variant="outline" aria-label={tr('Import course', 'Importar curso')} className="px-3 sm:px-4" disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
+			<Button variant={primaryImport ? 'default' : 'outline'} aria-label={tr('Import course', 'Importar curso')} className="px-3 sm:px-4" disabled={importCourse.isPending} aria-haspopup={transportKind === 'http' ? 'dialog' : undefined} onClick={() => (transportKind === 'desktop' ? runImport() : setImportOpen(true))}>
 				<FolderPlus />
 				<span className="hidden sm:inline">{tr('Import course', 'Importar curso')}</span>
 				<span className="sm:hidden" aria-hidden="true">{tr('Import', 'Importar')}</span>
@@ -583,7 +614,7 @@ function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (me
 					? tr('Import a folder with videos or documents. Your files stay where they are.', 'Importe uma pasta com vídeos ou documentos. Seus arquivos ficam onde estão.')
 					: tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
 			</p>
-			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions onMessage={onMessage} /></div>}
+			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions primaryImport onMessage={onMessage} /></div>}
 		</div>
 	);
 }

@@ -1,4 +1,5 @@
 import type { CatalogNode, FileEntry } from './transport';
+import { displayLessonTitle } from './catalog';
 
 export type LessonRef = { title: string; path: string };
 export type LessonSection = { title: string | null; lessons: LessonRef[] };
@@ -21,7 +22,10 @@ function indexLessons(nodes: CatalogNode[]): IndexedLesson[] {
 		if (!Array.isArray(list)) return;
 		for (const node of list) {
 			if (!node) continue;
-			if (node.role === 'lesson') indexed.push({ ref: { title: node.title, path: node.path }, ancestors });
+			if (node.role === 'lesson') {
+				const context = sectionContainer(ancestors);
+				indexed.push({ ref: { title: displayLessonTitle(node.title, context?.role === 'course' ? null : context?.title), path: node.path }, ancestors });
+			}
 			if (Array.isArray(node.children) && node.children.length > 0) walk(node.children, [...ancestors, node]);
 		}
 	}

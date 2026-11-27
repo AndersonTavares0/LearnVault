@@ -10,7 +10,7 @@ describe('ActivityHeatmap', () => {
 		expect(screen.getByText('2 days with study in the last year')).toBeTruthy();
 		const cells = container.querySelectorAll('[data-heatmap-grid] > span');
 		expect(cells.length).toBe(371);
-		expect(container.querySelectorAll('[data-heatmap-grid] > span.bg-success').length).toBe(2);
+		expect(container.querySelectorAll('[data-heatmap-grid] > span.bg-primary').length).toBe(2);
 	});
 
 	it('uses the singular for a single study day', () => {

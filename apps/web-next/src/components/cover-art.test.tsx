@@ -5,13 +5,13 @@ import { CoverArt } from './cover-art';
 afterEach(cleanup);
 
 describe('CoverArt', () => {
-	it('sets the course title and lesson count on a dark frame, with no monogram', () => {
+	it('sets the course title and lesson count on a studio plate, with no monogram', () => {
 		const { container } = render(<CoverArt title="Rust from Zero" done={2} total={4} />);
 		expect(container.textContent).toContain('Rust from Zero');
 		expect(container.textContent).toContain('4 lessons');
 		expect(container.textContent).not.toContain('RF');
 		expect(container.querySelector('svg')).toBeNull();
-		expect(container.firstElementChild?.getAttribute('style')).toContain('oklch(0.24');
+		expect(container.firstElementChild?.getAttribute('style')).toContain('--cover-hue');
 	});
 
 	it('uses the singular for a one-lesson course and omits the count when there are no lessons', () => {

@@ -53,7 +53,7 @@ export function CoursePicker({ icon, title, description, actions, footer, to, ha
 			<section aria-labelledby="pinned-heading" className="space-y-3">
 				<Eyebrow className="flex items-center gap-2"><Pin className="size-3.5" aria-hidden="true" /><span id="pinned-heading">{tr('Your courses', 'Seus cursos')}</span></Eyebrow>
 				{pinned.length === 0 ? (
-					<p className="rounded-[1.75rem] border border-dashed p-6 text-center text-sm text-muted-foreground">{tr('No pinned courses yet. Pin any course below to keep it here.', 'Nenhum curso fixado ainda. Fixe qualquer curso abaixo para mantê-lo aqui.')}</p>
+					<p className="rounded-[var(--radius-lg)] border border-dashed p-6 text-center text-sm text-muted-foreground">{tr('No pinned courses yet. Pin any course below to keep it here.', 'Nenhum curso fixado ainda. Fixe qualquer curso abaixo para mantê-lo aqui.')}</p>
 				) : (
 					<ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">{pinned.map((entry) => <PickerCard key={entry.courseId} entry={entry} footer={footer(entry.courseId)} to={to(entry.courseId)} />)}</ul>
 				)}
@@ -86,7 +86,7 @@ function PickerCard({ entry, title: given, footer, to }: { entry?: CourseEntry; 
 	const tone = courseTone(title);
 	const profile = session.data?.user?.userId ?? '';
 	return (
-		<li className="group/pick relative flex flex-col overflow-hidden rounded-[1.5rem] border bg-card transition-all duration-150 focus-within:ring-3 focus-within:ring-ring hover:shadow-md">
+		<li className="group/pick relative flex flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--study-rule)] bg-card transition-all duration-150 focus-within:ring-3 focus-within:ring-ring hover:border-[var(--border-strong)] hover:shadow-sm">
 			<div className="flex items-center gap-3 p-4 pb-2">
 				{entry ? (
 					<CourseCover course={entry.course} profile={profile} compact className="size-10 shrink-0 rounded-lg" />
@@ -99,7 +99,7 @@ function PickerCard({ entry, title: given, footer, to }: { entry?: CourseEntry; 
 					</Button>
 				)}
 			</div>
-			<h3 className="line-clamp-2 min-h-[4.25rem] [overflow-wrap:anywhere] px-4 pb-4 text-lg leading-snug font-bold">
+			<h3 className="mb-4 line-clamp-2 min-h-[3.125rem] [overflow-wrap:anywhere] px-4 text-lg leading-snug font-bold">
 				<Link to={to} title={title} className="after:absolute after:inset-0 after:content-[''] focus-visible:outline-none">{title}<span className="sr-only">: {footer}</span></Link>
 			</h3>
 			<div className="mt-auto flex items-center justify-between border-t bg-panel/45 px-4 py-2.5 text-xs font-medium text-muted-foreground transition-colors group-hover/pick:text-foreground" aria-hidden="true">

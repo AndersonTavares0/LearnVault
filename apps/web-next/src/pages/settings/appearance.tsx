@@ -13,18 +13,19 @@ import { persistLibraryView } from '@/lib/library-view';
 import { cn } from '@/lib/utils';
 import { safeStorage } from '@/app/preferences';
 
-const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ lamp: tr('Lamp', 'Abajur'), ink: tr('Ink', 'Tinta'), brown: tr('Brown', 'Marrom'), amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
+const accentNames = (): Record<(typeof ACCENT_PRESETS)[number]['id'], string> => ({ petrol: tr('Petrol', 'Petróleo'), ink: tr('Ink', 'Tinta'), brown: tr('Brown', 'Marrom'), amber: tr('Amber', 'Âmbar'), forest: tr('Forest', 'Floresta'), terracotta: tr('Terracotta', 'Terracota'), navy: tr('Navy', 'Azul-marinho'), plum: tr('Plum', 'Ameixa'), teal: tr('Teal', 'Verde-azulado'), slate: tr('Slate', 'Ardósia') });
 
 const surfaceNames = (): Record<(typeof SURFACES)[number], string> => ({
-	lamplight: tr('Lamplight', 'Luz de abajur'),
+	paper: tr('Cool paper', 'Papel frio'),
+	lamplight: tr('Lamplight', 'Papel quente claro'),
 	warm: tr('Warm paper', 'Papel quente'),
 	stone: tr('Cool stone', 'Pedra neutra'),
 	crisp: tr('Crisp contrast', 'Alto contraste'),
-	sepia: tr('Kindle sepia', 'Sépia Kindle'),
+	sepia: tr('Kindle sepia', 'Sépia de leitura'),
 	sage: tr('Forest mist', 'Névoa verde'),
-	nord: tr('Nord frost', 'Nord ártico'),
-	rose: tr('Rosé pine', 'Rosé pine'),
-	solarized: tr('Solarized', 'Solarized')
+	nord: tr('Nord frost', 'Ártico suave'),
+	rose: tr('Rosé pine', 'Rosé suave'),
+	solarized: tr('Solarized', 'Creme solar')
 });
 
 /**
@@ -92,13 +93,13 @@ export function AppearanceSettings() {
 			</fieldset>
 			<fieldset className="min-w-0 space-y-3">
 				<legend className="text-sm font-semibold">{tr('Accent color', 'Cor de destaque')}</legend>
-				<div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+				<div className="grid grid-cols-2 gap-2 sm:grid-cols-[repeat(auto-fill,minmax(9.75rem,1fr))]">
 					{ACCENT_PRESETS.map((preset) => {
 						const selected = value.accent === preset.hex;
 						return (
-							<button key={preset.id} type="button" aria-pressed={selected} onClick={() => { change({ accent: preset.hex }); setCustom(preset.hex); }} className={cn('flex min-h-11 items-center gap-2 rounded-[var(--radius)] border border-[var(--study-rule)] bg-card px-3 text-sm font-medium transition-colors hover:border-[var(--border-strong)] hover:bg-brand-tint/60 focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none', selected && 'border-primary bg-brand-soft font-semibold text-brand-ink ring-1 ring-primary/20')}>
+							<button key={preset.id} type="button" aria-pressed={selected} onClick={() => { change({ accent: preset.hex }); setCustom(preset.hex); }} className={cn('flex min-h-11 items-center gap-2 rounded-[var(--radius)] border border-[var(--study-rule)] bg-card px-2.5 text-sm font-medium transition-colors hover:border-[var(--border-strong)] hover:bg-brand-tint/60 focus-visible:ring-3 focus-visible:ring-ring focus-visible:outline-none', selected && 'border-primary bg-brand-soft font-semibold text-brand-ink ring-1 ring-primary/20')}>
 								<span aria-hidden="true" className="grid size-4 shrink-0 place-items-center rounded-full text-brand-foreground" style={{ backgroundColor: dark ? preset.dark : preset.hex }}>{selected && <Check className="size-3" />}</span>
-								<span className="truncate">{accentNames()[preset.id]}</span>
+								<span className="min-w-0 flex-1 text-left leading-tight">{accentNames()[preset.id]}</span>
 							</button>
 						);
 					})}
@@ -125,7 +126,7 @@ export function AppearanceSettings() {
 			<Choice legend={tr('Density', 'Densidade')} options={DENSITIES} value={value.density} label={(option) => (option === 'comfortable' ? tr('Comfortable', 'Confortável') : tr('Compact', 'Compacta'))} onChange={(density) => change({ density })} />
 			<Choice legend={tr('Text size', 'Tamanho do texto')} options={TEXT_SIZES} value={value.textSize} label={(option) => ({ small: tr('Small', 'Pequeno'), medium: tr('Medium', 'Médio'), large: tr('Large', 'Grande') })[option]} onChange={(textSize) => change({ textSize })} />
 			<Choice legend={tr('Page width', 'Largura da página')} options={PAGE_WIDTHS} value={value.pageWidth} label={(option) => ({ focused: tr('Focused', 'Focada'), standard: tr('Standard', 'Padrão'), wide: tr('Wide', 'Ampla') })[option]} onChange={(pageWidth) => change({ pageWidth })} />
-			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('Geist', 'Geist'), modern: tr('Clean sans-serif', 'Sans-serif limpa'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
+			<Choice legend={tr('Font', 'Fonte')} options={FONTS} value={value.font} label={(option) => ({ sans: tr('Geist', 'Padrão limpa'), modern: tr('Clean sans-serif', 'Sans-serif suave'), system: tr('System font', 'Fonte do sistema'), serif: tr('Reading serif', 'Serifada de leitura') })[option]} onChange={(font) => change({ font })} />
 						<SwitchCard label={tr('Reduce motion & animations', 'Reduzir animações e movimento')} checked={value.reduceMotion} onChange={(reduceMotion) => change({ reduceMotion })} />
 			</Panel>
 			<Panel className="space-y-6 p-5 sm:p-6 xl:col-span-2">

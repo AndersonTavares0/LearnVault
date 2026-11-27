@@ -3,14 +3,14 @@ import { createStore } from '@/lib/store';
 /**
  * Everything a learner can change about how LearnVault looks and what it shows. One small object,
  * kept in this browser (nothing is sent anywhere), applied to <html> before the first render.
- * Dark Lamplight is the default; light (Daylight) and "follow the system" are choices.
+ * Paper & Petrol is the default palette across Light (Cool paper) and Dark (Greenish slate).
  */
 export const APPEARANCE_STORAGE_KEY = 'learnvault-appearance';
 
 /** Each preset has the colour used on the light page and a lighter one for the dark page. */
 export const ACCENT_PRESETS = [
-	// Lamp amber, the default: bronze on the light page (white text at 4.5:1), lamplight on the dark one.
-	{ id: 'lamp', hex: '#8A5A0C', dark: '#F0BE62' },
+	// Petrol teal, the default: deep petrol on cool paper (7.6:1 with white), luminous mint-teal on dark slate.
+	{ id: 'petrol', hex: '#115E59', dark: '#4EC0B3' },
 	// Warm ink, the brand's near-black. `tone` is what the page, panels and tints are mixed from on the light page:
 	// mixing from a near-black would darken them (less text contrast) and, with so little chroma, turn them pink.
 	{ id: 'ink', hex: '#1C1815', dark: '#C9B594', tone: '#5C4229' },
@@ -25,10 +25,11 @@ export const ACCENT_PRESETS = [
 ] as const;
 
 export const THEMES = ['light', 'dark', 'system'] as const;
-export const SURFACES = ['lamplight', 'warm', 'stone', 'crisp', 'sepia', 'sage', 'nord', 'rose', 'solarized'] as const;
+export const SURFACES = ['paper', 'lamplight', 'warm', 'stone', 'crisp', 'sepia', 'sage', 'nord', 'rose', 'solarized'] as const;
 
 export const SURFACE_SWATCHES: Record<(typeof SURFACES)[number], { light: string; dark: string; edgeLight: string; edgeDark: string }> = {
-	lamplight: { light: '#F1F3EF', dark: '#0D1210', edgeLight: '#DCE2DA', edgeDark: '#25322B' },
+	paper: { light: '#F4F6F4', dark: '#0F1513', edgeLight: '#CFD9D3', edgeDark: '#2C3A35' },
+	lamplight: { light: '#F6F4EE', dark: '#141A19', edgeLight: '#D8D8CA', edgeDark: '#37423D' },
 	warm: { light: '#FBF7F1', dark: '#161719', edgeLight: '#E7D8C6', edgeDark: '#36383C' },
 	stone: { light: '#F4F5F7', dark: '#0E1014', edgeLight: '#DCE0E8', edgeDark: '#2B313E' },
 	crisp: { light: '#FFFFFF', dark: '#060607', edgeLight: '#E5E7EB', edgeDark: '#27272A' },
@@ -75,9 +76,9 @@ export type Appearance = {
 
 export const DEFAULT_APPEARANCE: Appearance = {
 	theme: 'dark',
-	surface: 'lamplight',
+	surface: 'paper',
 	accent: ACCENT_PRESETS[0].hex,
-	reward: 'amber',
+	reward: 'accent',
 	radius: 'soft',
 	cardStyle: 'bordered',
 	density: 'comfortable',
@@ -206,7 +207,7 @@ export function applyAppearance(appearance: Appearance, root: HTMLElement = docu
 	const accent = dark ? darkAccent(appearance.accent) : readableAccent(appearance.accent);
 	root.style.setProperty('--brand', accent);
 	root.style.setProperty('--brand-tone', dark ? accent : toneFor(appearance.accent) ?? accent);
-	root.style.setProperty('--brand-fg', dark ? '#1C1209' : '#FFFFFF');
+	root.style.setProperty('--brand-fg', dark ? '#0A1A18' : '#FFFFFF');
 	const own = appearance.reward === 'accent';
 	root.style.setProperty('--reward', own ? 'var(--brand-ink)' : dark ? '#C9B594' : '#795514');
 	root.style.setProperty('--reward-fill', own ? 'var(--brand)' : dark ? '#C9B594' : '#A8761F');

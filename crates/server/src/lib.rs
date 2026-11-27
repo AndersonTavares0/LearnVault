@@ -138,6 +138,7 @@ pub fn build_router(state: AppState) -> Router {
             get(transcode::media_transcode).head(transcode::media_transcode),
         )
         .route("/api/study/recent", get(study::recent))
+        .route("/api/study/state", get(study::state))
         .route("/api/study/summary", get(study::summary))
         // The sync batch carries up to 200 operations with note text, so it
         // has a limit of its own, far above the default of the small routes.

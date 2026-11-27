@@ -27,7 +27,7 @@ use crate::dto::{
     FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
     NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto, RecentStudyDto,
     RescanSummaryDto, RewardSummaryDto, SearchResultsDto, StudyFavoritesDto, StudyNoteDto,
-    StudyProgressDto, StudySummaryDto, SyncResultDto, SyncStateDto,
+    StudyProgressDto, StudyStateDto, StudySummaryDto, SyncResultDto, SyncStateDto,
 };
 use crate::error::IpcError;
 use crate::ordering::{CourseOrders, load_orders, store_orders};
@@ -436,6 +436,19 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::database_unavailable())?;
         study::recent(&database, limit)
+    }
+
+    /// Pages through the local owner's whole study state, newest first.
+    pub fn study_state(
+        &self,
+        limit: Option<usize>,
+        cursor: Option<&str>,
+    ) -> Result<StudyStateDto, IpcError> {
+        let database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        study::state(&database, limit, cursor)
     }
 
     /// Summarizes the local owner's streak and current week.

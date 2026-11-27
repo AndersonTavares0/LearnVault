@@ -289,6 +289,42 @@ describe('lesson page', () => {
 			expect(video.currentTime).toBe(30);
 		});
 
+		it('edits a rail note in place without changing its timestamp', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			vi.mocked(transport.listNotes).mockResolvedValue([
+				{ noteId: 'n-edit', mediaId: 'one.mp4', positionSeconds: 83, content: 'Before', createdAt: 1, updatedAt: 1 }
+			]);
+			const update = vi.spyOn(transport, 'updateNote').mockResolvedValue({ noteId: 'n-edit', mediaId: 'one.mp4', positionSeconds: 83, content: 'After', createdAt: 1, updatedAt: 2 });
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('tab', { name: 'Notes (1)' }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Edit note at 1:23' }));
+			fireEvent.change(await screen.findByLabelText('Note text'), { target: { value: 'After' } });
+			fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+			await waitFor(() => expect(update).toHaveBeenCalledWith('n-edit', 'After'));
+			expect(screen.getByRole('button', { name: 'Play from 1:23' })).toBeTruthy();
+		});
+
+		it('asks before deleting a rail note and keeps it on cancel', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			vi.mocked(transport.listNotes).mockResolvedValue([
+				{ noteId: 'n-delete', mediaId: 'one.mp4', positionSeconds: 83, content: 'Keep me', createdAt: 1, updatedAt: 1 }
+			]);
+			const remove = vi.spyOn(transport, 'deleteNote').mockResolvedValue(undefined);
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('tab', { name: 'Notes (1)' }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Delete note at 1:23' }));
+			const dialog = await screen.findByRole('alertdialog');
+			expect(remove).not.toHaveBeenCalled();
+			fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+			expect(remove).not.toHaveBeenCalled();
+			expect(screen.queryByRole('alertdialog')).toBeNull();
+
+			fireEvent.click(screen.getByRole('button', { name: 'Delete note at 1:23' }));
+			fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete note' }));
+			await waitFor(() => expect(remove).toHaveBeenCalledWith('n-delete'));
+			await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+		});
+
 		it('puts the lesson in focus and leaves it with the button or Escape', async () => {
 			renderApp('/course/c/c%2FOne', { catalog });
 			const focus = await screen.findByRole('button', { name: 'Focus' });

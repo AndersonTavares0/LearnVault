@@ -1,5 +1,6 @@
 import { courseProgress, getCourseProgressStatus } from './catalog';
 import { resolveCourseCategory, type CourseCategoryMap } from './course-categories';
+import { getLocale } from './i18n';
 import { defaultLessonPath } from './navigation';
 import { findLesson, findLessonLocation, type LessonLocation } from './router';
 import { filterCatalog } from './search';
@@ -85,7 +86,8 @@ export function buildLibrary(input: {
 		if (entry.favorite) counts.favorites += 1;
 	}
 
-	const categories = [...new Set(entries.map((entry) => entry.category).filter((name): name is string => Boolean(name)))].sort((a, b) => a.localeCompare(b));
+	const collator = new Intl.Collator(getLocale(), { sensitivity: 'base', numeric: true });
+	const categories = [...new Set(entries.map((entry) => entry.category).filter((name): name is string => Boolean(name)))].sort((a, b) => collator.compare(a, b));
 
 	// One resume card per course, most recent first, skipping lessons already completed.
 	const seen = new Set<string>();

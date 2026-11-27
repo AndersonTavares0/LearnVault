@@ -22,7 +22,7 @@ use crate::dto::{
     FocusSessionDto, FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto,
     MediaRemovalOutcomeDto, NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto,
     RecentStudyDto, RescanSummaryDto, RewardSummaryDto, SearchResultsDto, StudyFavoritesDto,
-    StudyNoteDto, StudyProgressDto, StudySummaryDto, SyncResultDto, SyncStateDto,
+    StudyNoteDto, StudyProgressDto, StudyStateDto, StudySummaryDto, SyncResultDto, SyncStateDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -330,6 +330,21 @@ pub async fn desktop_recent_study(
 ) -> Result<RecentStudyDto, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.recent_study(limit))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: one page of the local owner's whole study state, newest first.
+///
+/// The cursor is the opaque `next_cursor` of the previous page; the webview never sends an owner.
+#[tauri::command]
+pub async fn desktop_study_state(
+    state: State<'_, DesktopState>,
+    limit: Option<usize>,
+    cursor: Option<String>,
+) -> Result<StudyStateDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_state(limit, cursor.as_deref()))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

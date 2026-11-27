@@ -63,6 +63,11 @@ type Props = { entry: CourseEntry; profile: string; variant?: 'grid' | 'shelf' |
 export function CourseCard({ entry, profile, variant = 'grid', canManage = false }: Props) {
 	const look = useStore(appearanceStore);
 	const toggle = useToggleCourseFavorite();
+	const favoriteError = toggle.isError && (
+		<p role="alert" className="mt-2 text-xs text-destructive">
+			{tr('Could not update favorites. Try again.', 'Não foi possível atualizar os favoritos. Tente novamente.')}
+		</p>
+	);
 	// Cover, lesson order and registry removal only exist for local courses; a remote course is managed from Settings.
 	const manageable = canManage && !entry.course.remote;
 	const listed = variant === 'list';
@@ -112,17 +117,17 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 	}
 	if (variant === 'grid') {
 		const current = entry.status === 'in_progress' && entry.next ? lessonPaths(entry.course).indexOf(entry.next.path) : -1;
-		const doneLabel = entry.done > 0 ? tr(`${entry.done} done`, `${entry.done} concluídas`) : entry.status === 'in_progress' ? tr('Started', 'Iniciado') : tr('Not started', 'Não iniciado');
+		const doneLabel = entry.done > 0 ? tr(`${entry.done} done`, `${entry.done} ${entry.done === 1 ? 'concluída' : 'concluídas'}`) : entry.status === 'in_progress' ? tr('Started', 'Iniciado') : tr('Not started', 'Não iniciado');
 		return (
-			<li className="group/card relative grid min-w-0 grid-cols-[7rem_minmax(0,1fr)] items-center gap-3.5 sm:block sm:gap-0">
-				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} className="aspect-video w-full rounded-[10px] border border-border ring-0" />
-				<div className="min-w-0 sm:mt-2.5">
-					<div className="flex items-start gap-1">
-						<h3 className="line-clamp-2 min-w-0 flex-1 text-sm leading-[1.3] font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">
+			<li className="group/card relative grid min-w-0 grid-cols-[4.25rem_minmax(0,1fr)] items-start gap-3.5 border-t border-[var(--study-rule)] py-3.5 sm:grid-cols-[4.5rem_minmax(0,1fr)]">
+				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="aspect-square w-full rounded-[var(--radius)] border border-[var(--study-rule)] ring-0" />
+				<div className="flex min-h-[4.5rem] min-w-0 flex-col justify-between gap-2">
+					<div className="flex min-h-[2.4rem] items-start gap-1">
+						<h3 className="line-clamp-2 min-w-0 flex-1 text-base leading-snug font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">
 							<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:underline">{entry.course.title}</Link>
 						</h3>
 						{(studySyncSupported || manageable) && (
-							<div className="relative z-10 -mt-1 -mr-1.5 flex shrink-0 items-center text-muted-foreground">
+							<div className="relative z-10 -mt-1.5 -mr-1.5 flex shrink-0 items-center text-muted-foreground">
 								{studySyncSupported && (
 									<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
 										aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
@@ -135,16 +140,20 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 						)}
 					</div>
 					{entry.total > 0 ? (
-						<>
-							<p className="mt-1 flex justify-between gap-3 text-[12.5px] text-muted-foreground tabular-nums">
-							<span>{formatCount(entry.total, tr('lesson', 'aula'), tr('lessons', 'aulas'))}</span>
-							<span>{doneLabel}</span>
-						</p>
-						<LessonSegments className="mt-2" done={entry.done} total={entry.total} current={current >= 0 ? current : undefined} />
-					</>
+						<div className="space-y-1.5">
+							<p className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
+								<span>{formatCount(entry.total, tr('lesson', 'aula'), tr('lessons', 'aulas'))}</span>
+								<span aria-hidden="true">·</span>
+								<span className={entry.status === 'completed' ? 'font-medium text-primary' : undefined}>{doneLabel}</span>
+							</p>
+							{(look.showProgress || entry.done > 0) && (
+								<LessonSegments done={entry.done} total={entry.total} current={current >= 0 ? current : undefined} />
+							)}
+						</div>
 					) : (
-						<p className="mt-1 text-[12.5px] text-muted-foreground">{tr('No lessons found', 'Sem aulas')}</p>
+						<p className="text-[12.5px] text-muted-foreground">{tr('No lessons found', 'Sem aulas')}</p>
 					)}
+					{favoriteError}
 				</div>
 			</li>
 		);
@@ -199,6 +208,7 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 				) : (
 					<p className="text-xs text-muted-foreground">{tr('No lessons found', 'Sem aulas')}</p>
 				)}
+				{favoriteError}
 			</div>
 		</li>
 	);

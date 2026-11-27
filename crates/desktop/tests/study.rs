@@ -721,3 +721,38 @@ fn desktop_study_notes_crud_and_isolation() {
     let err = state.delete_note("nota-inexistente").unwrap_err();
     assert_eq!(err.code, learnvault_desktop::IpcErrorCode::NoteNotFound);
 }
+
+#[test]
+fn study_state_pages_past_the_recent_ceiling_for_the_local_owner_only() {
+    let dir = tempfile::tempdir().unwrap();
+    let state = desktop(dir.path());
+    for n in 0..101 {
+        let id = format!("m{n:03}");
+        seed_media(dir.path(), &id);
+        seed_state(dir.path(), LOCAL_OWNER_ID, &id, 5, false, 1_000 + n);
+    }
+    seed_state(dir.path(), "outro-dono", "m000", 9, true, 5_000);
+
+    let first = state.study_state(Some(100), None).unwrap();
+    assert_eq!(first.items.len(), 100);
+    let cursor = first.next_cursor.clone().expect("a second page exists");
+    let second = state.study_state(Some(100), Some(&cursor)).unwrap();
+    assert_eq!(recent_ids_of(&second.items), ["m000"]);
+    assert!(second.next_cursor.is_none());
+    assert!(
+        second.items[0].position_seconds == 5,
+        "never the other owner's row"
+    );
+
+    let json = serde_json::to_value(&first).unwrap();
+    assert_eq!(json["items"][0]["media_id"], "m100");
+    assert!(json["next_cursor"].is_string());
+    assert_eq!(
+        state.study_state(None, Some("nope")).unwrap_err().code,
+        IpcErrorCode::StudyUnavailable
+    );
+}
+
+fn recent_ids_of(items: &[StudyProgressDto]) -> Vec<String> {
+    items.iter().map(|item| item.media_id.clone()).collect()
+}

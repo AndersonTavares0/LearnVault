@@ -222,6 +222,23 @@
 :root[data-theme="dark"] .tone { background: hsl(var(--hue) 28% 17%); color: hsl(var(--hue) 65% 74%); }
 :root[data-theme="dark"] .tone-ink { color: hsl(var(--hue) 65% 74%); }
 
+/* Surface-aware generated course artwork: light editorial bookplates in Light mode, calm deep plates in Dark mode. */
+.cover-plate {
+  --cover-hue: 175;
+  --cover-ground: oklch(0.93 0.022 var(--cover-hue));
+  --cover-ink: oklch(0.24 0.05 var(--cover-hue));
+  --cover-sub: oklch(0.38 0.04 var(--cover-hue));
+  --cover-rule: oklch(0.38 0.04 var(--cover-hue) / 0.14);
+  background-color: var(--cover-ground);
+  color: var(--cover-ink);
+}
+:root[data-theme="dark"] .cover-plate {
+  --cover-ground: oklch(0.22 0.028 var(--cover-hue));
+  --cover-ink: oklch(0.91 0.018 var(--cover-hue));
+  --cover-sub: oklch(0.76 0.02 var(--cover-hue));
+  --cover-rule: oklch(0.85 0.02 var(--cover-hue) / 0.14);
+}
+
 /* Headings use lining figures so counts line up with titles. */
 .font-heading, h1, h2, h3 { font-variant-numeric: lining-nums; }
 
@@ -246,43 +263,83 @@
 :root[data-page-width="standard"] { --container-max: 88rem; }
 :root[data-page-width="wide"] { --container-max: 112rem; }
 
-:root[data-surface="lamplight"] {
-  --background: #F1F3EF;
-  --foreground: #111914;
+:root[data-surface="paper"] {
+  --background: #F4F6F4;
+  --foreground: #131C18;
   --card: #FFFFFF;
-  --card-foreground: #111914;
+  --card-foreground: #131C18;
   --popover: #FFFFFF;
-  --popover-foreground: #111914;
-  --secondary-foreground: #111914;
-  --accent-foreground: #111914;
-  --muted: #E8ECE6;
-  --muted-foreground: #47534C;
-  --panel: #E6EBE4;
-  --border: #DCE2DA;
-  --input: #7A867E;
-  --sidebar: #E8EDE6;
-  --sidebar-foreground: #111914;
-  --sidebar-accent-foreground: #111914;
+  --popover-foreground: #131C18;
+  --secondary-foreground: #131C18;
+  --accent-foreground: #131C18;
+  --muted: #EAEFEA;
+  --muted-foreground: #475750;
+  --panel: #E7EDE9;
+  --border: #CFD9D3;
+  --input: #6D7F77;
+  --sidebar: #ECF0ED;
+  --sidebar-foreground: #131C18;
+  --sidebar-accent-foreground: #131C18;
+  --success: #115E59;
+  --success-tint: #E3EFEC;
+}
+:root[data-theme="dark"][data-surface="paper"] {
+  --background: #0F1513;
+  --foreground: #ECF1EE;
+  --card: #17201D;
+  --card-foreground: #ECF1EE;
+  --popover: #1E2925;
+  --popover-foreground: #ECF1EE;
+  --secondary-foreground: #ECF1EE;
+  --accent-foreground: #ECF1EE;
+  --muted: #1A2320;
+  --muted-foreground: #9FB2AA;
+  --panel: #1E2925;
+  --border: #2C3A35;
+  --input: #6E827A;
+  --sidebar: #121A17;
+  --sidebar-foreground: #ECF1EE;
+  --sidebar-accent-foreground: #ECF1EE;
+  --success: #4EC0B3;
+  --success-tint: #162A26;
+}
+:root[data-surface="lamplight"] {
+  --background: #F6F4EE;
+  --foreground: #242923;
+  --card: #FFFEFA;
+  --card-foreground: #242923;
+  --popover: #FFFEFA;
+  --popover-foreground: #242923;
+  --secondary-foreground: #242923;
+  --accent-foreground: #242923;
+  --muted: #EDEBE3;
+  --muted-foreground: #555D54;
+  --panel: #EAE9DF;
+  --border: #D8D8CA;
+  --input: #747C71;
+  --sidebar: #ECECE2;
+  --sidebar-foreground: #242923;
+  --sidebar-accent-foreground: #242923;
   --success: #2E7A51;
   --success-tint: #DDEBE1;
 }
 :root[data-theme="dark"][data-surface="lamplight"] {
-  --background: #0D1210;
-  --foreground: #ECE7DA;
-  --card: #151E19;
-  --card-foreground: #ECE7DA;
-  --popover: #1B2620;
-  --popover-foreground: #ECE7DA;
-  --secondary-foreground: #ECE7DA;
-  --accent-foreground: #ECE7DA;
-  --muted: #131B17;
-  --muted-foreground: #AAB4AD;
-  --panel: #1B2620;
-  --border: #25322B;
-  --input: #5E6E64;
-  --sidebar: #101814;
-  --sidebar-foreground: #ECE7DA;
-  --sidebar-accent-foreground: #ECE7DA;
+  --background: #141A19;
+  --foreground: #F1EEE5;
+  --card: #1D2523;
+  --card-foreground: #F1EEE5;
+  --popover: #26302D;
+  --popover-foreground: #F1EEE5;
+  --secondary-foreground: #F1EEE5;
+  --accent-foreground: #F1EEE5;
+  --muted: #1A211F;
+  --muted-foreground: #B4BDB4;
+  --panel: #26302D;
+  --border: #37423D;
+  --input: #748078;
+  --sidebar: #18201D;
+  --sidebar-foreground: #F1EEE5;
+  --sidebar-accent-foreground: #F1EEE5;
   --success: #6DB58C;
   --success-tint: #1A2C21;
 }
@@ -596,6 +653,36 @@ html[data-app-shell], html[data-app-shell] body { height: 100%; overflow: hidden
   border-color: transparent;
   background: var(--panel);
 }
+.study-page-title {
+  font-family: var(--heading-font);
+  font-size: clamp(1.75rem, 1.4rem + 1.45vw, 2.5rem);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.035em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+.study-empty {
+  max-inline-size: 56ch;
+  padding: clamp(1rem, 3vw, 1.5rem);
+  border: 1px solid var(--study-rule);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.study-empty > * + * { margin-block-start: 0.5rem; }
+.study-empty a { display: inline-flex; align-items: center; min-height: 2.75rem; }
+.study-metrics > :nth-child(2) { border-inline-start: 1px solid var(--study-rule); }
+.study-metrics > :last-child {
+  grid-column: 1 / -1;
+  border-block-start: 1px solid var(--study-rule);
+}
+@media (width >= 40rem) {
+  .study-metrics > :last-child {
+    grid-column: auto;
+    border-block-start: 0;
+    border-inline-start: 1px solid var(--study-rule);
+  }
+}
 .study-timecode {
   font-family: var(--font-mono);
   font-size: 0.78rem;
@@ -608,16 +695,16 @@ html[data-app-shell], html[data-app-shell] body { height: 100%; overflow: hidden
 .lesson-rail {
   transition: opacity 200ms ease;
 }
-:root:has([data-lesson-focus='on']) :is([data-app-chrome], nav[aria-label='Sections']) {
+:root:has([data-lesson-focus='on']) [data-app-chrome] {
   transition: opacity 200ms ease;
 }
-:root:has([data-lesson-focus='on']) :is([data-app-chrome], nav[aria-label='Sections']),
+:root:has([data-lesson-focus='on']) [data-app-chrome],
 [data-lesson-focus='on'] .lesson-rail {
   opacity: 0.25;
 }
 @media (prefers-reduced-motion: reduce) {
   .lesson-rail,
-  :root:has([data-lesson-focus='on']) :is([data-app-chrome], nav[aria-label='Sections']) {
+  :root:has([data-lesson-focus='on']) [data-app-chrome] {
     transition: none;
   }
 }

@@ -18,7 +18,7 @@ import { usePlayerPreferences } from '@/hooks/use-player-preferences';
 import { useLocale } from '@/hooks/use-locale';
 import { usePageTitle } from '@/hooks/use-page-title';
 import { useStore } from '@/hooks/use-store';
-import { courseProgress, lessonStudyMediaId } from '@/lib/catalog';
+import { courseProgress, displayLessonTitle, lessonStudyMediaId } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
 import { lessonSequence, neighboringLessons } from '@/lib/navigation';
 import { findLessonPdf, formatFileSize } from '@/lib/pdf';
@@ -151,7 +151,9 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	}, [mediaId, progress.isPending, progress.data]); // eslint-disable-line react-hooks/exhaustive-deps -- recordPosition is recreated each render; the effect follows the lesson and its saved progress
 
 	const lessonNotes = useLessonNotes(mediaId);
+	const lessonCards = useQuery({ queryKey: ['flashcards', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.listFlashcards(mediaId!) });
 	const noteCount = lessonNotes.data?.length ?? 0;
+	const cardCount = lessonCards.data?.length ?? 0;
 	const goTo = (target: string) => navigate(path(href('course', courseId, target)));
 	const finished = (id: string) => {
 		if (studySyncSupported) setCompleted.mutate({ mediaId: id, completed: true }, { onSuccess: (updated) => client.setQueryData(['progress', id], updated) });
@@ -201,8 +203,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	}, [focus]);
 
 	const missingTitle = tr('Lesson not found', 'Aula não encontrada');
-	const genericLessonName = lesson && /^(lesson|aula)(\s+\d+)?$/i.test(lesson.title.trim());
-	const displayTitle = lesson ? (genericLessonName && location?.moduleTitle ? location.moduleTitle : lesson.title) : missingTitle;
+	const displayTitle = lesson ? displayLessonTitle(lesson.title, location?.moduleTitle) : missingTitle;
 	usePageTitle(lesson ? `${displayTitle} · ${course.title}` : missingTitle);
 
 	const sequence = useMemo(() => lessonSequence([course]), [course]);
@@ -229,10 +230,10 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	};
 	const closeBreak = () => setBreakPhase(null);
 
-	const moduleTitle = location?.moduleTitle && !genericLessonName ? location.moduleTitle : null;
+	const moduleTitle = location?.moduleTitle === displayTitle ? null : location?.moduleTitle;
 	const materialCount = lesson.materials.length + lesson.subtitles.length;
 	return (
-		<div data-lesson-focus={focus ? 'on' : undefined} className="space-y-5">
+		<div data-lesson-focus={focus ? 'on' : undefined} className="space-y-3.5 lg:space-y-5">
 			<header className="flex items-center justify-between gap-3 lg:flex-wrap lg:gap-x-6 lg:gap-y-3">
 				<nav aria-label={tr('Breadcrumb', 'Caminho')} className="flex min-w-0 flex-1 items-center gap-1.5 text-sm lg:flex-none">
 					<Link to={path(href('course', courseId))} className="inline-flex min-h-11 min-w-0 items-center gap-1 font-medium text-muted-foreground hover:text-foreground">
@@ -311,10 +312,10 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						</div>
 					)}
 
-					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-						<div className="min-w-0 space-y-1">
+					<div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2.5">
+						<div className="min-w-0 space-y-0.5">
 							{position >= 0 && <p className="text-[13px] text-muted-foreground tabular-nums">{tr(`Lesson ${position + 1} of ${sequence.length}`, `Aula ${position + 1} de ${sequence.length}`)}</p>}
-							<h1 className="text-[26px] leading-tight font-semibold tracking-tight text-balance">{displayTitle}</h1>
+							<h1 className="text-xl leading-tight font-semibold tracking-tight text-balance [overflow-wrap:anywhere] sm:text-[26px]">{displayTitle}</h1>
 						</div>
 						{studySyncSupported && mediaId && (
 							<Button variant="outline" aria-pressed={isDone} disabled={setCompleted.isPending} title={tr('Mark or unmark this lesson completed regardless of playback position', 'Marcar ou desmarcar esta aula como concluída, independente da posição do vídeo')} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone }, { onSuccess: (updated) => client.setQueryData(['progress', mediaId], updated) })}>
@@ -323,11 +324,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 						)}
 					</div>
 
-					<div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-[var(--study-rule)] pt-3 text-sm">
+					<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-[var(--study-rule)] pt-2.5 text-sm lg:pt-3">
 						{!pdf && playableMedia && resumeAt !== null && time < resumeAt && (
 							<Button variant="secondary" onClick={() => player.current?.seek(resumeAt)}>{tr(`Resume from ${formatDuration(resumeAt)}`, `Retomar de ${formatDuration(resumeAt)}`)}</Button>
 						)}
-						{next && <Button variant="ghost" onClick={() => goTo(next.path)} className="min-w-0 max-w-full"><span className="text-muted-foreground">{tr('Up next', 'A seguir')}</span><span className="truncate">{next.title}</span></Button>}
+						{next && <Button variant="ghost" onClick={() => goTo(next.path)} className="min-w-0 max-w-full px-2.5"><span className="text-muted-foreground">{tr('Up next', 'A seguir')}:</span><span className="truncate font-medium">{next.title}</span><ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" /></Button>}
 						{materialCount > 0 && <Button variant="ghost" onClick={() => { setContentOpen(true); setTab('contents'); }}>{tr(`Materials (${materialCount})`, `Materiais (${materialCount})`)}</Button>}
 						<label className="ml-auto inline-flex min-h-11 cursor-pointer items-center gap-2.5 px-2 font-medium text-foreground/85 hover:text-foreground has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50" title={tr('When playback ends, mark completed and advance after 5 s', 'Ao chegar ao fim, marca como concluída e avança em 5 s')}>
 							<input type="checkbox" className="peer sr-only" checked={preferences.autoNext} onChange={(event) => savePreferences({ ...preferences, autoNext: event.target.checked })} />
@@ -340,12 +341,12 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 				</div>
 
 				{(
-					// Desktop: a full-height rail with tabs. Phones: the same tabs as a sheet under the lesson.
-					<aside className={cn('lesson-rail min-w-0 border-t border-[var(--study-rule)] bg-card lg:border-t-0 lg:border-l [:root[data-sidebar=left]_&]:lg:order-first [:root[data-sidebar=left]_&]:lg:border-x-0 [:root[data-sidebar=left]_&]:lg:border-r', !contentOpen && 'hidden max-lg:block')}>
+					// Desktop: a full-height rail with tabs. Phones: rounded card above bottom navigation bar.
+					<aside className={cn('lesson-rail min-w-0 rounded-xl border border-[var(--study-rule)] bg-card lg:rounded-none lg:border-y-0 lg:border-r-0 lg:border-l [:root[data-sidebar=left]_&]:lg:order-first [:root[data-sidebar=left]_&]:lg:border-x-0 [:root[data-sidebar=left]_&]:lg:border-r', !contentOpen && 'hidden max-lg:block')}>
 						<Tabs value={activeTab} onValueChange={(value) => setTab(String(value))} className="gap-0">
-							<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start gap-1 border-b px-3 group-data-horizontal/tabs:h-auto [&>[role=tab]]:min-h-11">
+							<TabsList variant="line" aria-label={tr('Lesson tools', 'Ferramentas da aula')} className="w-full justify-start gap-1 border-b px-2 group-data-horizontal/tabs:h-auto [&>[role=tab]]:min-h-11 [&>[role=tab]]:px-2 sm:px-3 sm:[&>[role=tab]]:px-3">
 								{hasNotes && <TabsTrigger value="notes">{tr('Notes', 'Notas')}{noteCount > 0 && ` (${noteCount})`}</TabsTrigger>}
-								{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}</TabsTrigger>}
+								{hasCards && <TabsTrigger value="cards">{tr('Cards', 'Cartões')}{cardCount > 0 && ` (${cardCount})`}</TabsTrigger>}
 								<TabsTrigger value="contents">{tr('Contents', 'Conteúdo')}</TabsTrigger>
 							</TabsList>
 							{hasNotes && mediaId && (
