@@ -709,6 +709,57 @@ async fn push_enforces_current_course_grants_for_updates_reviews_and_deletions()
             "client_at": 200,
             "payload": { "kind": "flashcard_deleted", "card_id": "card-1" }
         }),
+        json!({
+            "op_id": "op-del-note-trimmed",
+            "client_at": 200,
+            "payload": { "kind": "note_deleted", "note_id": " note-1 " }
+        }),
+        json!({
+            "op_id": "op-del-bookmark-trimmed",
+            "client_at": 200,
+            "payload": { "kind": "bookmark_deleted", "bookmark_id": " bookmark-1 " }
+        }),
+        json!({
+            "op_id": "op-upd-card-trimmed",
+            "client_at": 200,
+            "payload": {
+                "kind": "flashcard_updated",
+                "card_id": " card-1 ",
+                "front": "Tampered",
+                "back": "Tampered",
+                "updated_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-del-card-trimmed",
+            "client_at": 200,
+            "payload": { "kind": "flashcard_deleted", "card_id": " card-1 " }
+        }),
+        json!({
+            "op_id": "op-rebind-note",
+            "client_at": 200,
+            "payload": {
+                "kind": "note",
+                "note_id": " note-1 ",
+                "media_id": "m2",
+                "position_seconds": 9,
+                "content": "rebound",
+                "created_at": 200,
+                "updated_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-rebind-card",
+            "client_at": 200,
+            "payload": {
+                "kind": "flashcard_created",
+                "card_id": " card-1 ",
+                "media_id": "m2",
+                "front": "Rebound",
+                "back": "Rebound",
+                "created_at": 200
+            }
+        }),
     ];
 
     for op in blocked {
@@ -723,6 +774,26 @@ async fn push_enforces_current_course_grants_for_updates_reviews_and_deletions()
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
         assert_eq!(json_body(resp).await["error"], "media_not_found");
     }
+
+    // Unknown/offline-only IDs remain accepted for deletion/update/review.
+    push_ops(
+        &app,
+        &cookie,
+        "device-a",
+        vec![
+            json!({
+                "op_id": "op-offline-del-bookmark",
+                "client_at": 201,
+                "payload": { "kind": "bookmark_deleted", "bookmark_id": "bookmark-offline" }
+            }),
+            json!({
+                "op_id": "op-offline-del-card",
+                "client_at": 201,
+                "payload": { "kind": "flashcard_deleted", "card_id": "card-offline" }
+            }),
+        ],
+    )
+    .await;
 
     let db = Database::open(temp.path().join("sync.sqlite")).unwrap();
     let conn = db.connection();

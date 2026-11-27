@@ -107,10 +107,11 @@ pub use study::{
     StudyFavorites, StudyNote, StudyPage, StudyProgress, StudySummary, count_due_flashcards,
     count_flashcard_reviews, create_flashcard, create_media_bookmark, create_study_note,
     delete_flashcard, delete_media_bookmark, delete_study_note, flashcard_media_id,
-    list_all_flashcards, list_all_study_notes, list_favorites, list_flashcard_reviews,
-    list_flashcards, list_media_bookmarks, list_study_notes, media_bookmark_media_id, recent_study,
-    record_position, review_flashcard, set_completed, set_course_favorite, set_lesson_favorite,
-    study_note_media_id, study_page, study_progress, study_summary, study_summary_on,
+    flashcard_media_id_for_owner, list_all_flashcards, list_all_study_notes, list_favorites,
+    list_flashcard_reviews, list_flashcards, list_media_bookmarks, list_study_notes,
+    media_bookmark_media_id, media_bookmark_media_id_for_owner, recent_study, record_position,
+    review_flashcard, set_completed, set_course_favorite, set_lesson_favorite, study_note_media_id,
+    study_note_media_id_for_owner, study_page, study_progress, study_summary, study_summary_on,
     update_flashcard, update_study_note,
 };
 pub use sync::{
