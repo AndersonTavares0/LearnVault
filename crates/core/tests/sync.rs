@@ -1100,6 +1100,9 @@ fn a_legacy_sync_peer_can_read_old_grades_but_cannot_acknowledge_new_ones() -> T
         assert_eq!(payload["rating"]["grade"], expected);
         assert!(serde_json::from_value::<PublishedReview>(payload.clone()).is_err());
     }
+    let mut unsupported = push[3].clone();
+    unsupported["payload"]["rating"]["grade"] = serde_json::json!("future_grade");
+    assert!(serde_json::from_value::<SyncOperationInput>(unsupported).is_err());
 
     let server = database();
     let decoded: Vec<SyncOperationInput> = serde_json::from_value(push)?;

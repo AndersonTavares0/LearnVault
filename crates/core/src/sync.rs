@@ -217,10 +217,9 @@ mod review_rating_wire {
 
     pub(super) fn serialize<S: Serializer>(rating: &str, serializer: S) -> Result<S::Ok, S::Error> {
         // v0.9.6 silently skips unknown strings. An object rejects the batch before acknowledgment.
-        let wire = match super::ReviewRating::parse(rating) {
-            Some(super::ReviewRating::Hard | super::ReviewRating::Easy) => {
-                Rating::Extended { grade: rating }
-            }
+        let wire = match rating.trim() {
+            grade if grade.eq_ignore_ascii_case("hard") => Rating::Extended { grade: "hard" },
+            grade if grade.eq_ignore_ascii_case("easy") => Rating::Extended { grade: "easy" },
             _ => Rating::Legacy(rating),
         };
         wire.serialize(serializer)
@@ -229,9 +228,13 @@ mod review_rating_wire {
     pub(super) fn deserialize<'de, D: Deserializer<'de>>(
         deserializer: D,
     ) -> Result<String, D::Error> {
-        Ok(match Rating::deserialize(deserializer)? {
-            Rating::Legacy(rating) | Rating::Extended { grade: rating } => rating,
-        })
+        match Rating::deserialize(deserializer)? {
+            Rating::Legacy(rating) => Ok(rating),
+            Rating::Extended { grade } if matches!(grade.as_str(), "hard" | "easy") => Ok(grade),
+            Rating::Extended { .. } => {
+                Err(serde::de::Error::custom("unknown extended review grade"))
+            }
+        }
     }
 }
 
