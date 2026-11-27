@@ -336,6 +336,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-import-course-cover"));
     assert!(permissions.contains(&"allow-desktop-remove-course-cover"));
     assert!(permissions.contains(&"allow-desktop-rescan"));
+    assert!(permissions.contains(&"allow-desktop-search"));
     assert!(permissions.contains(&"allow-desktop-study-progress"));
     assert!(permissions.contains(&"allow-desktop-record-position"));
     assert!(permissions.contains(&"allow-desktop-set-completed"));
@@ -375,6 +376,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-restart-to-update"));
     assert!(permissions.contains(&"allow-desktop-media-capabilities"));
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
+    assert!(permissions.contains(&"allow-desktop-read-media-slice"));
     assert!(permissions.contains(&"allow-desktop-playback-preferences"));
     assert!(permissions.contains(&"allow-desktop-save-playback-preferences"));
     assert!(permissions.contains(&"allow-desktop-sync-state"));
@@ -384,7 +386,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-sync-now"));
     assert_eq!(
         permissions.len(),
-        58,
+        60,
         "the capability must not extend beyond the core, the titlebar controls and the app commands: {permissions:?}"
     );
 }
