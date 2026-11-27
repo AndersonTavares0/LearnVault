@@ -936,27 +936,44 @@ pub struct SearchLessonDto {
 /// A flashcard matched by global search, shaped like the HTTP payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SearchFlashcardDto {
+    /// Stable identifier of the flashcard.
     pub card_id: String,
+    /// Media identifier of the lesson attached to the flashcard.
     pub media_id: String,
+    /// Identifier of the course containing the flashcard.
     pub course_id: String,
+    /// Display title of the course containing the flashcard.
     pub course_title: String,
+    /// Relative lesson path inside the course.
     pub lesson_path: String,
+    /// Display title of the lesson.
     pub lesson_title: String,
+    /// Optional lesson timestamp (in seconds) referenced by the card.
     pub position_seconds: Option<i64>,
+    /// Highlighted or truncated search snippet from the card prompt or answer.
     pub snippet: String,
 }
 
 /// A bookmark or PDF annotation matched by global search, shaped like the HTTP payload.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SearchBookmarkDto {
+    /// Stable identifier of the bookmark or annotation.
     pub bookmark_id: String,
+    /// Result kind (`"bookmark"` or `"annotation"`).
     pub kind: String,
+    /// Media identifier of the lesson or material.
     pub media_id: String,
+    /// Identifier of the course containing the bookmark or annotation.
     pub course_id: String,
+    /// Display title of the course containing the bookmark or annotation.
     pub course_title: String,
+    /// Relative lesson or material path inside the course.
     pub lesson_path: String,
+    /// Display title of the lesson or material.
     pub lesson_title: String,
+    /// Lesson timestamp (in seconds) or PDF page position.
     pub position_seconds: i64,
+    /// Highlighted or truncated search snippet from the note text.
     pub snippet: String,
 }
 

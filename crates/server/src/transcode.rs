@@ -228,30 +228,6 @@ pub(crate) async fn media_transcode(
         Err(_) => return service_unavailable(),
     };
 
-    if method != Method::HEAD && !is_ffmpeg_available() {
-        return (
-            StatusCode::NOT_IMPLEMENTED,
-            [
-                (header::CACHE_CONTROL, "private, no-store"),
-                (header::CONTENT_TYPE, "application/json"),
-            ],
-            Json(serde_json::json!({
-                "error": "transcoding_unavailable",
-                "message": "FFmpeg is not available on the server for on-demand transcoding"
-            })),
-        )
-            .into_response();
-    }
-
-    let stream_permit = if method == Method::HEAD {
-        None
-    } else {
-        match state.try_acquire_media_stream() {
-            Some(permit) => Some(permit),
-            None => return service_unavailable(),
-        }
-    };
-
     let Some(blocking_task) = state.try_acquire_blocking_task() else {
         return service_unavailable();
     };
@@ -295,8 +271,25 @@ pub(crate) async fn media_transcode(
         return response;
     }
 
-    let Some(stream_permit) = stream_permit else {
-        return error_private_no_store(StatusCode::INTERNAL_SERVER_ERROR);
+    // Report unavailable FFmpeg only after validating the course item and media kind so
+    // non-media assets (e.g. PDFs) still return 404 when FFmpeg is absent.
+    if !is_ffmpeg_available() {
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            [
+                (header::CACHE_CONTROL, "private, no-store"),
+                (header::CONTENT_TYPE, "application/json"),
+            ],
+            Json(serde_json::json!({
+                "error": "transcoding_unavailable",
+                "message": "FFmpeg is not available on the server for on-demand transcoding"
+            })),
+        )
+            .into_response();
+    }
+
+    let Some(stream_permit) = state.try_acquire_media_stream() else {
+        return service_unavailable();
     };
 
     let start = query.start.unwrap_or(0.0);
