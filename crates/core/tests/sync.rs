@@ -1071,3 +1071,73 @@ fn flashcard_backfill_preserves_srs_interval_and_due_date() -> TestResult {
     assert_eq!(synced[0].next_due, reviewed.next_due);
     Ok(())
 }
+
+#[test]
+fn a_legacy_sync_peer_can_read_old_grades_but_cannot_acknowledge_new_ones() -> TestResult {
+    #[derive(serde::Deserialize)]
+    struct PublishedReview {
+        rating: String,
+    }
+
+    let desktop = database();
+    let card = queue_flashcard_create(&desktop, OWNER, "writer", "m1", "Q", "A", None)?;
+    for grade in [
+        ReviewRating::Again,
+        ReviewRating::Good,
+        ReviewRating::Hard,
+        ReviewRating::Easy,
+    ] {
+        queue_review(&desktop, OWNER, "writer", &card.card_id, grade)?;
+    }
+    let operations = pending_operations(&desktop, OWNER, 10)?;
+    let push: serde_json::Value = serde_json::to_value(&operations)?;
+    for (index, expected) in [(1, "again"), (2, "good")] {
+        let old: PublishedReview = serde_json::from_value(push[index]["payload"].clone())?;
+        assert_eq!(old.rating, expected);
+    }
+    for (index, expected) in [(3, "hard"), (4, "easy")] {
+        let payload = &push[index]["payload"];
+        assert_eq!(payload["rating"]["grade"], expected);
+        assert!(serde_json::from_value::<PublishedReview>(payload.clone()).is_err());
+    }
+    let mut unsupported = push[3].clone();
+    unsupported["payload"]["rating"]["grade"] = serde_json::json!("future_grade");
+    assert!(serde_json::from_value::<SyncOperationInput>(unsupported).is_err());
+
+    let server = database();
+    let decoded: Vec<SyncOperationInput> = serde_json::from_value(push)?;
+    assert_eq!(
+        push_operations(&server, OWNER, "writer", &decoded)?.applied,
+        5
+    );
+    assert_eq!(
+        push_operations(&server, OWNER, "writer", &decoded)?.duplicated,
+        5
+    );
+    let batch = pull_operations(&server, OWNER, "reader", 0, 10)?;
+    let wire = serde_json::to_value(&batch)?;
+    for (index, expected) in [(3, "hard"), (4, "easy")] {
+        let payload = &wire["items"][index]["payload"];
+        assert_eq!(payload["rating"]["grade"], expected);
+        assert!(serde_json::from_value::<PublishedReview>(payload.clone()).is_err());
+    }
+
+    let reader = database();
+    let resumed: learnvault_core::SyncBatch = serde_json::from_value(wire)?;
+    apply_operations(&reader, OWNER, &resumed.items, resumed.cursor)?;
+    assert_eq!(
+        learnvault_core::count_flashcard_reviews(&reader, OWNER, &card.card_id)?,
+        4
+    );
+    assert_eq!(
+        learnvault_core::list_flashcards(&reader, OWNER, "m1")?,
+        learnvault_core::list_flashcards(&server, OWNER, "m1")?
+    );
+    let cursor = sync_state(&reader, OWNER)?.pull_cursor;
+    assert!(
+        pull_operations(&server, OWNER, "reader", cursor, 10)?
+            .items
+            .is_empty()
+    );
+    Ok(())
+}
