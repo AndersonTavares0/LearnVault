@@ -23,8 +23,9 @@
 //!   others become copies with the deterministic id `note_id~op_version`. So two devices
 //!   that saw the same set of versions converge to the same texts, without deleting
 //!   content;
-//! - flashcards: last write wins by `updated_at` (a create counts as `created_at`); a
-//!   review only reschedules the card, and an unknown card keeps the review journaled;
+//! - flashcards: text edits follow last-write-wins by `text_updated_at` (a create defaults
+//!   to `created_at` unless `text_updated_at` is carried on backfill); reviews reschedule
+//!   the card independently without suppressing concurrent text edits, and an unknown card keeps the review journaled;
 //! - deletions: a note, bookmark or flashcard delete records a tombstone with the delete
 //!   instant. A create or update whose own instant is not newer than the tombstone is
 //!   skipped, so an offline create never resurrects a deleted row;
@@ -167,6 +168,12 @@ pub enum SyncPayload {
         /// Persisted next due timestamp when backfilled.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         next_due: Option<i64>,
+        /// Persisted last activity timestamp (`MAX` of text edit/review) when backfilled.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        updated_at: Option<i64>,
+        /// Persisted last text edit timestamp when backfilled.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        text_updated_at: Option<i64>,
     },
     /// Flashcard text edited on the device.
     FlashcardUpdated {
@@ -878,6 +885,8 @@ pub fn queue_flashcard_create(
                 created_at: card.created_at,
                 interval_days: None,
                 next_due: None,
+                updated_at: None,
+                text_updated_at: None,
             },
             card.created_at,
         ))
@@ -894,16 +903,17 @@ pub fn queue_flashcard_update(
     back: &str,
 ) -> Result<Flashcard> {
     queue_change(db, owner_id, device_id, |conn| {
-        let card = crate::study::update_flashcard_on(conn, owner_id, card_id, front, back)?;
+        let (card, text_updated_at) =
+            crate::study::update_flashcard_versioned_on(conn, owner_id, card_id, front, back)?;
         Ok((
             card.clone(),
             SyncPayload::FlashcardUpdated {
                 card_id: card.card_id,
                 front: card.front,
                 back: card.back,
-                updated_at: card.updated_at,
+                updated_at: text_updated_at,
             },
-            card.updated_at,
+            text_updated_at,
         ))
     })
 }
@@ -941,15 +951,16 @@ pub fn queue_review(
     rating: ReviewRating,
 ) -> Result<Flashcard> {
     queue_change(db, owner_id, device_id, |conn| {
-        let card = crate::study::review_flashcard_on(conn, owner_id, card_id, rating)?;
+        let (card, reviewed_at) =
+            crate::study::review_flashcard_timed_on(conn, owner_id, card_id, rating)?;
         Ok((
             card.clone(),
             SyncPayload::FlashcardReview {
                 card_id: card.card_id,
                 rating: rating.as_str().to_owned(),
-                reviewed_at: card.updated_at,
+                reviewed_at,
             },
-            card.updated_at,
+            reviewed_at,
         ))
     })
 }
@@ -1128,6 +1139,8 @@ fn apply_payload(
             created_at,
             interval_days,
             next_due,
+            updated_at,
+            text_updated_at,
         } => apply_flashcard_create(
             conn,
             owner_id,
@@ -1139,6 +1152,8 @@ fn apply_payload(
             *created_at,
             *interval_days,
             *next_due,
+            *updated_at,
+            *text_updated_at,
         ),
         SyncPayload::FlashcardUpdated {
             card_id,
@@ -1503,6 +1518,8 @@ fn apply_flashcard_create(
     created_at: i64,
     interval_days: Option<i64>,
     next_due: Option<i64>,
+    updated_at: Option<i64>,
+    text_updated_at: Option<i64>,
 ) -> Result<()> {
     let card_id = card_id.trim();
     let (Ok(front), Ok(back)) = (
@@ -1518,8 +1535,18 @@ fn apply_flashcard_create(
         return Ok(());
     }
     let created_at = created_at.max(0);
+    let card_text_updated_at = text_updated_at.unwrap_or(created_at).max(created_at);
+    let card_updated_at = updated_at
+        .unwrap_or(card_text_updated_at)
+        .max(card_text_updated_at);
     // A delete at or after this version wins: an old create never resurrects a newer delete.
-    if tombstone_blocks(conn, owner_id, TOMBSTONE_FLASHCARD, card_id, created_at)? {
+    if tombstone_blocks(
+        conn,
+        owner_id,
+        TOMBSTONE_FLASHCARD,
+        card_id,
+        card_text_updated_at,
+    )? {
         return Ok(());
     }
     // The card identity is global: another owner's row is never overwritten.
@@ -1538,7 +1565,7 @@ fn apply_flashcard_create(
     conn.execute(
         "INSERT INTO flashcard
              (card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at, text_updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?9)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
          ON CONFLICT (card_id) DO UPDATE SET
              media_id = excluded.media_id,
              position_seconds = excluded.position_seconds,
@@ -1557,7 +1584,9 @@ fn apply_flashcard_create(
             back,
             interval_days,
             next_due,
-            created_at
+            created_at,
+            card_updated_at,
+            card_text_updated_at
         ],
     )?;
     Ok(())

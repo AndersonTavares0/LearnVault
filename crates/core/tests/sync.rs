@@ -61,6 +61,8 @@ fn card_created(card_id: &str, front: &str, back: &str, created_at: i64) -> Sync
         created_at,
         interval_days: None,
         next_due: None,
+        updated_at: None,
+        text_updated_at: None,
     }
 }
 
@@ -1132,6 +1134,8 @@ fn reviewing_a_card_does_not_suppress_a_concurrent_offline_text_edit() -> TestRe
                 created_at: 100,
                 interval_days: None,
                 next_due: None,
+                updated_at: None,
+                text_updated_at: None,
             },
         )],
     )?;
@@ -1187,5 +1191,91 @@ fn reviewing_a_card_does_not_suppress_a_concurrent_offline_text_edit() -> TestRe
     assert_eq!(cards[0].front, "Q1 edited");
     assert_eq!(cards[0].back, "A1 edited");
     assert_eq!(cards[0].updated_at, 200);
+    Ok(())
+}
+
+#[test]
+fn backfill_preserves_flashcard_text_updated_at_and_update_queue_uses_it() -> TestResult {
+    let source = database();
+    push_operations(
+        &source,
+        OWNER,
+        "seed-dev",
+        &[
+            input(
+                "op-c",
+                100,
+                card_created("card-bf", "Orig Q", "Orig A", 100),
+            ),
+            input(
+                "op-e",
+                150,
+                card_updated("card-bf", "Edited Q", "Edited A", 150),
+            ),
+            input(
+                "op-r",
+                200,
+                SyncPayload::FlashcardReview {
+                    card_id: "card-bf".to_owned(),
+                    rating: "good".to_owned(),
+                    reviewed_at: 200,
+                },
+            ),
+        ],
+    )?;
+
+    // First-time backfill onto a replica preserves both updated_at (200) and text_updated_at (150).
+    let batch = pull_operations(&source, OWNER, "replica-dev", 0, 50)?;
+    let replica = database();
+    apply_operations(&replica, OWNER, &batch.items, batch.cursor)?;
+
+    let (rep_upd, rep_text): (i64, i64) = replica.connection().query_row(
+        "SELECT updated_at, text_updated_at FROM flashcard WHERE card_id = 'card-bf'",
+        [],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    assert_eq!(rep_upd, 200);
+    assert_eq!(rep_text, 150);
+
+    // An older offline edit at t = 120 cannot overwrite Edited Q (150).
+    push_operations(
+        &replica,
+        OWNER,
+        "stale-dev",
+        &[input(
+            "op-stale",
+            120,
+            card_updated("card-bf", "Stale Q", "Stale A", 120),
+        )],
+    )?;
+    assert_eq!(
+        learnvault_core::list_flashcards(&replica, OWNER, "m1")?[0].front,
+        "Edited Q"
+    );
+
+    // Editing a card with a far-future review timestamp keeps updated_at monotonic while queuing monotonic text_updated_at.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs() as i64;
+    let future_ts = now + 86_400;
+    source.connection().execute(
+        "UPDATE flashcard SET updated_at = ?1, text_updated_at = 150 WHERE card_id = 'card-bf'",
+        [future_ts],
+    )?;
+    let updated_card = learnvault_core::queue_flashcard_update(
+        &source, OWNER, "seed-dev", "card-bf", "Local Q", "Local A",
+    )?;
+    assert_eq!(updated_card.updated_at, future_ts);
+    let queued = learnvault_core::pending_operations(&source, OWNER, 20)?;
+    let last = queued.last().expect("queued update op");
+    match &last.payload {
+        SyncPayload::FlashcardUpdated { updated_at, .. } => {
+            assert!(
+                *updated_at < future_ts,
+                "must emit text_updated_at, not future review updated_at"
+            );
+        }
+        other => panic!("unexpected queued payload: {other:?}"),
+    }
     Ok(())
 }

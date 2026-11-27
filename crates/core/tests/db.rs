@@ -950,12 +950,14 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
     )?;
     assert_eq!(note_content, "old note");
 
-    let card_front: String = db.connection().query_row(
-        "SELECT front FROM flashcard WHERE card_id = 'card-1'",
-        [],
-        |row| row.get(0),
-    )?;
+    let (card_front, card_updated, card_text_updated): (String, i64, i64) =
+        db.connection().query_row(
+            "SELECT front, updated_at, text_updated_at FROM flashcard WHERE card_id = 'card-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
     assert_eq!(card_front, "Q");
+    assert_eq!(card_text_updated, card_updated);
 
     let position: i64 = db.connection().query_row(
         "SELECT position_seconds FROM study_state WHERE owner_id = 'owner-a' AND media_id = 'mid-1'",

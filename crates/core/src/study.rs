@@ -986,6 +986,17 @@ pub(crate) fn update_flashcard_on(
     front: &str,
     back: &str,
 ) -> Result<Flashcard> {
+    update_flashcard_versioned_on(conn, owner_id, card_id, front, back).map(|(card, _)| card)
+}
+
+/// Updates card text atomically and returns the card together with its monotonic `text_updated_at`.
+pub(crate) fn update_flashcard_versioned_on(
+    conn: &Connection,
+    owner_id: &str,
+    card_id: &str,
+    front: &str,
+    back: &str,
+) -> Result<(Flashcard, i64)> {
     validate_owner(owner_id)?;
     let front_trimmed = validate_card_text(front)?;
     let back_trimmed = validate_card_text(back)?;
@@ -995,11 +1006,11 @@ pub(crate) fn update_flashcard_on(
     let updated = conn
         .query_row(
             "UPDATE flashcard
-             SET front = ?1, back = ?2, updated_at = MAX(updated_at, ?3), text_updated_at = ?3
+             SET front = ?1, back = ?2, updated_at = MAX(updated_at, ?3), text_updated_at = MAX(text_updated_at, ?3)
              WHERE owner_id = ?4 AND card_id = ?5
-             RETURNING card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at",
+             RETURNING card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at, text_updated_at",
             rusqlite::params![front_trimmed, back_trimmed, now, owner_id, card_id],
-            card_from_row,
+            |row| Ok((card_from_row(row)?, row.get::<_, i64>(10)?)),
         )
         .optional()?;
 
@@ -1119,6 +1130,16 @@ pub(crate) fn review_flashcard_on(
     card_id: &str,
     rating: ReviewRating,
 ) -> Result<Flashcard> {
+    review_flashcard_timed_on(conn, owner_id, card_id, rating).map(|(card, _)| card)
+}
+
+/// Reviews a card inside an active connection and returns `(card, reviewed_at)`.
+pub(crate) fn review_flashcard_timed_on(
+    conn: &Connection,
+    owner_id: &str,
+    card_id: &str,
+    rating: ReviewRating,
+) -> Result<(Flashcard, i64)> {
     validate_owner(owner_id)?;
     let now = now_unix_seconds();
 
@@ -1141,7 +1162,7 @@ pub(crate) fn review_flashcard_on(
 
     let updated = conn.query_row(
         "UPDATE flashcard
-         SET interval_days = ?1, next_due = ?2, updated_at = ?3
+         SET interval_days = ?1, next_due = ?2, updated_at = MAX(updated_at, ?3)
          WHERE owner_id = ?4 AND card_id = ?5
          RETURNING card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at",
         rusqlite::params![new_interval, next_due, now, owner_id, card_id],
@@ -1162,7 +1183,7 @@ pub(crate) fn review_flashcard_on(
         ],
     )?;
 
-    Ok(updated)
+    Ok((updated, now))
 }
 
 /// A review recorded in a card's history.
