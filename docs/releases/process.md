@@ -28,6 +28,11 @@ gh release edit v0.9.6 --notes-file <(pnpm --silent run release:notes -- v0.9.6)
 
 Write the user-facing summary and highlights in `docs/releases/highlights/<version>.md` (a paragraph, then a list). Without that file the notes list only the grouped commits. The generator always states whether `crates/core/src/migrations.rs` changed.
 
+For the first release with four-grade flashcards, the notes must tell users who sync
+to upgrade the server and desktop before syncing Hard or Easy reviews. Before publishing,
+verify that a mixed-version sync keeps those reviews pending and that syncing after
+both upgrades applies them once. Exercise the upgrade from a backed-up v0.9.6 database.
+
 ## Publication approval
 
 Two jobs of the `Release` workflow run in the `release` GitHub environment (required reviewer): `container-approval`, which gates the image push and tags, and `publish`, which gates the asset upload. The Git tag and GitHub Release that Release Please creates when the release PR merges are not gated.
