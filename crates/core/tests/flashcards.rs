@@ -402,3 +402,27 @@ fn hard_and_easy_ratings_scale_intervals_and_persist_history() -> TestResult {
     assert_eq!(history[1].rating, ReviewRating::Hard);
     Ok(())
 }
+
+#[test]
+fn removed_media_cards_leave_global_list_and_due_count_without_deletion() -> TestResult {
+    let mut db = library_db()?;
+    let card_a = create_flashcard(&db, OWNER, MEDIA_A, "Removed front", "Removed back", None)?;
+    let card_b = create_flashcard(&db, OWNER, MEDIA_B, "Active front", "Active back", None)?;
+    assert_eq!(count_due_flashcards(&db, OWNER)?, 2);
+    assert_eq!(list_all_flashcards(&db, OWNER)?.len(), 2);
+
+    learnvault_core::remove_media(&mut db, LIB, MEDIA_A, false)?;
+
+    assert_eq!(count_due_flashcards(&db, OWNER)?, 1);
+    let global = list_all_flashcards(&db, OWNER)?;
+    assert_eq!(global.len(), 1);
+    assert_eq!(global[0].card_id, card_b.card_id);
+
+    // Physical flashcard rows are preserved per data-safety removal rules.
+    assert_eq!(list_flashcards(&db, OWNER, MEDIA_A)?.len(), 1);
+    assert_eq!(
+        list_flashcards(&db, OWNER, MEDIA_A)?[0].card_id,
+        card_a.card_id
+    );
+    Ok(())
+}
