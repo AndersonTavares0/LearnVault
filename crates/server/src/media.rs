@@ -334,11 +334,15 @@ async fn remote_media(
                 {
                     return remote_media_error(StatusCode::BAD_GATEWAY, "source_range_mismatch");
                 }
-                Body::from_stream(upstream.bytes_stream().map(move |chunk| {
-                    // The permit lives while the body is consumed and is released at the end.
-                    let _ = &permit;
-                    chunk.map_err(std::io::Error::other)
-                }))
+                Body::from_stream(idle_timeout_stream(
+                    tokio_util::io::StreamReader::new(Box::pin(
+                        upstream
+                            .bytes_stream()
+                            .map(|chunk| chunk.map_err(std::io::Error::other)),
+                    )),
+                    permit,
+                    MEDIA_STREAM_IDLE_TIMEOUT,
+                ))
             }
             None => {
                 match dav.head_file(&reference.relative_path).await {
@@ -377,10 +381,13 @@ async fn remote_media(
                 }
             };
             match permit {
-                Some(permit) => Body::from_stream(upstream.map(move |chunk| {
-                    let _ = &permit;
-                    chunk
-                })),
+                Some(permit) => Body::from_stream(idle_timeout_stream(
+                    tokio_util::io::StreamReader::new(Box::pin(
+                        upstream.map(|chunk| chunk.map(axum::body::Bytes::from)),
+                    )),
+                    permit,
+                    MEDIA_STREAM_IDLE_TIMEOUT,
+                )),
                 None => Body::empty(),
             }
         }
