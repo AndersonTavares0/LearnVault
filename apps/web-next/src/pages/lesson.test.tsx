@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { pomodoro } from '@/lib/pomodoro-store';
+import { pauseTimer, pomodoro, startTimer } from '@/lib/pomodoro-store';
 import { clearProgressOutbox, progressOutboxKey, readProgressOutbox } from '@/lib/progress-outbox';
 import { DesktopStub, transport, type Catalog, type CatalogNode, type FileEntry, type StudyProgress } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
@@ -32,7 +32,9 @@ beforeEach(() => {
 	vi.spyOn(transport, 'rewardSummary').mockRejectedValue(new Error('not needed'));
 });
 afterEach(() => {
+	pauseTimer();
 	pomodoro.set(initialTimer);
+	vi.useRealTimers();
 	cleanup();
 	vi.restoreAllMocks();
 });
@@ -542,6 +544,67 @@ describe('lesson page', () => {
 			fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete timestamp' }));
 			await waitFor(() => expect(remove).toHaveBeenCalledWith('b1'));
 		});
+	});
+
+	it('advances to the next lesson on schedule even while the Pomodoro timer ticks every second', async () => {
+		const { router } = renderApp('/course/c/c%2FOne', { catalog });
+		fireEvent.click(await screen.findByRole('checkbox', { name: 'Autoplay next' }));
+		vi.useFakeTimers();
+		act(() => { startTimer(); });
+		fireEvent.ended(screen.getByLabelText('Lesson player: One'));
+		expect(screen.getByText('Next lesson in 5 s: Two')).toBeTruthy();
+		for (let step = 0; step < 20; step += 1) await act(async () => { vi.advanceTimersByTime(250); });
+		act(() => { pauseTimer(); });
+		vi.useRealTimers();
+		expect(router.state.location.pathname).toBe('/course/c/c%2FTwo');
+	});
+
+	it('clears unsaved study drafts and flashcard reveal state when moving to another lesson', async () => {
+		vi.spyOn(transport, 'listFlashcards').mockImplementation(async (mediaId = 'one.mp4') => [{
+			cardId: `card-${mediaId}`,
+			mediaId,
+			front: mediaId === 'one.mp4' ? 'Front 1' : 'Front 2',
+			back: mediaId === 'one.mp4' ? 'Back 1' : 'Back 2',
+			positionSeconds: null,
+			intervalDays: 0,
+			nextDue: 1,
+			createdAt: 1,
+			updatedAt: 1
+		}]);
+		renderApp('/course/c/c%2FOne', { catalog });
+		fireEvent.click(await screen.findByRole('button', { name: 'Write a note at 0:00' }));
+		fireEvent.change(await screen.findByLabelText('Note at 0:00'), { target: { value: 'Draft from One' } });
+		fireEvent.click(screen.getByRole('tab', { name: /Cards/ }));
+		fireEvent.click(await screen.findByRole('button', { name: 'Show answer' }));
+		expect(screen.getByText('Back 1')).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('button', { name: /Next/ }));
+		expect(await screen.findByRole('heading', { level: 1, name: 'Two' })).toBeTruthy();
+		expect(await screen.findByText('Front 2')).toBeTruthy();
+		expect(screen.queryByText('Back 2')).toBeNull();
+		expect(screen.getByRole('button', { name: 'Show answer' })).toBeTruthy();
+
+		fireEvent.click(screen.getByRole('tab', { name: /Notes/ }));
+		expect(screen.queryByDisplayValue('Draft from One')).toBeNull();
+	});
+
+	it('ignores player shortcuts while interacting inside the Player settings menu', async () => {
+		const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+		renderApp('/course/c/c%2FOne', { catalog });
+		const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+		Object.defineProperty(video, 'volume', { value: 0.5, writable: true, configurable: true });
+		Object.defineProperty(video, 'muted', { value: false, writable: true, configurable: true });
+
+		fireEvent.click(screen.getByRole('button', { name: 'Player settings' }));
+		const item = await screen.findByRole('menuitem', { name: 'Loop a section' });
+		item.focus();
+		for (const key of ['ArrowDown', 'ArrowRight', ' ', 'm']) {
+			fireEvent.keyDown(item, { key });
+		}
+		expect(video.volume).toBe(0.5);
+		expect(video.currentTime).toBe(0);
+		expect(video.muted).toBe(false);
+		expect(play).not.toHaveBeenCalled();
 	});
 
 });
