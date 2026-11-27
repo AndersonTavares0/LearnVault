@@ -166,7 +166,8 @@ pub(crate) async fn credentials(
     let Some(token) = request_token(&headers) else {
         return private_no_store(StatusCode::UNAUTHORIZED.into_response());
     };
-    let user = match state.session_user(hash_session_token(&token)).await {
+    let current_token_hash = hash_session_token(&token);
+    let user = match state.session_user(current_token_hash.clone()).await {
         Ok(Some(user)) => user,
         Err(StateError::Capacity) => return private_no_store(service_unavailable()),
         Ok(None) | Err(_) => return private_no_store(StatusCode::UNAUTHORIZED.into_response()),
@@ -214,15 +215,7 @@ pub(crate) async fn credentials(
     .await
     .unwrap_or(false);
     if !current_valid {
-        return private_no_store(
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorResponse {
-                    error: "invalid credentials",
-                }),
-            )
-                .into_response(),
-        );
+        return private_no_store(invalid_credentials());
     }
     let Some(permit) = state.try_acquire_blocking_task() else {
         return private_no_store(service_unavailable());
@@ -239,17 +232,20 @@ pub(crate) async fn credentials(
     let Ok(new_token) = generate_session_token() else {
         return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
     };
-    if state
+    match state
         .update_credentials_and_session(
-            user.user_id.clone(),
+            current_token_hash,
+            user.password_hash,
             request.username.clone(),
             hash,
             hash_session_token(&new_token),
         )
         .await
-        .is_err()
     {
-        return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        Ok(true) => {}
+        Ok(false) => return private_no_store(invalid_credentials()),
+        Err(StateError::Capacity) => return private_no_store(service_unavailable()),
+        Err(_) => return private_no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
     }
     let mut response = Json(UserResponse {
         user_id: user.user_id,
@@ -268,6 +264,16 @@ pub(crate) async fn credentials(
 #[derive(Debug, Serialize)]
 struct ErrorResponse {
     error: &'static str,
+}
+
+fn invalid_credentials() -> Response {
+    (
+        StatusCode::UNAUTHORIZED,
+        Json(ErrorResponse {
+            error: "invalid credentials",
+        }),
+    )
+        .into_response()
 }
 
 pub(crate) async fn login(
@@ -296,41 +302,15 @@ pub(crate) async fn login(
         );
     }
     if validate_username(&request.username).is_err() || request.password.is_empty() {
-        return no_store(
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorResponse {
-                    error: "invalid credentials",
-                }),
-            )
-                .into_response(),
-        );
+        return no_store(invalid_credentials());
     }
     let user = match state.user(request.username).await {
         Ok(user) => user,
         Err(StateError::Capacity) => return no_store(service_unavailable()),
-        Err(_) => {
-            return no_store(
-                (
-                    StatusCode::UNAUTHORIZED,
-                    Json(ErrorResponse {
-                        error: "invalid credentials",
-                    }),
-                )
-                    .into_response(),
-            );
-        }
+        Err(_) => return no_store(invalid_credentials()),
     };
     let Some(user) = user else {
-        return no_store(
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorResponse {
-                    error: "invalid credentials",
-                }),
-            )
-                .into_response(),
-        );
+        return no_store(invalid_credentials());
     };
     let password = request.password;
     let hash = user.password_hash.clone();
@@ -344,24 +324,21 @@ pub(crate) async fn login(
     .await
     .unwrap_or(false);
     if !valid {
-        return no_store(
-            (
-                StatusCode::UNAUTHORIZED,
-                Json(ErrorResponse {
-                    error: "invalid credentials",
-                }),
-            )
-                .into_response(),
-        );
+        return no_store(invalid_credentials());
     }
     let Ok(token) = generate_session_token() else {
         return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response());
     };
     match state
-        .create_session(hash_session_token(&token), user.user_id.clone())
+        .create_session(
+            hash_session_token(&token),
+            user.user_id.clone(),
+            user.password_hash,
+        )
         .await
     {
-        Ok(()) => {}
+        Ok(true) => {}
+        Ok(false) => return no_store(invalid_credentials()),
         Err(StateError::Capacity) => return no_store(service_unavailable()),
         Err(_) => return no_store(StatusCode::INTERNAL_SERVER_ERROR.into_response()),
     }
