@@ -108,7 +108,7 @@ export function GlobalSearch({ collapsed = false, shortcut }: { collapsed?: bool
 		setMobile(false);
 		setActive(-1);
 		setQuery('');
-		if (restoreFocus && mobile) back?.focus();
+		if (restoreFocus) back?.focus();
 	};
 
 	const openItem = (item: Item) => {
@@ -141,8 +141,11 @@ export function GlobalSearch({ collapsed = false, shortcut }: { collapsed?: bool
 			if (!open) setOpen(true);
 			if (items.length === 0) return;
 			event.preventDefault();
-			const step = event.key === 'ArrowDown' ? 1 : -1;
-			setActive((current) => (current + step + items.length) % items.length);
+			const forward = event.key === 'ArrowDown';
+			setActive((current) => {
+				if (current < 0) return forward ? 0 : items.length - 1;
+				return (current + (forward ? 1 : -1) + items.length) % items.length;
+			});
 			return;
 		}
 		if (event.key === 'Enter' && open && items.length > 0) {
@@ -316,7 +319,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 
 function Option({ id, active, onClick, children }: { id: string; active: boolean; onClick: () => void; children: ReactNode }) {
 	return (
-		<button id={id} type="button" role="option" aria-selected={active} tabIndex={-1} onClick={onClick} className={cn('flex w-full min-h-11 items-start gap-2 rounded-md px-3 py-2 text-left text-sm [overflow-wrap:anywhere] hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', active && 'bg-panel')}>
+		<button id={id} type="button" role="option" aria-selected={active} tabIndex={-1} onClick={onClick} className={cn('flex w-full min-h-11 items-start gap-2 rounded-md px-3 py-2 text-left text-sm [overflow-wrap:anywhere] hover:bg-brand-tint focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', active && 'bg-panel outline-2 -outline-offset-2 outline-ring')}>
 			{children}
 		</button>
 	);

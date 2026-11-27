@@ -92,7 +92,7 @@ Marks live in the database per user; the file and the library are untouched.
   - **Unified accent discipline:** Primary CTAs, active navigation indicators, progress segments, activity heatmap levels, focus chart curves, badges, and focus rings all share `--primary` (Petrol Teal) by default (`reward: 'accent'`), eliminating competing amber/green/blue accents while keeping user-selectable presets in Settings.
 - **Navigation chrome & collapsible left rail:**
   - Desktop (`lg+`) left navigation rail toggles cleanly between expanded (`236px`) and compact icon-only (`68px`) modes via an explicit header control persisted in `localStorage` (`learnvault-sidebar-collapsed`). Both states maintain `44×44 px` targets, accessible names (`sr-only` labels when compact), tooltips, and modal search access (`Ctrl+K` / `/`).
-  - Global search hides its shortcut `<kbd>` badge when a query is entered so the clear button never collides, and anchors results cleanly beside the sidebar.
+   - Global search hides its shortcut `<kbd>` badge when a query is entered so the clear button never collides, and anchors results cleanly beside the sidebar. Keyboard navigation outlines the active result with the focus-ring token while focus stays in the field.
 - **Button hierarchy (three explicit tiers):**
   1. **Primary (`default`, solid `--primary`):** At most one primary forward step per viewport/section (`Resume`, `Start course`, `Review all due cards`, `Import course` in empty library).
   2. **Secondary (`outline`, `--study-rule` border):** Supporting actions and empty-state secondary navigation (`Favorite course`, `Export`, `Browse library` buttons replacing bare inline links).

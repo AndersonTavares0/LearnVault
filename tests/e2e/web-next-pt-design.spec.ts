@@ -28,7 +28,7 @@ test('Portuguese study screens reflow in light and dark themes', async ({ page, 
 	for (const theme of ['dark', 'light']) {
 		if (theme === 'light') await page.getByRole('button', { name: /tema claro/i }).click();
 		await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
-		for (const width of [1440, 390]) {
+		for (const width of [1440, 375]) {
 			await page.setViewportSize({ width, height: 900 });
 			for (const [surface, location, heading] of [
 				['biblioteca', '#/', 'Meu aprendizado'], ['curso', courseLink!, 'Course'],
@@ -51,6 +51,9 @@ test('Portuguese study screens reflow in light and dark themes', async ({ page, 
 			await search.fill('captação');
 			await expect(page.getByRole('option', { name: /captação de som/i }).first()).toBeVisible();
 			await expect(page.getByText('1 resultado', { exact: true })).toBeVisible();
+			await search.press('ArrowDown');
+			const selected = page.getByRole('listbox', { name: 'Resultados da busca' }).getByRole('option', { selected: true });
+			await expect(selected).toHaveCSS('outline-width', '2px');
 			await page.screenshot({ path: info.outputPath(`busca-${theme}-${width}.png`) });
 			await expectNoAxeViolations(page, `busca-${theme}-${width}`);
 			await search.press('Escape');

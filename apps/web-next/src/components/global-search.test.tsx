@@ -62,12 +62,25 @@ describe('global search', () => {
 		await waitFor(() => expect(router.state.location.pathname).toBe('/course/rust/r%2Fown.mp4'));
 	});
 
+	it('starts backward keyboard navigation at the last result and wraps forward', async () => {
+		renderApp('/', {});
+		fireEvent.change(searchbox(), { target: { value: 'borrow' } });
+		const options = await screen.findAllByRole('option');
+
+		fireEvent.keyDown(searchbox(), { key: 'ArrowUp' });
+		expect(searchbox().getAttribute('aria-activedescendant')).toBe(options.at(-1)!.id);
+		fireEvent.keyDown(searchbox(), { key: 'ArrowDown' });
+		expect(searchbox().getAttribute('aria-activedescendant')).toBe(options[0].id);
+	});
+
 	it('focuses from / and Ctrl+K and closes on Escape', async () => {
 		renderApp('/', {});
+		const home = screen.getAllByRole('link', { name: 'My learning' })[0];
+		home.focus();
 		fireEvent.keyDown(window, { key: '/' });
 		expect(document.activeElement).toBe(searchbox());
 		fireEvent.keyDown(searchbox(), { key: 'Escape' });
-		expect(document.activeElement).not.toBe(searchbox());
+		expect(document.activeElement).toBe(home);
 
 		fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
 		expect(document.activeElement).toBe(searchbox());
