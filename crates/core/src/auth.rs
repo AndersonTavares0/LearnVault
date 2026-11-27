@@ -149,6 +149,22 @@ pub fn create_session(
     Ok(())
 }
 
+/// Creates a session only while the password hash verified by the caller is current.
+pub fn create_session_for_verified_password(
+    db: &Database,
+    token_hash: &str,
+    user_id: &str,
+    verified_password_hash: &str,
+    expires_at: i64,
+) -> Result<bool> {
+    let count = db.connection().execute(
+        "INSERT INTO session (token_hash, user_id, expires_at)
+         SELECT ?1, user_id, ?4 FROM user WHERE user_id = ?2 AND password_hash = ?3",
+        rusqlite::params![token_hash, user_id, verified_password_hash, expires_at],
+    )?;
+    Ok(count == 1)
+}
+
 /// Returns the identity associated with a session that is still valid.
 pub fn session_user(db: &Database, token_hash: &str, now: i64) -> Result<Option<AuthSession>> {
     Ok(db
@@ -189,26 +205,47 @@ pub fn prune_expired_sessions(db: &Database, now: i64) -> Result<usize> {
         .execute("DELETE FROM session WHERE expires_at <= ?1", [now])?)
 }
 
-/// Updates credentials and creates the replacement session in the same transaction.
+/// Updates credentials and replaces the session only if the verified session and
+/// password hash are still current. Returns false if either changed or expired.
 pub fn update_credentials_and_session(
     db: &mut Database,
-    user_id: &str,
+    (current_token_hash, verified_password_hash): (&str, &str),
     username: &str,
     password_hash: &str,
     token_hash: &str,
+    now: i64,
     expires_at: i64,
-) -> Result<()> {
+) -> Result<bool> {
     let tx = db
         .conn
         .transaction_with_behavior(TransactionBehavior::Immediate)?;
-    tx.execute("UPDATE user SET username = ?1, password_hash = ?2, must_change_credentials = 0 WHERE user_id = ?3", rusqlite::params![username, password_hash, user_id])?;
-    tx.execute("DELETE FROM session WHERE user_id = ?1", [user_id])?;
+    let user_id: Option<String> = tx
+        .query_row(
+            "UPDATE user SET username = ?1, password_hash = ?2, must_change_credentials = 0
+             WHERE password_hash = ?3 AND user_id = (
+                 SELECT user_id FROM session WHERE token_hash = ?4 AND expires_at > ?5
+             )
+             RETURNING user_id",
+            rusqlite::params![
+                username,
+                password_hash,
+                verified_password_hash,
+                current_token_hash,
+                now
+            ],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let Some(user_id) = user_id else {
+        return Ok(false);
+    };
+    tx.execute("DELETE FROM session WHERE user_id = ?1", [&user_id])?;
     tx.execute(
         "INSERT INTO session (token_hash, user_id, expires_at) VALUES (?1, ?2, ?3)",
         rusqlite::params![token_hash, user_id, expires_at],
     )?;
     tx.commit()?;
-    Ok(())
+    Ok(true)
 }
 
 /// Updates the credentials and invalidates the user's existing sessions.
