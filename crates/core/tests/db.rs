@@ -44,7 +44,7 @@ fn table_exists(db: &Database, name: &str) -> bool {
 #[test]
 fn in_memory_database_starts_at_the_current_schema_version() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     Ok(())
 }
 
@@ -83,7 +83,7 @@ fn persistent_database_is_created_and_uses_the_wal_journal() -> TestResult {
     assert!(path.exists(), "o arquivo do banco deve existir");
     assert_eq!(journal_mode(&db), "wal");
     assert_eq!(foreign_keys_enabled(&db), 1);
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     Ok(())
 }
 
@@ -102,7 +102,7 @@ fn reopening_applies_migrations_once_and_preserves_data() -> TestResult {
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     let libraries: i64 = db
         .connection()
         .query_row("SELECT COUNT(*) FROM library", [], |row| row.get(0))?;
@@ -132,13 +132,13 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 23)?;
+        conn.pragma_update(None, "user_version", 24)?;
     }
 
     match Database::open(&path) {
         Err(Error::SchemaTooNew { found, known }) => {
-            assert_eq!(found, 23);
-            assert_eq!(known, 22);
+            assert_eq!(found, 24);
+            assert_eq!(known, 23);
         }
         other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
     }
@@ -176,7 +176,7 @@ fn legacy_go_database_is_rejected_before_bootstrap_or_migration() -> TestResult 
 fn new_empty_database_is_not_mistaken_for_legacy_go() -> TestResult {
     let dir = tempfile::tempdir()?;
     let db = Database::open(dir.path().join("new.sqlite"))?;
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     assert!(table_exists(&db, "user"));
     Ok(())
 }
@@ -188,7 +188,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 23)?;
+        conn.pragma_update(None, "user_version", 24)?;
     }
 
     match Database::open(&path) {
@@ -207,7 +207,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
     assert_eq!(tables, 0, "nenhuma tabela deve ter sido criada");
 
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 23, "a versão do banco não deve ser alterada");
+    assert_eq!(version, 24, "a versão do banco não deve ser alterada");
 
     let journal: String =
         conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?;
@@ -275,7 +275,7 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        22,
+        23,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(table_exists(&db, "scan_inaccessible"));
@@ -359,7 +359,7 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        22,
+        23,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(
@@ -404,14 +404,16 @@ fn a_version_sixteen_database_is_upgraded_without_losing_notes() -> TestResult {
              DROP TABLE sync_tombstone; DROP TABLE library_root; DROP TABLE sync_device;
              DROP TABLE library_root_dismissed;",
         )?;
-        db.connection()
-            .execute_batch("ALTER TABLE study_note DROP COLUMN sync_version;")?;
+        db.connection().execute_batch(
+            "ALTER TABLE study_note DROP COLUMN sync_version;
+             ALTER TABLE flashcard DROP COLUMN text_updated_at;",
+        )?;
         db.connection().pragma_update(None, "user_version", 16)?;
     }
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 22, "a cadeia aplica de V17 a V22");
+    assert_eq!(db.schema_version()?, 23, "a cadeia aplica de V17 a V23");
     assert!(table_exists(&db, "sync_operation"));
     assert!(table_exists(&db, "sync_outbox"));
     assert!(table_exists(&db, "sync_state"));
@@ -695,7 +697,7 @@ fn restore_rejects_a_too_new_schema_version() -> TestResult {
         Database::restore_from(&backup_path, &target_path),
         Err(Error::SchemaTooNew {
             found: 999,
-            known: 22
+            known: 23
         })
     ));
     assert!(!target_path.exists());
@@ -732,9 +734,10 @@ fn restore_accepts_an_older_valid_schema_for_migration_on_next_open() -> TestRes
     let backup_path = dir.path().join("version-20.sqlite");
     let target_path = dir.path().join("restored.sqlite");
     let database = Database::open_in_memory()?;
-    database
-        .connection()
-        .execute("DROP TABLE library_root_dismissed", [])?;
+    database.connection().execute_batch(
+        "DROP TABLE library_root_dismissed;
+         ALTER TABLE flashcard DROP COLUMN text_updated_at;",
+    )?;
     database
         .connection()
         .pragma_update(None, "user_version", 20)?;
@@ -742,7 +745,7 @@ fn restore_accepts_an_older_valid_schema_for_migration_on_next_open() -> TestRes
 
     Database::restore_from(&backup_path, &target_path)?;
     assert_eq!(learnvault_core::file_schema_version(&target_path)?, 20);
-    assert_eq!(Database::open(&target_path)?.schema_version()?, 22);
+    assert_eq!(Database::open(&target_path)?.schema_version()?, 23);
     Ok(())
 }
 
@@ -851,6 +854,7 @@ fn a_version_nineteen_database_gets_the_coalesce_keys_of_its_journal() -> TestRe
              DROP TABLE library_root_dismissed;
              DROP INDEX sync_operation_key_idx;
              ALTER TABLE sync_operation DROP COLUMN coalesce_key;
+             ALTER TABLE flashcard DROP COLUMN text_updated_at;
              INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload) VALUES
                ('o1', 'ana', 'pc', 1, 1, '{\"kind\":\"progress\",\"media_id\":\"m1\",\"position_seconds\":5,\"completed\":false}'),
                ('o2', 'ana', 'pc', 2, 2, '{\"kind\":\"preference\",\"video_speed\":120,\"audio_speed\":100,\"subtitle_language\":\"\"}'),
@@ -860,7 +864,7 @@ fn a_version_nineteen_database_gets_the_coalesce_keys_of_its_journal() -> TestRe
     }
 
     let db = Database::open(&path)?;
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     let key = |op: &str| -> Option<String> {
         db.connection()
             .query_row(
@@ -883,7 +887,7 @@ fn a_version_nineteen_database_gets_the_coalesce_keys_of_its_journal() -> TestRe
 }
 
 #[test]
-fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestResult {
+fn populated_v096_database_migrates_without_losing_study_data() -> TestResult {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("learnvault.sqlite");
 
@@ -891,10 +895,11 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
         let mut conn = rusqlite::Connection::open(&path)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         let tx = conn.transaction()?;
-        for step in &learnvault_core::migration_steps_for_test()[..16] {
+        // v0.9.6 shipped schema 21. Build that schema without running current migrations first.
+        for step in &learnvault_core::migration_steps_for_test()[..21] {
             tx.execute_batch(step)?;
         }
-        tx.pragma_update(None, "user_version", 16)?;
+        tx.pragma_update(None, "user_version", 21)?;
         tx.commit()?;
 
         conn.execute_batch(
@@ -912,7 +917,14 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
              INSERT INTO study_note (note_id, owner_id, media_id, position_seconds, content, created_at, updated_at)
              VALUES ('note-1', 'owner-a', 'mid-1', 10, 'old note', 1760000000, 1760000000);
              INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
-             VALUES ('card-1', 'owner-a', 'mid-1', 'Q', 'A', 1, 1760000000, 1760000000, 1760000000);",
+             VALUES ('card-1', 'owner-a', 'mid-1', 'Photosynthesis', 'Plants use light', 1, 1760086400, 1760000000, 1760000000);
+             INSERT INTO flashcard_review (review_id, owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
+             VALUES (7, 'owner-a', 'card-1', 'good', 0, 1760086400, 1760000000);
+             INSERT INTO sync_state (owner_id, device_id, pull_cursor, updated_at)
+             VALUES ('owner-a', 'desktop-a', 42, 1760000000);
+             INSERT INTO sync_outbox (op_id, owner_id, device_id, client_at, payload, queued_at)
+             VALUES ('pending-review', 'owner-a', 'desktop-a', 1760000000,
+             '{\"kind\":\"flashcard_review\",\"card_id\":\"card-1\",\"rating\":\"good\",\"reviewed_at\":1760000000}', 1760000000);",
         )?;
     }
 
@@ -946,12 +958,31 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
     )?;
     assert_eq!(note_content, "old note");
 
-    let card_front: String = db.connection().query_row(
-        "SELECT front FROM flashcard WHERE card_id = 'card-1'",
-        [],
-        |row| row.get(0),
-    )?;
-    assert_eq!(card_front, "Q");
+    let (card_front, card_updated, card_text_updated): (String, i64, i64) =
+        db.connection().query_row(
+            "SELECT front, updated_at, text_updated_at FROM flashcard WHERE card_id = 'card-1'",
+            [],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )?;
+    assert_eq!(card_front, "Photosynthesis");
+    assert_eq!(card_text_updated, card_updated);
+    let history = learnvault_core::list_flashcard_reviews(&db, "owner-a", "card-1", 10)?;
+    assert_eq!(history.len(), 1);
+    assert_eq!((history[0].review_id, history[0].next_due), (7, 1760086400));
+    assert_eq!(history[0].rating, learnvault_core::ReviewRating::Good);
+    let results = learnvault_core::search::search(&db, "owner-a", true, "photosynthesis", 10)?;
+    assert_eq!(results.flashcards[0].card_id, "card-1");
+    let state = learnvault_core::sync_state(&db, "owner-a")?;
+    assert_eq!(
+        (state.device_id.as_str(), state.pull_cursor),
+        ("desktop-a", 42)
+    );
+    let pending = learnvault_core::pending_operations(&db, "owner-a", 10)?;
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].op_id, "pending-review");
+    assert!(
+        matches!(&pending[0].payload, learnvault_core::SyncPayload::FlashcardReview { rating, .. } if rating == "good")
+    );
 
     let position: i64 = db.connection().query_row(
         "SELECT position_seconds FROM study_state WHERE owner_id = 'owner-a' AND media_id = 'mid-1'",
@@ -959,5 +990,64 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
         |row| row.get(0),
     )?;
     assert_eq!(position, 42);
+    Ok(())
+}
+
+#[test]
+fn a_fresh_replica_matches_the_upgraded_legacy_card_text() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("legacy.sqlite");
+    let media = "INSERT INTO library (library_id, available) VALUES ('library-1', 1);
+                 INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+                 VALUES ('media-a', 'library-1', 'lesson.mp4', 'lesson.mp4', 128, 1, 'available');";
+    {
+        let mut conn = rusqlite::Connection::open(&path)?;
+        let tx = conn.transaction()?;
+        for step in &learnvault_core::migration_steps_for_test()[..21] {
+            tx.execute_batch(step)?;
+        }
+        tx.pragma_update(None, "user_version", 21)?;
+        tx.execute_batch(media)?;
+        tx.execute_batch(
+            r#"INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
+               VALUES ('card-a', 'owner-a', 'media-a', 'Original', 'Answer', 1, 86600, 100, 200);
+               INSERT INTO flashcard_review (owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
+               VALUES ('owner-a', 'card-a', 'good', 0, 86600, 200);
+               INSERT INTO sync_device (owner_id, device_id, last_seen_at)
+               VALUES ('owner-a', 'writer', 200);
+               INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload) VALUES
+               ('bad-json', 'owner-other', 'writer', 50, 50, '{not-json'),
+               ('create', 'owner-a', 'writer', 100, 100, '{"kind":"flashcard_created","card_id":"card-a","media_id":"media-a","front":"Original","back":"Answer","created_at":100}'),
+               ('review', 'owner-a', 'writer', 200, 200, '{"kind":"flashcard_review","card_id":"card-a","rating":"good","reviewed_at":200}'),
+               ('edit', 'owner-a', 'offline', 150, 201, '{"kind":"flashcard_updated","card_id":"card-a","front":"Offline edit","back":"Answer","updated_at":150}');
+               INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
+               VALUES ('card-b', 'owner-a', 'media-a', 'Browser edit', 'Answer', 1, 86600, 100, 200);
+               INSERT INTO flashcard_review (owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
+               VALUES ('owner-a', 'card-b', 'good', 0, 86600, 200);
+               INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload) VALUES
+               ('create-b', 'owner-a', 'writer', 100, 100, '{"kind":"flashcard_created","card_id":"card-b","media_id":"media-a","front":"Original B","back":"Answer","created_at":100}'),
+               ('edit-b-old', 'owner-a', 'offline', 150, 150, '{"kind":"flashcard_updated","card_id":"card-b","front":"Older edit","back":"Answer","updated_at":150}');
+               INSERT INTO sync_outbox (op_id, owner_id, device_id, client_at, payload, queued_at) VALUES
+               ('edit-b-server', 'owner-a', 'server', 180, '{"kind":"flashcard_updated","card_id":"card-b","front":"Browser edit","back":"Answer","updated_at":180}', 180);"#,
+        )?;
+        tx.commit()?;
+    }
+    let server = Database::open(&path)?;
+    let replica = Database::open_in_memory()?;
+    replica.connection().execute_batch(media)?;
+    let page = learnvault_core::pull_operations(&server, "owner-a", "reader", 0, 10)?;
+    learnvault_core::apply_operations(&replica, "owner-a", &page.items, page.cursor)?;
+    let mut server_cards = learnvault_core::list_flashcards(&server, "owner-a", "media-a")?;
+    let mut replica_cards = learnvault_core::list_flashcards(&replica, "owner-a", "media-a")?;
+    server_cards.sort_by(|a, b| a.card_id.cmp(&b.card_id));
+    replica_cards.sort_by(|a, b| a.card_id.cmp(&b.card_id));
+    assert_eq!(server_cards.len(), 2);
+    assert_eq!(replica_cards.len(), 2);
+    for (server_card, replica_card) in server_cards.iter().zip(replica_cards.iter()) {
+        assert_eq!(server_card.card_id, replica_card.card_id);
+        assert_eq!(server_card.front, replica_card.front);
+    }
+    assert_eq!(server_cards[0].front, "Offline edit");
+    assert_eq!(server_cards[1].front, "Browser edit");
     Ok(())
 }

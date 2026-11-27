@@ -626,3 +626,244 @@ async fn pull_for_an_administrator_ignores_course_access_rows() {
     let pulled = pull_json(&app, &cookie, "device=device-b&cursor=0").await;
     assert_eq!(op_ids(&pulled), ["op-note"]);
 }
+
+#[tokio::test]
+async fn push_enforces_current_course_grants_for_updates_reviews_and_deletions() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+    seed_user(&temp, "reader-id", READER, READER_PASSWORD);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, READER, READER_PASSWORD).await;
+
+    push_ops(
+        &app,
+        &cookie,
+        "device-a",
+        vec![
+            note("1"),
+            json!({
+                "op_id": "op-seed-bookmark",
+                "client_at": 100,
+                "payload": {
+                    "kind": "bookmark",
+                    "bookmark_id": "bookmark-1",
+                    "media_id": "m1",
+                    "position_seconds": 15,
+                    "label": "Intro",
+                    "created_at": 100
+                }
+            }),
+            json!({
+                "op_id": "op-seed-card",
+                "client_at": 100,
+                "payload": {
+                    "kind": "flashcard_created",
+                    "card_id": "card-1",
+                    "media_id": "m1",
+                    "front": "Question",
+                    "back": "Answer",
+                    "created_at": 100
+                }
+            }),
+        ],
+    )
+    .await;
+
+    // Seed an authorized second library + media and a pre-existing untrimmed note row on m1.
+    {
+        let db = Database::open(temp.path().join("sync.sqlite")).unwrap();
+        let m2_key =
+            learnvault_core::paths::relative_path_key("curso2/m2.mp4", KeyMode::for_host())
+                .unwrap();
+        db.connection()
+            .execute_batch(&format!(
+                "INSERT INTO library (library_id, available) VALUES ('library-2', 1);
+                 INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+                 VALUES ('m2', 'library-2', 'curso2/m2.mp4', '{m2_key}', 1024, 1760000000, 'available');
+                 INSERT INTO study_note (note_id, owner_id, media_id, position_seconds, content, created_at, updated_at, sync_version)
+                 VALUES (' note-legacy ', 'reader-id', 'm1', 12, 'secret legacy', 100, 100, '01-legacy');
+                 INSERT INTO study_note (note_id, owner_id, media_id, position_seconds, content, created_at, updated_at, sync_version)
+                 VALUES ('note-admin-secret', 'admin-other', 'm1', 5, 'admin only', 100, 100, '01-admin');"
+            ))
+            .unwrap();
+    }
+
+    // Revoke course library-1 access, keeping library-2 accessible.
+    set_course_access(&temp, "reader-id", Some("library-2"));
+
+    let blocked = [
+        json!({
+            "op_id": "op-del-note",
+            "client_at": 200,
+            "payload": { "kind": "note_deleted", "note_id": "note-1" }
+        }),
+        json!({
+            "op_id": "op-del-bookmark",
+            "client_at": 200,
+            "payload": { "kind": "bookmark_deleted", "bookmark_id": "bookmark-1" }
+        }),
+        json!({
+            "op_id": "op-upd-card",
+            "client_at": 200,
+            "payload": {
+                "kind": "flashcard_updated",
+                "card_id": "card-1",
+                "front": "Tampered",
+                "back": "Tampered",
+                "updated_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-rev-card",
+            "client_at": 200,
+            "payload": {
+                "kind": "flashcard_review",
+                "card_id": "card-1",
+                "rating": "good",
+                "reviewed_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-del-card",
+            "client_at": 200,
+            "payload": { "kind": "flashcard_deleted", "card_id": "card-1" }
+        }),
+        json!({
+            "op_id": "op-del-note-trimmed",
+            "client_at": 200,
+            "payload": { "kind": "note_deleted", "note_id": " note-1 " }
+        }),
+        json!({
+            "op_id": "op-del-bookmark-trimmed",
+            "client_at": 200,
+            "payload": { "kind": "bookmark_deleted", "bookmark_id": " bookmark-1 " }
+        }),
+        json!({
+            "op_id": "op-upd-card-trimmed",
+            "client_at": 200,
+            "payload": {
+                "kind": "flashcard_updated",
+                "card_id": " card-1 ",
+                "front": "Tampered",
+                "back": "Tampered",
+                "updated_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-del-card-trimmed",
+            "client_at": 200,
+            "payload": { "kind": "flashcard_deleted", "card_id": " card-1 " }
+        }),
+        json!({
+            "op_id": "op-rebind-note",
+            "client_at": 200,
+            "payload": {
+                "kind": "note",
+                "note_id": " note-1 ",
+                "media_id": "m2",
+                "position_seconds": 9,
+                "content": "rebound",
+                "created_at": 200,
+                "updated_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-rebind-card",
+            "client_at": 200,
+            "payload": {
+                "kind": "flashcard_created",
+                "card_id": " card-1 ",
+                "media_id": "m2",
+                "front": "Rebound",
+                "back": "Rebound",
+                "created_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-rebind-legacy-note",
+            "client_at": 200,
+            "payload": {
+                "kind": "note",
+                "note_id": " note-legacy ",
+                "media_id": "m2",
+                "position_seconds": 12,
+                "content": "exfiltrate",
+                "created_at": 200,
+                "updated_at": 200
+            }
+        }),
+    ];
+
+    for op in blocked {
+        let resp = app
+            .clone()
+            .oneshot(push_request(
+                &cookie,
+                json!({ "device_id": "device-a", "operations": [op] }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert_eq!(json_body(resp).await["error"], "media_not_found");
+    }
+
+    // Unknown/offline-only IDs and another user's ID remain accepted (no oracle or mutation).
+    push_ops(
+        &app,
+        &cookie,
+        "device-a",
+        vec![
+            json!({
+                "op_id": "op-offline-del-bookmark",
+                "client_at": 201,
+                "payload": { "kind": "bookmark_deleted", "bookmark_id": "bookmark-offline" }
+            }),
+            json!({
+                "op_id": "op-offline-del-card",
+                "client_at": 201,
+                "payload": { "kind": "flashcard_deleted", "card_id": "card-offline" }
+            }),
+            json!({
+                "op_id": "op-other-user-note-probe",
+                "client_at": 201,
+                "payload": { "kind": "note_deleted", "note_id": "note-admin-secret" }
+            }),
+        ],
+    )
+    .await;
+
+    let db = Database::open(temp.path().join("sync.sqlite")).unwrap();
+    let conn = db.connection();
+    let note_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM study_note WHERE note_id = 'note-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let bookmark_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM media_bookmark WHERE bookmark_id = 'bookmark-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let card_front: String = conn
+        .query_row(
+            "SELECT front FROM flashcard WHERE card_id = 'card-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let review_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM flashcard_review WHERE card_id = 'card-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(note_count, 1);
+    assert_eq!(bookmark_count, 1);
+    assert_eq!(card_front, "Question");
+    assert_eq!(review_count, 0);
+}

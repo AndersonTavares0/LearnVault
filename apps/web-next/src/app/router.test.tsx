@@ -39,7 +39,8 @@ describe('routes', () => {
 		const { router } = renderApp('/notes', { user: null });
 		expect(await screen.findByRole('heading', { name: 'Sign in', level: 1 })).toBeTruthy();
 		expect(router.state.location.pathname).toBe('/login');
-		expect(router.state.location.state).toEqual({ from: '/notes' });
+		expect(router.state.location.state).toMatchObject({ from: '/notes' });
+		expect(screen.queryByText(/Your session expired/)).toBeNull();
 		expect(document.title).toBe('Sign in · LearnVault');
 	});
 
