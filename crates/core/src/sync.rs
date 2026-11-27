@@ -1211,7 +1211,11 @@ fn apply_progress(
     let newer = client_at >= current_updated_at;
     let next_position = if newer { position } else { current_position };
     let next_completed = current_completed != 0 || completed;
-    if next_position == current_position && next_completed == (current_completed != 0) {
+    let next_updated_at = current_updated_at.max(client_at);
+    if next_position == current_position
+        && next_completed == (current_completed != 0)
+        && next_updated_at == current_updated_at
+    {
         return Ok(());
     }
     conn.execute(
@@ -1221,7 +1225,7 @@ fn apply_progress(
         params![
             next_position,
             i64::from(next_completed),
-            current_updated_at.max(client_at),
+            next_updated_at,
             owner_id,
             media_id
         ],
@@ -1533,16 +1537,17 @@ fn apply_flashcard_create(
     let next_due = next_due.unwrap_or(created_at);
     conn.execute(
         "INSERT INTO flashcard
-             (card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+             (card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at, text_updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9, ?9)
          ON CONFLICT (card_id) DO UPDATE SET
              media_id = excluded.media_id,
              position_seconds = excluded.position_seconds,
              front = excluded.front,
              back = excluded.back,
              created_at = MIN(flashcard.created_at, excluded.created_at),
-             updated_at = excluded.updated_at
-         WHERE excluded.updated_at >= flashcard.updated_at",
+             updated_at = MAX(flashcard.updated_at, excluded.updated_at),
+             text_updated_at = excluded.text_updated_at
+         WHERE excluded.text_updated_at >= flashcard.text_updated_at",
         params![
             card_id,
             owner_id,
@@ -1586,8 +1591,8 @@ fn apply_flashcard_update(
     }
     conn.execute(
         "UPDATE flashcard
-            SET front = ?1, back = ?2, updated_at = ?3
-          WHERE owner_id = ?4 AND card_id = ?5 AND updated_at <= ?3",
+            SET front = ?1, back = ?2, updated_at = MAX(updated_at, ?3), text_updated_at = ?3
+          WHERE owner_id = ?4 AND card_id = ?5 AND text_updated_at <= ?3",
         params![front, back, updated_at, owner_id, card_id],
     )?;
     Ok(())
@@ -1681,7 +1686,7 @@ fn apply_review(
         crate::study::schedule_review(previous_interval, rating, reviewed_at);
     conn.execute(
         "UPDATE flashcard
-            SET interval_days = ?1, next_due = ?2, updated_at = ?3
+            SET interval_days = ?1, next_due = ?2, updated_at = MAX(updated_at, ?3)
           WHERE owner_id = ?4 AND card_id = ?5",
         params![next_interval, next_due, reviewed_at, owner_id, card_id],
     )?;

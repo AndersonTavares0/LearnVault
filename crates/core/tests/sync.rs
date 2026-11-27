@@ -1071,3 +1071,121 @@ fn flashcard_backfill_preserves_srs_interval_and_due_date() -> TestResult {
     assert_eq!(synced[0].next_due, reviewed.next_due);
     Ok(())
 }
+
+#[test]
+fn reapplying_unchanged_progress_advances_study_state_updated_at() -> TestResult {
+    let db = database();
+    push_operations(
+        &db,
+        OWNER,
+        "device-a",
+        &[input("op-1", 100, progress("m1", 120, false))],
+    )?;
+    push_operations(
+        &db,
+        OWNER,
+        "device-a",
+        &[input("op-2", 300, progress("m1", 120, false))],
+    )?;
+    push_operations(
+        &db,
+        OWNER,
+        "device-b",
+        &[input("op-3", 250, progress("m1", 45, false))],
+    )?;
+
+    let (pos, updated_at): (i64, i64) = db.connection().query_row(
+        "SELECT position_seconds, updated_at FROM study_state WHERE owner_id = ?1 AND media_id = 'm1'",
+        [OWNER],
+        |row| Ok((row.get(0)?, row.get(1)?)),
+    )?;
+    assert_eq!(pos, 120);
+    assert_eq!(updated_at, 300);
+
+    let batch = pull_operations(&db, OWNER, "device-c", 0, 10)?;
+    assert_eq!(batch.items.len(), 1);
+    match &batch.items[0].payload {
+        SyncPayload::Progress {
+            position_seconds, ..
+        } => assert_eq!(*position_seconds, 120),
+        other => panic!("unexpected payload: {other:?}"),
+    }
+    Ok(())
+}
+
+#[test]
+fn reviewing_a_card_does_not_suppress_a_concurrent_offline_text_edit() -> TestResult {
+    let server = database();
+    push_operations(
+        &server,
+        OWNER,
+        "device-a",
+        &[input(
+            "op-create",
+            100,
+            SyncPayload::FlashcardCreated {
+                card_id: "card-concurrent".to_owned(),
+                media_id: "m1".to_owned(),
+                position_seconds: None,
+                front: "Q1".to_owned(),
+                back: "A1".to_owned(),
+                created_at: 100,
+                interval_days: None,
+                next_due: None,
+            },
+        )],
+    )?;
+    // Device B reviews the card at t = 200 before Device A reconnects.
+    push_operations(
+        &server,
+        OWNER,
+        "device-b",
+        &[input(
+            "op-review",
+            200,
+            SyncPayload::FlashcardReview {
+                card_id: "card-concurrent".to_owned(),
+                rating: "good".to_owned(),
+                reviewed_at: 200,
+            },
+        )],
+    )?;
+    // Device A edited the card text offline at t = 150 and now syncs.
+    push_operations(
+        &server,
+        OWNER,
+        "device-a",
+        &[input(
+            "op-edit",
+            150,
+            SyncPayload::FlashcardUpdated {
+                card_id: "card-concurrent".to_owned(),
+                front: "Q1 edited".to_owned(),
+                back: "A1 edited".to_owned(),
+                updated_at: 150,
+            },
+        )],
+    )?;
+    // Even an older review arriving at t = 120 must not move updated_at backwards.
+    push_operations(
+        &server,
+        OWNER,
+        "device-c",
+        &[input(
+            "op-old-review",
+            120,
+            SyncPayload::FlashcardReview {
+                card_id: "card-concurrent".to_owned(),
+                rating: "hard".to_owned(),
+                reviewed_at: 120,
+            },
+        )],
+    )?;
+
+    let cards = learnvault_core::list_flashcards(&server, OWNER, "m1")?;
+    assert_eq!(cards.len(), 1);
+    assert_eq!(cards[0].front, "Q1 edited");
+    assert_eq!(cards[0].back, "A1 edited");
+    assert_eq!(cards[0].updated_at, 200);
+    Ok(())
+}

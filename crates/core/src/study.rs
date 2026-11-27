@@ -867,6 +867,14 @@ pub fn list_all_flashcards(db: &Database, owner_id: &str) -> Result<Vec<Flashcar
         "SELECT card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at
          FROM flashcard
          WHERE owner_id = ?1
+           AND NOT EXISTS (
+               SELECT 1
+               FROM media_removal r
+               JOIN media m
+                 ON m.library_id = r.library_id
+                AND m.media_id = r.media_id
+               WHERE m.media_id = flashcard.media_id
+           )
          ORDER BY next_due ASC, created_at ASC",
     )?;
     let rows = statement.query_map([owner_id], card_from_row)?;
@@ -927,8 +935,8 @@ pub(crate) fn create_flashcard_on(
     let next_due = now;
 
     conn.execute(
-        "INSERT INTO flashcard (card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        "INSERT INTO flashcard (card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at, text_updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?10)",
         rusqlite::params![
             card_id,
             owner_id,
@@ -987,7 +995,7 @@ pub(crate) fn update_flashcard_on(
     let updated = conn
         .query_row(
             "UPDATE flashcard
-             SET front = ?1, back = ?2, updated_at = ?3
+             SET front = ?1, back = ?2, updated_at = MAX(updated_at, ?3), text_updated_at = ?3
              WHERE owner_id = ?4 AND card_id = ?5
              RETURNING card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at",
             rusqlite::params![front_trimmed, back_trimmed, now, owner_id, card_id],
@@ -1252,7 +1260,17 @@ pub fn count_flashcard_reviews(db: &Database, owner_id: &str, card_id: &str) -> 
 pub fn count_due_flashcards(db: &Database, owner_id: &str) -> Result<i64> {
     validate_owner(owner_id)?;
     Ok(db.connection().query_row(
-        "SELECT COUNT(*) FROM flashcard WHERE owner_id = ?1 AND next_due <= ?2",
+        "SELECT COUNT(*) FROM flashcard
+         WHERE owner_id = ?1
+           AND next_due <= ?2
+           AND NOT EXISTS (
+               SELECT 1
+               FROM media_removal r
+               JOIN media m
+                 ON m.library_id = r.library_id
+                AND m.media_id = r.media_id
+               WHERE m.media_id = flashcard.media_id
+           )",
         rusqlite::params![owner_id, now_unix_seconds()],
         |row| row.get(0),
     )?)

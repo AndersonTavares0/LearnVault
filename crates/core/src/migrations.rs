@@ -857,11 +857,18 @@ END;
 INSERT INTO pdf_annotation_fts (pdf_annotation_fts) VALUES ('rebuild');
 ";
 
+/// Version 23: separate flashcard text edit timestamps from review timestamps so
+/// spaced-repetition reviews never suppress offline card text updates.
+const V23: &str = "
+ALTER TABLE flashcard ADD COLUMN text_updated_at INTEGER NOT NULL DEFAULT 0;
+UPDATE flashcard SET text_updated_at = updated_at;
+";
+
 /// Migration chain applied by [`crate::db::Database`]; index `n` takes the database from
 /// version `n` to `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
     V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21,
-    V22,
+    V22, V23,
 ];
 
 /// Schema version stored in `PRAGMA user_version` (0 when never migrated).

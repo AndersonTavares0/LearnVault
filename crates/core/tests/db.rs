@@ -44,7 +44,7 @@ fn table_exists(db: &Database, name: &str) -> bool {
 #[test]
 fn in_memory_database_starts_at_the_current_schema_version() -> TestResult {
     let db = Database::open_in_memory()?;
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     Ok(())
 }
 
@@ -83,7 +83,7 @@ fn persistent_database_is_created_and_uses_the_wal_journal() -> TestResult {
     assert!(path.exists(), "o arquivo do banco deve existir");
     assert_eq!(journal_mode(&db), "wal");
     assert_eq!(foreign_keys_enabled(&db), 1);
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     Ok(())
 }
 
@@ -102,7 +102,7 @@ fn reopening_applies_migrations_once_and_preserves_data() -> TestResult {
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     let libraries: i64 = db
         .connection()
         .query_row("SELECT COUNT(*) FROM library", [], |row| row.get(0))?;
@@ -132,13 +132,13 @@ fn database_with_a_newer_schema_is_rejected_without_panicking() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 23)?;
+        conn.pragma_update(None, "user_version", 24)?;
     }
 
     match Database::open(&path) {
         Err(Error::SchemaTooNew { found, known }) => {
-            assert_eq!(found, 23);
-            assert_eq!(known, 22);
+            assert_eq!(found, 24);
+            assert_eq!(known, 23);
         }
         other => panic!("esperava Error::SchemaTooNew, obtive {other:?}"),
     }
@@ -176,7 +176,7 @@ fn legacy_go_database_is_rejected_before_bootstrap_or_migration() -> TestResult 
 fn new_empty_database_is_not_mistaken_for_legacy_go() -> TestResult {
     let dir = tempfile::tempdir()?;
     let db = Database::open(dir.path().join("new.sqlite"))?;
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     assert!(table_exists(&db, "user"));
     Ok(())
 }
@@ -188,7 +188,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
 
     {
         let conn = rusqlite::Connection::open(&path)?;
-        conn.pragma_update(None, "user_version", 23)?;
+        conn.pragma_update(None, "user_version", 24)?;
     }
 
     match Database::open(&path) {
@@ -207,7 +207,7 @@ fn rejecting_a_newer_schema_leaves_the_database_untouched() -> TestResult {
     assert_eq!(tables, 0, "nenhuma tabela deve ter sido criada");
 
     let version: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    assert_eq!(version, 23, "a versão do banco não deve ser alterada");
+    assert_eq!(version, 24, "a versão do banco não deve ser alterada");
 
     let journal: String =
         conn.query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))?;
@@ -275,7 +275,7 @@ fn a_version_one_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        22,
+        23,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(table_exists(&db, "scan_inaccessible"));
@@ -359,7 +359,7 @@ fn a_version_two_database_is_upgraded_additively_preserving_rows() -> TestResult
 
     assert_eq!(
         db.schema_version()?,
-        22,
+        23,
         "a cadeia deve aplicar a migração aditiva"
     );
     assert!(
@@ -404,14 +404,16 @@ fn a_version_sixteen_database_is_upgraded_without_losing_notes() -> TestResult {
              DROP TABLE sync_tombstone; DROP TABLE library_root; DROP TABLE sync_device;
              DROP TABLE library_root_dismissed;",
         )?;
-        db.connection()
-            .execute_batch("ALTER TABLE study_note DROP COLUMN sync_version;")?;
+        db.connection().execute_batch(
+            "ALTER TABLE study_note DROP COLUMN sync_version;
+             ALTER TABLE flashcard DROP COLUMN text_updated_at;",
+        )?;
         db.connection().pragma_update(None, "user_version", 16)?;
     }
 
     let db = Database::open(&path)?;
 
-    assert_eq!(db.schema_version()?, 22, "a cadeia aplica de V17 a V22");
+    assert_eq!(db.schema_version()?, 23, "a cadeia aplica de V17 a V23");
     assert!(table_exists(&db, "sync_operation"));
     assert!(table_exists(&db, "sync_outbox"));
     assert!(table_exists(&db, "sync_state"));
@@ -695,7 +697,7 @@ fn restore_rejects_a_too_new_schema_version() -> TestResult {
         Database::restore_from(&backup_path, &target_path),
         Err(Error::SchemaTooNew {
             found: 999,
-            known: 22
+            known: 23
         })
     ));
     assert!(!target_path.exists());
@@ -732,9 +734,10 @@ fn restore_accepts_an_older_valid_schema_for_migration_on_next_open() -> TestRes
     let backup_path = dir.path().join("version-20.sqlite");
     let target_path = dir.path().join("restored.sqlite");
     let database = Database::open_in_memory()?;
-    database
-        .connection()
-        .execute("DROP TABLE library_root_dismissed", [])?;
+    database.connection().execute_batch(
+        "DROP TABLE library_root_dismissed;
+         ALTER TABLE flashcard DROP COLUMN text_updated_at;",
+    )?;
     database
         .connection()
         .pragma_update(None, "user_version", 20)?;
@@ -742,7 +745,7 @@ fn restore_accepts_an_older_valid_schema_for_migration_on_next_open() -> TestRes
 
     Database::restore_from(&backup_path, &target_path)?;
     assert_eq!(learnvault_core::file_schema_version(&target_path)?, 20);
-    assert_eq!(Database::open(&target_path)?.schema_version()?, 22);
+    assert_eq!(Database::open(&target_path)?.schema_version()?, 23);
     Ok(())
 }
 
@@ -851,6 +854,7 @@ fn a_version_nineteen_database_gets_the_coalesce_keys_of_its_journal() -> TestRe
              DROP TABLE library_root_dismissed;
              DROP INDEX sync_operation_key_idx;
              ALTER TABLE sync_operation DROP COLUMN coalesce_key;
+             ALTER TABLE flashcard DROP COLUMN text_updated_at;
              INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload) VALUES
                ('o1', 'ana', 'pc', 1, 1, '{\"kind\":\"progress\",\"media_id\":\"m1\",\"position_seconds\":5,\"completed\":false}'),
                ('o2', 'ana', 'pc', 2, 2, '{\"kind\":\"preference\",\"video_speed\":120,\"audio_speed\":100,\"subtitle_language\":\"\"}'),
@@ -860,7 +864,7 @@ fn a_version_nineteen_database_gets_the_coalesce_keys_of_its_journal() -> TestRe
     }
 
     let db = Database::open(&path)?;
-    assert_eq!(db.schema_version()?, 22);
+    assert_eq!(db.schema_version()?, 23);
     let key = |op: &str| -> Option<String> {
         db.connection()
             .query_row(
