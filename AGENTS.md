@@ -67,6 +67,13 @@ Rust version is pinned by `rust-toolchain.toml`; Node.js 24 and pnpm 11.28.5 com
   belong in PR comments/descriptions, never in git tracking. Vector branding is maintained strictly in
   SVG format under `docs/design/branding/`. Every PR runs automated hygiene validation in CI (`scripts/repo-hygiene.mjs`).
 
+## Interface work
+
+- Read [`PRODUCT.md`](PRODUCT.md) and [`DESIGN.md`](DESIGN.md) before changing the SPA (`apps/web-next`) or desktop window chrome. Tokens live only in `apps/web-next/src/styles/app.css`; follow the DESIGN.md invariants and reuse `Panel`, `Hero`, `Stat`, `PageHeader` and the shadcn components in `src/components/ui` before adding a new container or primitive.
+- Check the result in a real browser before opening a PR: run `pnpm dev` and review each changed screen at 375 px and 1440 px wide, in light and dark themes, with keyboard focus visible. Compare it with DESIGN.md (one accent per screen, contrast, density, motion that only shows a state change). For window chrome or `DesktopTitlebar` changes, also check `pnpm dev:tauri`.
+- Keep screenshots outside the repository (for example under `/tmp`) and attach them to the PR description when they help review; never commit them.
+- Update `DESIGN.md` in the same PR when a change alters a token, a component rule or an invariant.
+
 ## Multi-agent collaboration
 
 Before starting work, follow [`.agents/policies/agent-collaboration.md`](.agents/policies/agent-collaboration.md)
