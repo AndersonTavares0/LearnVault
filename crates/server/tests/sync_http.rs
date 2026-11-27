@@ -626,3 +626,136 @@ async fn pull_for_an_administrator_ignores_course_access_rows() {
     let pulled = pull_json(&app, &cookie, "device=device-b&cursor=0").await;
     assert_eq!(op_ids(&pulled), ["op-note"]);
 }
+
+#[tokio::test]
+async fn push_enforces_current_course_grants_for_updates_reviews_and_deletions() {
+    let temp = tempfile::tempdir().unwrap();
+    seed(&temp);
+    seed_user(&temp, "reader-id", READER, READER_PASSWORD);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, READER, READER_PASSWORD).await;
+
+    push_ops(
+        &app,
+        &cookie,
+        "device-a",
+        vec![
+            note("1"),
+            json!({
+                "op_id": "op-seed-bookmark",
+                "client_at": 100,
+                "payload": {
+                    "kind": "bookmark",
+                    "bookmark_id": "bookmark-1",
+                    "media_id": "m1",
+                    "position_seconds": 15,
+                    "label": "Intro",
+                    "created_at": 100
+                }
+            }),
+            json!({
+                "op_id": "op-seed-card",
+                "client_at": 100,
+                "payload": {
+                    "kind": "flashcard_created",
+                    "card_id": "card-1",
+                    "media_id": "m1",
+                    "front": "Question",
+                    "back": "Answer",
+                    "created_at": 100
+                }
+            }),
+        ],
+    )
+    .await;
+
+    // Revoke course library-1 access.
+    set_course_access(&temp, "reader-id", Some("library-2"));
+
+    let blocked = [
+        json!({
+            "op_id": "op-del-note",
+            "client_at": 200,
+            "payload": { "kind": "note_deleted", "note_id": "note-1" }
+        }),
+        json!({
+            "op_id": "op-del-bookmark",
+            "client_at": 200,
+            "payload": { "kind": "bookmark_deleted", "bookmark_id": "bookmark-1" }
+        }),
+        json!({
+            "op_id": "op-upd-card",
+            "client_at": 200,
+            "payload": {
+                "kind": "flashcard_updated",
+                "card_id": "card-1",
+                "front": "Tampered",
+                "back": "Tampered",
+                "updated_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-rev-card",
+            "client_at": 200,
+            "payload": {
+                "kind": "flashcard_review",
+                "card_id": "card-1",
+                "rating": "good",
+                "reviewed_at": 200
+            }
+        }),
+        json!({
+            "op_id": "op-del-card",
+            "client_at": 200,
+            "payload": { "kind": "flashcard_deleted", "card_id": "card-1" }
+        }),
+    ];
+
+    for op in blocked {
+        let resp = app
+            .clone()
+            .oneshot(push_request(
+                &cookie,
+                json!({ "device_id": "device-a", "operations": [op] }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+        assert_eq!(json_body(resp).await["error"], "media_not_found");
+    }
+
+    let db = Database::open(temp.path().join("sync.sqlite")).unwrap();
+    let conn = db.connection();
+    let note_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM study_note WHERE note_id = 'note-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let bookmark_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM media_bookmark WHERE bookmark_id = 'bookmark-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let card_front: String = conn
+        .query_row(
+            "SELECT front FROM flashcard WHERE card_id = 'card-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    let review_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM flashcard_review WHERE card_id = 'card-1'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(note_count, 1);
+    assert_eq!(bookmark_count, 1);
+    assert_eq!(card_front, "Question");
+    assert_eq!(review_count, 0);
+}

@@ -16,7 +16,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{Database, SyncOperationInput};
+use learnvault_core::{Database, SyncOperationInput, SyncPayload};
 use serde::Deserialize;
 
 use crate::AppState;
@@ -141,16 +141,32 @@ fn require_sync_access(
     operations: &[SyncOperationInput],
 ) -> learnvault_core::Result<()> {
     for operation in operations {
-        let Some(media_id) = operation.payload.media_id() else {
+        let media_id = match &operation.payload {
+            SyncPayload::Progress { media_id, .. }
+            | SyncPayload::Note { media_id, .. }
+            | SyncPayload::Bookmark { media_id, .. }
+            | SyncPayload::FlashcardCreated { media_id, .. } => Some(media_id.clone()),
+            SyncPayload::NoteDeleted { note_id } => {
+                learnvault_core::study_note_media_id(db, note_id)?
+            }
+            SyncPayload::BookmarkDeleted { bookmark_id } => {
+                learnvault_core::media_bookmark_media_id(db, bookmark_id)?
+            }
+            SyncPayload::FlashcardUpdated { card_id, .. }
+            | SyncPayload::FlashcardDeleted { card_id }
+            | SyncPayload::FlashcardReview { card_id, .. } => {
+                learnvault_core::flashcard_media_id(db, card_id)?
+            }
+            SyncPayload::Preference { .. } => None,
+        };
+        let Some(media_id) = media_id else {
             continue;
         };
-        let Some(library_id) = learnvault_core::find_media_library_id(db, media_id)? else {
+        let Some(library_id) = learnvault_core::find_media_library_id(db, &media_id)? else {
             continue;
         };
         if !learnvault_core::can_user_access_course(db, user_id, is_admin, &library_id)? {
-            return Err(learnvault_core::Error::MediaNotFound {
-                media_id: media_id.to_owned(),
-            });
+            return Err(learnvault_core::Error::MediaNotFound { media_id });
         }
     }
     Ok(())
