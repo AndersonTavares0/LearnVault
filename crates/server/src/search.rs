@@ -211,7 +211,7 @@ fn present(results: SearchResults, titles: &HashMap<String, String>) -> SearchRe
                 course_title,
                 media_id: hit.media_id,
                 title: lesson_title(&hit.relative_path),
-                path: hit.relative_path,
+                path: hit.lesson_path.unwrap_or(hit.relative_path),
             })
         })
         .collect();
