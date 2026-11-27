@@ -568,16 +568,49 @@ pub fn list_study_notes(db: &Database, owner_id: &str, media_id: &str) -> Result
     Ok(notes)
 }
 
+fn lookup_record_media_id(
+    db: &Database,
+    query: &str,
+    owner_id: Option<&str>,
+    record_id: &str,
+) -> Result<Option<String>> {
+    match owner_id {
+        Some(owner_id) => Ok(db
+            .connection()
+            .query_row(query, rusqlite::params![record_id, owner_id], |row| {
+                row.get(0)
+            })
+            .optional()?),
+        None => Ok(db
+            .connection()
+            .query_row(query, [record_id], |row| row.get(0))
+            .optional()?),
+    }
+}
+
 /// Finds the media linked to a study note without returning the note contents.
 pub fn study_note_media_id(db: &Database, note_id: &str) -> Result<Option<String>> {
-    Ok(db
-        .connection()
-        .query_row(
-            "SELECT media_id FROM study_note WHERE note_id = ?1",
-            [note_id],
-            |row| row.get(0),
-        )
-        .optional()?)
+    lookup_record_media_id(
+        db,
+        "SELECT media_id FROM study_note WHERE note_id = ?1",
+        None,
+        note_id,
+    )
+}
+
+/// Finds the media linked to a study note owned by `owner_id`.
+pub fn study_note_media_id_for_owner(
+    db: &Database,
+    owner_id: &str,
+    note_id: &str,
+) -> Result<Option<String>> {
+    validate_owner(owner_id)?;
+    lookup_record_media_id(
+        db,
+        "SELECT media_id FROM study_note WHERE note_id = ?1 AND owner_id = ?2",
+        Some(owner_id),
+        note_id,
+    )
 }
 
 /// Lists all of the owner's notes across the whole catalog, from newest to oldest.
@@ -849,14 +882,27 @@ pub fn list_flashcards(db: &Database, owner_id: &str, media_id: &str) -> Result<
 
 /// Finds the media linked to a flashcard without returning its contents.
 pub fn flashcard_media_id(db: &Database, card_id: &str) -> Result<Option<String>> {
-    Ok(db
-        .connection()
-        .query_row(
-            "SELECT media_id FROM flashcard WHERE card_id = ?1",
-            [card_id],
-            |row| row.get(0),
-        )
-        .optional()?)
+    lookup_record_media_id(
+        db,
+        "SELECT media_id FROM flashcard WHERE card_id = ?1",
+        None,
+        card_id,
+    )
+}
+
+/// Finds the media linked to a flashcard owned by `owner_id`.
+pub fn flashcard_media_id_for_owner(
+    db: &Database,
+    owner_id: &str,
+    card_id: &str,
+) -> Result<Option<String>> {
+    validate_owner(owner_id)?;
+    lookup_record_media_id(
+        db,
+        "SELECT media_id FROM flashcard WHERE card_id = ?1 AND owner_id = ?2",
+        Some(owner_id),
+        card_id,
+    )
 }
 
 /// Lists every card of the owner across all lessons, soonest due first. The review hub needs
@@ -1438,14 +1484,27 @@ pub(crate) fn delete_media_bookmark_on(
 
 /// Finds the media linked to a bookmark without returning its contents.
 pub fn media_bookmark_media_id(db: &Database, bookmark_id: &str) -> Result<Option<String>> {
-    Ok(db
-        .connection()
-        .query_row(
-            "SELECT media_id FROM media_bookmark WHERE bookmark_id = ?1",
-            [bookmark_id],
-            |row| row.get(0),
-        )
-        .optional()?)
+    lookup_record_media_id(
+        db,
+        "SELECT media_id FROM media_bookmark WHERE bookmark_id = ?1",
+        None,
+        bookmark_id,
+    )
+}
+
+/// Finds the media linked to a bookmark owned by `owner_id`.
+pub fn media_bookmark_media_id_for_owner(
+    db: &Database,
+    owner_id: &str,
+    bookmark_id: &str,
+) -> Result<Option<String>> {
+    validate_owner(owner_id)?;
+    lookup_record_media_id(
+        db,
+        "SELECT media_id FROM media_bookmark WHERE bookmark_id = ?1 AND owner_id = ?2",
+        Some(owner_id),
+        bookmark_id,
+    )
 }
 
 fn bookmark_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<MediaBookmark> {
