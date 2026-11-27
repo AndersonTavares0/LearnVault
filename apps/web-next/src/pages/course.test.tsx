@@ -154,4 +154,43 @@ describe('course page', () => {
 			setOrder.mockRestore();
 		}
 	});
+
+	it('offers a review-from-start CTA when every lesson in the course is completed', async () => {
+		renderApp('/course/rust', {
+			catalog,
+			recent: [
+				{ mediaId: 'borrow.mp4', positionSeconds: 0, completed: true, updatedAt: 2, recorded: true },
+				{ mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }
+			]
+		});
+		expect(await screen.findByText('Course complete. Well done.')).toBeTruthy();
+		expect(screen.queryByRole('link', { name: 'Continue studying' })).toBeNull();
+		expect(screen.getByRole('link', { name: 'Review course from start' }).getAttribute('href')).toBe('/course/rust/rust%2FOwnership');
+	});
+
+	it('wraps back to an earlier pending lesson when the final lesson was completed first', async () => {
+		renderApp('/course/rust', {
+			catalog,
+			recent: [{ mediaId: 'borrow.mp4', positionSeconds: 0, completed: true, updatedAt: 2, recorded: true }]
+		});
+		expect((await screen.findByRole('link', { name: 'Continue studying' })).getAttribute('href')).toBe('/course/rust/rust%2FOwnership');
+	});
+
+	it('allows long resume CTA titles to wrap on narrow screens', async () => {
+		const longTitle = 'Understanding lifetimes across asynchronous Rust closures and trait objects';
+		const longCatalog: Catalog = {
+			complete: true,
+			looseFiles: [],
+			nodes: [{
+				title: 'Rust', path: 'rust', role: 'course', courseId: 'rust', files: [], looseFiles: [],
+				children: [lesson(longTitle, [file('long.mp4', 'media')])]
+			}]
+		};
+		renderApp('/course/rust', {
+			catalog: longCatalog,
+			recent: [{ mediaId: 'long.mp4', positionSeconds: 95, completed: false, updatedAt: 1, recorded: true }]
+		});
+		const cta = await screen.findByRole('link', { name: `Resume ${longTitle} at 1:35` });
+		expect(cta.className).not.toContain('whitespace-nowrap');
+	});
 });

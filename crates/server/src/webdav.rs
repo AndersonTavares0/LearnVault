@@ -574,7 +574,6 @@ struct PropfindEntry {
 /// Parses a `PROPFIND` `multistatus`.
 fn parse_propfind(xml: &[u8]) -> SourceResult<Vec<PropfindEntry>> {
     let mut reader = Reader::from_reader(xml);
-    reader.config_mut().trim_text(true);
     let mut buffer = Vec::new();
     let mut entries = Vec::new();
     let mut current: Option<PropfindEntry> = None;
@@ -628,10 +627,17 @@ fn parse_propfind(xml: &[u8]) -> SourceResult<Vec<PropfindEntry>> {
                     captured.push_str(&text.xml_content(XmlVersion::Explicit1_0));
                 }
             }
+            Ok(Event::GeneralRef(entity)) => {
+                if capture.is_some() {
+                    captured.push('&');
+                    captured.push_str(&entity.xml_content(XmlVersion::Explicit1_0));
+                    captured.push(';');
+                }
+            }
             Ok(Event::End(event)) => match event.local_name().as_ref() {
                 "href" => {
                     if let (Some(entry), Some(Capture::Href)) = (current.as_mut(), capture.take()) {
-                        entry.href = unescape(&captured)
+                        entry.href = unescape(captured.trim())
                             .map_err(|_| SourceError::InvalidResponse)?
                             .into_owned();
                     }
@@ -1188,6 +1194,47 @@ mod tests {
             SourceError::Unreachable
         );
         assert_eq!(*resolver.lookups.lock().unwrap(), 2);
+        task.abort();
+    }
+
+    #[test]
+    fn propfind_preserves_spaces_around_xml_character_entities() {
+        let xml = br#"<D:multistatus xmlns:D="DAV:">
+            <D:response>
+                <D:href> /dav/Algorithms &amp; Data/Bob&#39;s%20Lesson.mp4 </D:href>
+                <D:propstat><D:prop><D:getcontentlength> 42 </D:getcontentlength></D:prop></D:propstat>
+            </D:response>
+        </D:multistatus>"#;
+        let entries = super::parse_propfind(xml).unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].href, "/dav/Algorithms & Data/Bob's%20Lesson.mp4");
+        assert_eq!(entries[0].size, Some(42));
+    }
+
+    #[tokio::test]
+    async fn list_directory_handles_ampersands_in_current_and_child_paths() {
+        let (address, task) = server(|_| {
+            response(
+                "207 Multi-Status",
+                &[("content-type", "application/xml"), ("connection", "close")],
+                r#"<D:multistatus xmlns:D="DAV:">
+                    <D:response>
+                        <D:href>/dav/Q&amp;A/</D:href>
+                        <D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat>
+                    </D:response>
+                    <D:response>
+                        <D:href>/dav/Q&amp;A/01 &amp; 02.mp4</D:href>
+                        <D:propstat><D:prop><D:getcontentlength>10</D:getcontentlength></D:prop></D:propstat>
+                    </D:response>
+                </D:multistatus>"#,
+            )
+        })
+        .await;
+        let base = url::Url::parse(&format!("http://{address}/dav/")).unwrap();
+        let client = WebDavClient::new(base, None, None).unwrap();
+        let entries = client.list_directory("Q&A").await.unwrap();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].path, "Q&A/01 & 02.mp4");
         task.abort();
     }
 }
