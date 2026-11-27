@@ -566,8 +566,15 @@ struct TableDefinition {
     columns: &'static [(&'static str, &'static str, bool, Option<&'static str>, i64)],
 }
 
-/// FTS5 virtual tables created by schema version 13.
-const REQUIRED_FTS_TABLES: &[&str] = &["study_note_fts", "media_fts", "course_fts"];
+/// FTS5 virtual tables created by schema versions 13 and 22.
+const REQUIRED_FTS_TABLES: &[&str] = &[
+    "study_note_fts",
+    "media_fts",
+    "course_fts",
+    "flashcard_fts",
+    "media_bookmark_fts",
+    "pdf_annotation_fts",
+];
 
 const REQUIRED_TABLES: &[TableDefinition] = &[
     TableDefinition {
@@ -1002,7 +1009,7 @@ fn expected_checks(table: &str) -> &'static [&'static str] {
             "position_seconds is null or position_seconds >= 0",
         ],
         "flashcard_review" => &[
-            "rating in ('again', 'good')",
+            "rating in ('again', 'hard', 'good', 'easy')",
             "previous_interval_days >= 0 and previous_interval_days <= 365",
         ],
         "study_favorite" => &[

@@ -94,8 +94,9 @@ pub use roots::{
 };
 pub use scanner::{MediaKind, ScanOutcome, ScannedFile, scan};
 pub use search::{
-    MAX_SEARCH_QUERY_CHARS, MAX_SEARCH_RESULTS, MIN_SEARCH_QUERY_CHARS, SearchLessonHit,
-    SearchNoteHit, SearchResults, fts_query, search, sync_course_index,
+    MAX_SEARCH_QUERY_CHARS, MAX_SEARCH_RESULTS, MIN_SEARCH_QUERY_CHARS, SearchBookmarkHit,
+    SearchFlashcardHit, SearchLessonHit, SearchNoteHit, SearchResults, fts_query, search,
+    sync_course_index,
 };
 pub use source::{
     CourseSource, LocalSource, MAX_SOURCE_READ, SourceEntry, SourceError, SourceResult, scan_source,

@@ -933,6 +933,33 @@ pub struct SearchLessonDto {
     pub title: String,
 }
 
+/// A flashcard matched by global search, shaped like the HTTP payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SearchFlashcardDto {
+    pub card_id: String,
+    pub media_id: String,
+    pub course_id: String,
+    pub course_title: String,
+    pub lesson_path: String,
+    pub lesson_title: String,
+    pub position_seconds: Option<i64>,
+    pub snippet: String,
+}
+
+/// A bookmark or PDF annotation matched by global search, shaped like the HTTP payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SearchBookmarkDto {
+    pub bookmark_id: String,
+    pub kind: String,
+    pub media_id: String,
+    pub course_id: String,
+    pub course_title: String,
+    pub lesson_path: String,
+    pub lesson_title: String,
+    pub position_seconds: i64,
+    pub snippet: String,
+}
+
 /// Grouped global search results.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SearchResultsDto {
@@ -942,4 +969,18 @@ pub struct SearchResultsDto {
     pub courses: Vec<SearchCourseDto>,
     /// Lessons whose path matched.
     pub lessons: Vec<SearchLessonDto>,
+    /// Flashcards of the local owner.
+    pub flashcards: Vec<SearchFlashcardDto>,
+    /// Bookmarks and PDF annotations of the local owner.
+    pub bookmarks: Vec<SearchBookmarkDto>,
+}
+
+/// Byte slice read from an authorized media item for offline desktop text/subtitle loading.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaSliceDto {
+    /// Read bytes starting at the requested offset.
+    pub bytes: Vec<u8>,
+    /// Total file size in bytes.
+    pub total: u64,
 }

@@ -61,6 +61,42 @@ pub struct SearchLessonHit {
     pub relative_path: String,
 }
 
+/// A flashcard matched by the query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchFlashcardHit {
+    /// Card identity.
+    pub card_id: String,
+    /// Media (lesson) the card belongs to.
+    pub media_id: String,
+    /// Course that owns the media.
+    pub course_id: String,
+    /// Relative path inside the course.
+    pub relative_path: String,
+    /// Optional timestamp in the lesson when the card was created.
+    pub position_seconds: Option<i64>,
+    /// Matched fragment with `<mark>`/`</mark>` around the terms.
+    pub snippet: String,
+}
+
+/// A bookmark or PDF annotation matched by the query.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SearchBookmarkHit {
+    /// Identifier of the bookmark or annotation.
+    pub bookmark_id: String,
+    /// Kind of mark: `"bookmark"` (time in seconds) or `"pdf"` (page number).
+    pub kind: String,
+    /// Media (lesson) the mark belongs to.
+    pub media_id: String,
+    /// Course that owns the media.
+    pub course_id: String,
+    /// Relative path inside the course.
+    pub relative_path: String,
+    /// Playback position in seconds, or 1-based page number for PDFs.
+    pub position_seconds: i64,
+    /// Matched fragment with `<mark>`/`</mark>` around the terms.
+    pub snippet: String,
+}
+
 /// Grouped search results.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct SearchResults {
@@ -70,6 +106,10 @@ pub struct SearchResults {
     pub course_ids: Vec<String>,
     /// Lessons whose path matched, best match first.
     pub lessons: Vec<SearchLessonHit>,
+    /// Flashcards of the current owner whose front or back matched.
+    pub flashcards: Vec<SearchFlashcardHit>,
+    /// Time bookmarks and PDF annotations of the current owner.
+    pub bookmarks: Vec<SearchBookmarkHit>,
 }
 
 /// Replaces the standalone course index with the current registered courses.
@@ -124,6 +164,10 @@ pub fn search(
              JOIN study_note n ON n.rowid = study_note_fts.rowid
              JOIN media m ON m.media_id = n.media_id
              WHERE study_note_fts MATCH ?1 AND n.owner_id = ?2
+               AND NOT EXISTS (SELECT 1
+                                 FROM media_removal r
+                                WHERE r.library_id = m.library_id
+                                  AND r.media_id = m.media_id)
                AND {access_predicate}
              ORDER BY rank
              LIMIT ?4",
@@ -230,10 +274,122 @@ pub fn search(
         }
     }
 
+    let mut flashcards = Vec::new();
+    {
+        let mut statement = conn.prepare(&format!(
+            "SELECT f.card_id, f.media_id, m.library_id, m.relative_path, f.position_seconds,
+                    snippet(flashcard_fts, -1, '<mark>', '</mark>', '…', 16)
+             FROM flashcard_fts
+             JOIN flashcard f ON f.rowid = flashcard_fts.rowid
+             JOIN media m ON m.media_id = f.media_id
+             WHERE flashcard_fts MATCH ?1 AND f.owner_id = ?2
+               AND NOT EXISTS (SELECT 1
+                                 FROM media_removal r
+                                WHERE r.library_id = m.library_id
+                                  AND r.media_id = m.media_id)
+               AND {access_predicate}
+             ORDER BY rank
+             LIMIT ?4",
+            access_predicate = access_predicate("m.library_id"),
+        ))?;
+        let rows = statement.query_map(
+            rusqlite::params![match_query, owner_id, is_admin, limit as i64],
+            |row| {
+                Ok(SearchFlashcardHit {
+                    card_id: row.get(0)?,
+                    media_id: row.get(1)?,
+                    course_id: row.get(2)?,
+                    relative_path: row.get(3)?,
+                    position_seconds: row.get(4)?,
+                    snippet: row.get(5)?,
+                })
+            },
+        )?;
+        for row in rows {
+            flashcards.push(row?);
+        }
+    }
+
+    let mut bookmarks = Vec::new();
+    {
+        let mut statement = conn.prepare(&format!(
+            "SELECT b.bookmark_id, b.media_id, m.library_id, m.relative_path, b.position_seconds,
+                    snippet(media_bookmark_fts, 0, '<mark>', '</mark>', '…', 16)
+             FROM media_bookmark_fts
+             JOIN media_bookmark b ON b.rowid = media_bookmark_fts.rowid
+             JOIN media m ON m.media_id = b.media_id
+             WHERE media_bookmark_fts MATCH ?1 AND b.owner_id = ?2
+               AND NOT EXISTS (SELECT 1
+                                 FROM media_removal r
+                                WHERE r.library_id = m.library_id
+                                  AND r.media_id = m.media_id)
+               AND {access_predicate}
+             ORDER BY rank
+             LIMIT ?4",
+            access_predicate = access_predicate("m.library_id"),
+        ))?;
+        let rows = statement.query_map(
+            rusqlite::params![match_query, owner_id, is_admin, limit as i64],
+            |row| {
+                Ok(SearchBookmarkHit {
+                    bookmark_id: row.get(0)?,
+                    kind: "bookmark".to_owned(),
+                    media_id: row.get(1)?,
+                    course_id: row.get(2)?,
+                    relative_path: row.get(3)?,
+                    position_seconds: row.get(4)?,
+                    snippet: row.get(5)?,
+                })
+            },
+        )?;
+        for row in rows {
+            bookmarks.push(row?);
+        }
+    }
+
+    if bookmarks.len() < limit {
+        let remaining = (limit - bookmarks.len()) as i64;
+        let mut statement = conn.prepare(&format!(
+            "SELECT a.annotation_id, a.media_id, m.library_id, m.relative_path, a.page,
+                    snippet(pdf_annotation_fts, -1, '<mark>', '</mark>', '…', 16)
+             FROM pdf_annotation_fts
+             JOIN pdf_annotation a ON a.rowid = pdf_annotation_fts.rowid
+             JOIN media m ON m.media_id = a.media_id
+             WHERE pdf_annotation_fts MATCH ?1 AND a.owner_id = ?2
+               AND NOT EXISTS (SELECT 1
+                                 FROM media_removal r
+                                WHERE r.library_id = m.library_id
+                                  AND r.media_id = m.media_id)
+               AND {access_predicate}
+             ORDER BY rank
+             LIMIT ?4",
+            access_predicate = access_predicate("m.library_id"),
+        ))?;
+        let rows = statement.query_map(
+            rusqlite::params![match_query, owner_id, is_admin, remaining],
+            |row| {
+                Ok(SearchBookmarkHit {
+                    bookmark_id: row.get(0)?,
+                    kind: "pdf".to_owned(),
+                    media_id: row.get(1)?,
+                    course_id: row.get(2)?,
+                    relative_path: row.get(3)?,
+                    position_seconds: row.get(4)?,
+                    snippet: row.get(5)?,
+                })
+            },
+        )?;
+        for row in rows {
+            bookmarks.push(row?);
+        }
+    }
+
     Ok(SearchResults {
         notes,
         course_ids,
         lessons,
+        flashcards,
+        bookmarks,
     })
 }
 

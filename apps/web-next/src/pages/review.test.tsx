@@ -56,13 +56,13 @@ describe('review', () => {
 		expect(screen.getByRole('heading', { name: 'front a' })).toBeTruthy();
 		expect(screen.getByText(/Rust · Ownership/)).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));
-		fireEvent.click(screen.getByRole('button', { name: 'Good' }));
+		fireEvent.click(screen.getByRole('button', { name: /^Good/ }));
 		expect(await screen.findByRole('heading', { name: 'front b' })).toBeTruthy();
 		expect(screen.getByText(/Go · Channels/)).toBeTruthy();
 	});
 
-	it('runs a session with the keyboard and ends when the due cards are done', async () => {
-		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1), card('b', 'own', 2)]);
+	it('runs a session with 4-grade keyboard shortcuts and ends when the due cards are done', async () => {
+		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1), card('b', 'own', 2), card('c', 'own', 3), card('d', 'own', 4)]);
 		const review = vi.spyOn(transport, 'reviewFlashcard').mockImplementation(async (id) => card(id, 'own', future));
 		renderApp('/review?course=rust', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'Start review' }));
@@ -70,14 +70,22 @@ describe('review', () => {
 		expect(screen.queryByText('back a')).toBeNull();
 		fireEvent.keyDown(screen.getByRole('button', { name: 'Show answer' }), { key: ' ' });
 		expect(screen.getByText('back a')).toBeTruthy();
-		// The button that had focus is gone, so the session itself takes focus and 1 and 2 keep working.
+		// The button that had focus is gone, so the session itself takes focus and 1-4 keep working.
 		expect(document.activeElement?.getAttribute('tabindex')).toBe('-1');
-		fireEvent.keyDown(document.activeElement!, { key: '2' });
+		fireEvent.keyDown(document.activeElement!, { key: '3' });
 		await waitFor(() => expect(review).toHaveBeenCalledWith('a', 'good'));
 		expect(await screen.findByRole('heading', { name: 'front b' })).toBeTruthy();
 		fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));
-		fireEvent.click(screen.getByRole('button', { name: 'Again' }));
-		await waitFor(() => expect(review).toHaveBeenCalledWith('b', 'again'));
+		fireEvent.keyDown(document.activeElement!, { key: '2' });
+		await waitFor(() => expect(review).toHaveBeenCalledWith('b', 'hard'));
+		expect(await screen.findByRole('heading', { name: 'front c' })).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));
+		fireEvent.keyDown(document.activeElement!, { key: '4' });
+		await waitFor(() => expect(review).toHaveBeenCalledWith('c', 'easy'));
+		expect(await screen.findByRole('heading', { name: 'front d' })).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Show answer' }));
+		fireEvent.click(screen.getByRole('button', { name: /^Again/ }));
+		await waitFor(() => expect(review).toHaveBeenCalledWith('d', 'again'));
 		expect(await screen.findByRole('heading', { name: 'Session done' })).toBeTruthy();
 	});
 
@@ -133,5 +141,25 @@ describe('review', () => {
 		renderApp('/review?course=rust', { catalog });
 		fireEvent.click(await screen.findByRole('button', { name: 'Start review' }));
 		expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'history offline');
+	});
+
+	it('lets the learner browse, filter, edit and delete cards inside a deck', async () => {
+		vi.spyOn(transport, 'listFlashcards').mockResolvedValue([card('a', 'own', 1), card('c', 'own', future)]);
+		const update = vi.spyOn(transport, 'updateFlashcard').mockResolvedValue({ ...card('a', 'own', 1), front: 'front updated', back: 'back updated' });
+		const remove = vi.spyOn(transport, 'deleteFlashcard').mockResolvedValue(undefined);
+		renderApp('/review?course=rust', { catalog });
+		fireEvent.click(await screen.findByRole('tab', { name: 'Browse cards (2)' }));
+		expect(screen.getByText('front a')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Due' }));
+		expect(screen.queryByText('front c')).toBeNull();
+		fireEvent.click(screen.getByRole('button', { name: 'Edit card: front a' }));
+		fireEvent.change(screen.getByLabelText('Front'), { target: { value: 'front updated' } });
+		fireEvent.change(screen.getByLabelText('Back'), { target: { value: 'back updated' } });
+		fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+		await waitFor(() => expect(update).toHaveBeenCalledWith('a', 'front updated', 'back updated'));
+		expect(await screen.findByText('front updated')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'Delete card: front updated' }));
+		fireEvent.click(await screen.findByRole('button', { name: 'Delete card' }));
+		await waitFor(() => expect(remove).toHaveBeenCalledWith('a'));
 	});
 });

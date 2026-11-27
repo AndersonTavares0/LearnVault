@@ -1,4 +1,4 @@
-import { Bold, Heading2, Heading3, Italic, List, ListOrdered, Underline } from 'lucide-react';
+import { Bold, Code, Heading2, Heading3, Italic, List, ListOrdered, Underline } from 'lucide-react';
 import { useEffect, useRef, type KeyboardEvent, type MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { tr } from '@/lib/i18n';
@@ -8,6 +8,7 @@ const TOOLS = (): { format: Format; label: string; icon: typeof Bold }[] => [
 	{ format: 'bold', label: tr('Bold', 'Negrito'), icon: Bold },
 	{ format: 'italic', label: tr('Italic', 'Itálico'), icon: Italic },
 	{ format: 'underline', label: tr('Underline', 'Sublinhado'), icon: Underline },
+	{ format: 'code', label: tr('Code', 'Código'), icon: Code },
 	{ format: 'h2', label: tr('Heading', 'Título'), icon: Heading2 },
 	{ format: 'h3', label: tr('Subheading', 'Subtítulo'), icon: Heading3 },
 	{ format: 'bullets', label: tr('Bulleted list', 'Lista com marcadores'), icon: List },
@@ -28,6 +29,14 @@ export function NoteEditor({ id, value, onChange, onKeyDown, describedBy, rows =
 		// The field keeps the selection on the formatted text once React has written the new value.
 		requestAnimationFrame(() => { element.focus(); element.setSelectionRange(next.start, next.end); });
 	};
+	const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+		if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+			const lower = event.key.toLowerCase();
+			if (lower === 'b') { event.preventDefault(); format('bold'); return; }
+			if (lower === 'i') { event.preventDefault(); format('italic'); return; }
+		}
+		onKeyDown?.(event);
+	};
 	return (
 		<div className="overflow-hidden rounded-2xl border border-input bg-background focus-within:ring-3 focus-within:ring-ring/50">
 			<div role="toolbar" aria-label={tr('Formatting', 'Formatação')} aria-controls={id} className="flex flex-wrap gap-0.5 border-b bg-panel p-1">
@@ -36,7 +45,7 @@ export function NoteEditor({ id, value, onChange, onKeyDown, describedBy, rows =
 					<Button key={kind} type="button" variant="ghost" size="icon" className="size-11" aria-label={text} onMouseDown={(event: MouseEvent) => event.preventDefault()} onClick={() => format(kind)}><Icon /></Button>
 				))}
 			</div>
-			<textarea ref={field} id={id} aria-label={label} aria-describedby={describedBy} rows={rows} maxLength={10_000} value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={onKeyDown} className="block w-full resize-y bg-transparent p-3 text-sm outline-none" />
+			<textarea ref={field} id={id} aria-label={label} aria-describedby={describedBy} rows={rows} maxLength={10_000} value={value} onChange={(event) => onChange(event.target.value)} onKeyDown={handleKeyDown} className="block w-full resize-y bg-transparent p-3 text-sm outline-none" />
 		</div>
 	);
 }

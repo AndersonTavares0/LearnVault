@@ -57,6 +57,7 @@
     "allow-desktop-restart-to-update",
     "allow-desktop-media-capabilities",
     "allow-desktop-open-in-system-player",
+    "allow-desktop-read-media-slice",
     "allow-desktop-playback-preferences",
     "allow-desktop-save-playback-preferences",
     "allow-desktop-sync-state",

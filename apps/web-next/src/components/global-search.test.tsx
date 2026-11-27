@@ -137,4 +137,40 @@ describe('global search', () => {
 		fireEvent.keyDown(searchbox(), { key: 'Tab', shiftKey: true });
 		expect(document.activeElement).toBe(close);
 	});
+
+	it('renders flashcards and marks groups and scrolls active option into view on ArrowDown', async () => {
+		vi.mocked(transport.search).mockResolvedValue({
+			...results,
+			flashcards: [{
+				cardId: 'c1',
+				mediaId: 'own',
+				courseId: 'rust',
+				courseTitle: 'Rust',
+				lessonPath: 'r/own.mp4',
+				lessonTitle: 'Ownership',
+				positionSeconds: 42,
+				snippet: 'Question <mark>borrow</mark>'
+			}],
+			bookmarks: [{
+				bookmarkId: 'b1',
+				kind: 'pdf',
+				mediaId: 'pdf1',
+				courseId: 'rust',
+				courseTitle: 'Rust',
+				lessonPath: 'r/book.pdf',
+				lessonTitle: 'Handbook',
+				positionSeconds: 7,
+				snippet: '<mark>borrow</mark> rules p.7'
+			}]
+		});
+		const scrollSpy = vi.fn();
+		Element.prototype.scrollIntoView = scrollSpy;
+		renderApp('/', {});
+		fireEvent.change(searchbox(), { target: { value: 'borrow' } });
+		expect(await screen.findByRole('group', { name: 'Flashcards' })).toBeTruthy();
+		expect(screen.getByRole('group', { name: 'Marks' })).toBeTruthy();
+		expect(screen.getByText('Rust · Page 7')).toBeTruthy();
+		fireEvent.keyDown(searchbox(), { key: 'ArrowDown' });
+		expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest' });
+	});
 });

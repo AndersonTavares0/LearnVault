@@ -15,6 +15,7 @@ const done = (mediaId: string) => ({ mediaId, completed: true, positionSeconds: 
 
 beforeEach(() => {
 	vi.spyOn(transport, 'focusSummary').mockResolvedValue({ todayMinutes: 25, weekMinutes: 50, weekSessions: 2, totalMinutes: 50, totalSessions: 2, completionRate: 1, bestDay: null, days: [] });
+	vi.spyOn(transport, 'listFocusSessions').mockResolvedValue([]);
 });
 afterEach(() => {
 	cleanup();
@@ -58,12 +59,16 @@ describe('progress', () => {
 		await waitFor(() => expect(claim).toHaveBeenCalledWith('lesson'));
 	});
 
-	it('labels the all-time total separately from its weekly breakdown', async () => {
+	it('labels the all-time total separately and updates the chart from session history', async () => {
 		vi.spyOn(transport, 'focusSummary').mockResolvedValue({ todayMinutes: 25, weekMinutes: 50, weekSessions: 2, totalMinutes: 200, totalSessions: 8, completionRate: 1, bestDay: null, days: [] });
+		vi.spyOn(transport, 'listFocusSessions').mockResolvedValue([
+			{ id: 's1', kind: 'focus', plannedSeconds: 1500, actualSeconds: 1500, completed: true, startedAt: 1_794_000_000, endedAt: 1_794_001_500 }
+		]);
 		renderApp('/progress', { catalog, rewards });
-		fireEvent.click(await screen.findByRole('button', { name: 'All time' }));
+		expect(await screen.findByText('Recent sessions')).toBeTruthy();
+		fireEvent.click(screen.getByRole('button', { name: 'All time' }));
 		expect(screen.getByText('3h 20m', { exact: true })).toBeTruthy();
-		expect(screen.getByText('Weekly breakdown')).toBeTruthy();
+		expect(screen.getByText('All-time focus')).toBeTruthy();
 	});
 
 	it('reports a focus summary failure instead of showing zero activity', async () => {

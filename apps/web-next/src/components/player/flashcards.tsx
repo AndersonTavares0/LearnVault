@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type Key
 import { Button } from '@/components/ui/button';
 import { ConfirmDelete } from '@/components/confirm-delete';
 import { Label } from '@/components/ui/label';
-import { MAX_IMPORT_CARDS, parseCards } from '@/lib/cards';
+import { MAX_IMPORT_CARDS, REVIEW_RATINGS, parseCards, previewIntervalLabel, ratingLabel } from '@/lib/cards';
 import { tr } from '@/lib/i18n';
 import { formatDuration } from '@/lib/player';
 import { transport, type Flashcard, type ReviewRating } from '@/lib/transport';
@@ -48,7 +48,16 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0, cardSeed 
 	}, []);
 
 	const patch = (card: Flashcard) => client.setQueryData<Flashcard[]>(key, (list = []) => (list.some((item) => item.cardId === card.cardId) ? list.map((item) => (item.cardId === card.cardId ? card : item)) : [...list, card]));
-	const review = useMutation({ mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) => transport.reviewFlashcard(cardId, rating), onSuccess: (card) => { patch(card); setRevealed(false); setNow(nowSeconds()); } });
+	const reviewBox = useRef<HTMLDivElement>(null);
+	const review = useMutation({
+		mutationFn: ({ cardId, rating }: { cardId: string; rating: ReviewRating }) => transport.reviewFlashcard(cardId, rating),
+		onSuccess: (card) => {
+			patch(card);
+			setRevealed(false);
+			setNow(nowSeconds());
+			requestAnimationFrame(() => reviewBox.current?.focus());
+		}
+	});
 	const [importMessage, setImportMessage] = useState('');
 	const save = useMutation({
 		mutationFn: (input: { cardId: string | null; front: string; back: string; position: number | null }) => (input.cardId ? transport.updateFlashcard(input.cardId, input.front, input.back) : transport.createFlashcard(mediaId, input.front, input.back, input.position)),
@@ -98,9 +107,11 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0, cardSeed 
 		if (form && (event.ctrlKey || event.metaKey) && event.key === 'Enter') { event.preventDefault(); submit(); return; }
 		if (form && event.key === 'Escape') { event.preventDefault(); setForm(null); return; }
 		if (typing || mode !== 'review' || !current || review.isPending) return;
-		if (!revealed && event.key === 'Enter') { event.preventDefault(); setRevealed(true); }
+		if (!revealed && event.key === 'Enter') { event.preventDefault(); setRevealed(true); requestAnimationFrame(() => reviewBox.current?.focus()); }
 		else if (revealed && event.key === '1') { event.preventDefault(); review.mutate({ cardId: current.cardId, rating: 'again' }); }
-		else if (revealed && event.key === '2') { event.preventDefault(); review.mutate({ cardId: current.cardId, rating: 'good' }); }
+		else if (revealed && event.key === '2') { event.preventDefault(); review.mutate({ cardId: current.cardId, rating: 'hard' }); }
+		else if (revealed && event.key === '3') { event.preventDefault(); review.mutate({ cardId: current.cardId, rating: 'good' }); }
+		else if (revealed && event.key === '4') { event.preventDefault(); review.mutate({ cardId: current.cardId, rating: 'easy' }); }
 	};
 
 	return (
@@ -146,18 +157,29 @@ export function Flashcards({ mediaId, currentTime = 0, addRequest = 0, cardSeed 
 				<p role="status" className="text-sm text-muted-foreground">{tr('Loading cards…', 'Carregando cartões…')}</p>
 			) : mode === 'review' ? (
 				current ? (
-					<div className="space-y-4 rounded-lg border bg-card p-6" aria-live="polite">
+					<div ref={reviewBox} tabIndex={-1} className="space-y-4 rounded-lg border bg-card p-6 outline-none" aria-live="polite">
 						<p className="text-lg font-medium whitespace-pre-wrap">{current.front}</p>
 						{revealed ? (
 							<>
 								<p className="border-t pt-4 whitespace-pre-wrap">{current.back}</p>
-								<div className="flex flex-wrap gap-2">
-									<Button variant="outline" onClick={() => review.mutate({ cardId: current.cardId, rating: 'again' })} disabled={review.isPending} aria-keyshortcuts="1">{tr('Again (1)', 'De novo (1)')}</Button>
-									<Button onClick={() => review.mutate({ cardId: current.cardId, rating: 'good' })} disabled={review.isPending} aria-keyshortcuts="2">{tr('Good (2)', 'Bom (2)')}</Button>
+								<div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+									{REVIEW_RATINGS.map((rating, index) => (
+										<Button
+											key={rating}
+											variant={rating === 'good' ? 'default' : 'outline'}
+											className="h-auto flex-col gap-0.5 py-2"
+											onClick={() => review.mutate({ cardId: current.cardId, rating })}
+											disabled={review.isPending}
+											aria-keyshortcuts={String(index + 1)}
+										>
+											<span>{ratingLabel(rating)} ({index + 1})</span>
+											<span className="text-[11px] font-normal opacity-80">{previewIntervalLabel(current.intervalDays, rating)}</span>
+										</Button>
+									))}
 								</div>
 							</>
 						) : (
-							<Button onClick={() => setRevealed(true)} aria-keyshortcuts="Enter">{tr('Show answer', 'Mostrar resposta')}</Button>
+							<Button onClick={() => { setRevealed(true); requestAnimationFrame(() => reviewBox.current?.focus()); }} aria-keyshortcuts="Enter">{tr('Show answer', 'Mostrar resposta')}</Button>
 						)}
 					</div>
 				) : (

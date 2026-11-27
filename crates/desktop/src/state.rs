@@ -25,7 +25,7 @@ use crate::covers::{
 use crate::dto::{
     CatalogDto, CoverDto, CoverRemovalDto, FlashcardDto, FlashcardReviewsDto, FocusSessionDto,
     FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
-    NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto, RecentStudyDto,
+    MediaSliceDto, NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto, RecentStudyDto,
     RescanSummaryDto, RewardSummaryDto, SearchResultsDto, StudyFavoritesDto, StudyNoteDto,
     StudyProgressDto, StudyStateDto, StudySummaryDto, SyncResultDto, SyncStateDto,
 };
@@ -595,13 +595,7 @@ impl DesktopState {
             .lock()
             .map_err(|_| IpcError::sync_unavailable())?
             .clone();
-        let result = {
-            let database = self
-                .database
-                .lock()
-                .map_err(|_| IpcError::database_unavailable())?;
-            sync::run(&database, &settings.server_url, &settings.session)
-        };
+        let result = sync::run(&self.database, &settings.server_url, &settings.session);
         let summary = match result {
             Ok(result) => result,
             Err(failure) => {
@@ -1086,6 +1080,54 @@ impl DesktopState {
         crate::command::open_in_system_player(&database, &courses, media_id)
     }
 
+    /// Reads a bounded slice from an authorized local media or material file without HTTP `fetch`.
+    pub fn read_media_slice(
+        &self,
+        media_id: &str,
+        start: u64,
+        length: usize,
+    ) -> Result<MediaSliceDto, IpcError> {
+        use std::io::{Read, Seek, SeekFrom};
+
+        const MAX_SLICE_BYTES: usize = 512 * 1024;
+        let requested = length.min(MAX_SLICE_BYTES);
+        let opened = {
+            let database = self
+                .database
+                .lock()
+                .map_err(|_| IpcError::database_unavailable())?;
+            let Some(library_id) = learnvault_core::find_media_library_id(&database, media_id)
+                .map_err(|_| IpcError::study_unavailable())?
+            else {
+                return Err(IpcError::media_not_found());
+            };
+            let Some(course) = self.course(&library_id) else {
+                return Err(IpcError::media_not_found());
+            };
+            let root = CourseRoot::resolve(course.root.as_path())
+                .map_err(|_| IpcError::media_not_found())?;
+            learnvault_core::open_media(&database, &library_id, media_id, root.as_path())
+                .map_err(|_| IpcError::media_not_found())?
+        };
+        let total = opened.size;
+        if requested == 0 || start >= total {
+            return Ok(MediaSliceDto {
+                bytes: Vec::new(),
+                total,
+            });
+        }
+        let to_read = requested.min((total - start) as usize);
+        let mut file = opened.file;
+        file.seek(SeekFrom::Start(start))
+            .map_err(|_| IpcError::media_not_found())?;
+        let mut buf = vec![0u8; to_read];
+        let read = file
+            .read(&mut buf)
+            .map_err(|_| IpcError::media_not_found())?;
+        buf.truncate(read);
+        Ok(MediaSliceDto { bytes: buf, total })
+    }
+
     /// Reserves the rescan state, returning a guard that releases it on `Drop`.
     ///
     /// The swap is atomic: the first call wins and the concurrent ones receive
@@ -1122,11 +1164,6 @@ impl DesktopState {
             return Err(IpcError::no_courses_registered());
         }
 
-        let mut database = self
-            .database
-            .lock()
-            .map_err(|_| IpcError::database_unavailable())?;
-
         let mut summary = RescanSummaryDto {
             complete: true,
             courses: courses.len(),
@@ -1137,22 +1174,38 @@ impl DesktopState {
             preserved: 0,
             ambiguous_count: 0,
         };
+        let mut scanned = Vec::with_capacity(courses.len());
         for course in &courses {
-            // Revalidates the root immediately before scanning: if the directory was removed,
-            // replaced by a link/junction or stopped being readable since the import,
-            // the scan is refused without following the target.
+            // Revalidates the root immediately before scanning outside the SQLite lock:
+            // if the directory was removed or turned into a link, the scan is refused.
             let Ok(root) = CourseRoot::resolve(course.root.as_path()) else {
                 summary.failed += 1;
                 summary.complete = false;
                 continue;
             };
-            match learnvault_core::rescan(&mut database, &course.id, root.as_path()) {
+            let outcome = learnvault_core::scan(root.as_path());
+            if outcome.is_ok() {
+                let _ = crate::covers::auto_detect_course_cover(
+                    &self.covers_dir,
+                    &course.id,
+                    root.as_path(),
+                );
+            }
+            scanned.push((course.id.clone(), root, outcome));
+        }
+
+        let mut database = self
+            .database
+            .lock()
+            .map_err(|_| IpcError::database_unavailable())?;
+        for (course_id, root, outcome) in scanned {
+            match learnvault_core::apply_rescan_result(
+                &mut database,
+                &course_id,
+                outcome,
+                root.as_path(),
+            ) {
                 Ok(course_summary) => {
-                    let _ = crate::covers::auto_detect_course_cover(
-                        &self.covers_dir,
-                        &course.id,
-                        root.as_path(),
-                    );
                     summary.complete = summary.complete && course_summary.complete;
                     summary.inserted += course_summary.inserted;
                     summary.updated += course_summary.updated;

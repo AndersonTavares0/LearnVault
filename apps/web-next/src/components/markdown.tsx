@@ -22,6 +22,13 @@ export function Markdown({ text, className }: { text: string; className?: string
 					const List = block.ordered ? 'ol' : 'ul';
 					return <List key={index} className={cn('ml-5 space-y-1', block.ordered ? 'list-decimal' : 'list-disc')}>{block.items.map((item, i) => <li key={i}><Inlines items={item} /></li>)}</List>;
 				}
+				if (block.kind === 'code') {
+					return (
+						<pre key={index} className="overflow-x-auto rounded-lg border border-[var(--study-rule)] bg-panel p-3 font-mono text-xs leading-relaxed text-foreground">
+							<code>{block.code}</code>
+						</pre>
+					);
+				}
 				return <p key={index}>{block.lines.map((line, i) => <Fragment key={i}>{i > 0 && <br />}<Inlines items={line} /></Fragment>)}</p>;
 			})}
 		</div>

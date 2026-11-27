@@ -338,16 +338,30 @@ impl WebDavClient {
         Ok(listed)
     }
 
+    /// Checks file availability without transferring the body.
+    pub(crate) async fn head_file(&self, path: &str) -> SourceResult<()> {
+        let url = file_url(&self.base, path)?;
+        let response = self
+            .authorize(client().map_err(|_| SourceError::Unreachable)?.head(url))
+            .send()
+            .await
+            .map_err(map_request_error)?;
+        match response.status() {
+            status if status.is_success() => Ok(()),
+            status => Err(status_error(status)),
+        }
+    }
+
     /// Opens a file range for streaming.
     ///
-    /// Requires `206 Partial Content`: a server that ignores `Range` cannot be used for
-    /// playback with seeking, and accepting the whole body would deliver bytes outside the
-    /// requested range.
+    /// Requires `206 Partial Content` for ranged requests. When `allow_full` is `true`
+    /// (un-ranged full-entity request starting at byte `0`), `200 OK` is also accepted.
     pub(crate) async fn open_range(
         &self,
         path: &str,
         start: u64,
         end: u64,
+        allow_full: bool,
     ) -> SourceResult<reqwest::Response> {
         let url = file_url(&self.base, path)?;
         let response = self
@@ -358,6 +372,7 @@ impl WebDavClient {
             .map_err(map_request_error)?;
         match response.status() {
             reqwest::StatusCode::PARTIAL_CONTENT => Ok(response),
+            reqwest::StatusCode::OK if allow_full && start == 0 => Ok(response),
             reqwest::StatusCode::RANGE_NOT_SATISFIABLE => Err(SourceError::NotFound),
             status if status.is_success() => Err(SourceError::InvalidResponse),
             status => Err(status_error(status)),
@@ -392,7 +407,7 @@ impl CourseSource for WebDavClient {
                 return Ok(Vec::new());
             }
             let mut response = self
-                .open_range(path, offset, offset + length as u64 - 1)
+                .open_range(path, offset, offset + length as u64 - 1, false)
                 .await?;
             let mut bytes = Vec::with_capacity(length.min(64 * 1024));
             while let Some(chunk) = response.chunk().await.map_err(map_request_error)? {

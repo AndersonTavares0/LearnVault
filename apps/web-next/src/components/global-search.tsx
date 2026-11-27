@@ -1,4 +1,4 @@
-import { BookOpen, NotebookPen, Play, Search, X } from 'lucide-react';
+import { Bookmark, BookOpen, Layers, NotebookPen, Play, Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -7,15 +7,17 @@ import { useSearch } from '@/app/data';
 import { tr } from '@/lib/i18n';
 import { formatDuration } from '@/lib/player';
 import { href } from '@/lib/router';
-import type { SearchCourseResult, SearchLessonResult, SearchNoteResult, SearchResults } from '@/lib/transport';
+import type { SearchBookmarkResult, SearchCourseResult, SearchFlashcardResult, SearchLessonResult, SearchNoteResult, SearchResults } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 
 type Item =
 	| { kind: 'note'; note: SearchNoteResult }
+	| { kind: 'flashcard'; card: SearchFlashcardResult }
+	| { kind: 'bookmark'; mark: SearchBookmarkResult }
 	| { kind: 'course'; course: SearchCourseResult }
 	| { kind: 'lesson'; lesson: SearchLessonResult };
 
-const EMPTY: SearchResults = { notes: [], courses: [], lessons: [] };
+const EMPTY: SearchResults = { notes: [], courses: [], lessons: [], flashcards: [], bookmarks: [] };
 
 /** Below `lg` the rail field is display:none, so shortcuts must open the phone palette instead. */
 const isNarrow = () => window.matchMedia?.('(min-width: 1024px)')?.matches === false;
@@ -40,11 +42,20 @@ export function GlobalSearch({ collapsed = false, shortcut }: { collapsed?: bool
 	const ready = query.trim().length >= 2;
 	const search = useSearch(query, open);
 	const results = search.data ?? EMPTY;
+	const flashcards = useMemo(() => results.flashcards ?? [], [results.flashcards]);
+	const bookmarks = useMemo(() => results.bookmarks ?? [], [results.bookmarks]);
 	const items = useMemo<Item[]>(() => [
 		...results.notes.map((note) => ({ kind: 'note' as const, note })),
+		...flashcards.map((card) => ({ kind: 'flashcard' as const, card })),
+		...bookmarks.map((mark) => ({ kind: 'bookmark' as const, mark })),
 		...results.courses.map((course) => ({ kind: 'course' as const, course })),
 		...results.lessons.map((lesson) => ({ kind: 'lesson' as const, lesson }))
-	], [results]);
+	], [results.notes, results.courses, results.lessons, flashcards, bookmarks]);
+
+	useEffect(() => {
+		if (active < 0) return;
+		document.getElementById(`global-search-${active}`)?.scrollIntoView?.({ block: 'nearest' });
+	}, [active]);
 
 	const rememberOpener = () => {
 		if (!box.current?.contains(document.activeElement)) opener.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -102,6 +113,8 @@ export function GlobalSearch({ collapsed = false, shortcut }: { collapsed?: bool
 
 	const openItem = (item: Item) => {
 		if (item.kind === 'note') navigate(href('course', item.note.courseId, item.note.lessonPath, item.note.positionSeconds).replace(/^#/, ''));
+		else if (item.kind === 'flashcard') navigate(href('course', item.card.courseId, item.card.lessonPath, item.card.positionSeconds).replace(/^#/, ''));
+		else if (item.kind === 'bookmark') navigate(href('course', item.mark.courseId, item.mark.lessonPath, item.mark.positionSeconds).replace(/^#/, ''));
 		else if (item.kind === 'lesson') navigate(href('course', item.lesson.courseId, item.lesson.path).replace(/^#/, ''));
 		else navigate(href('course', item.course.courseId).replace(/^#/, ''));
 		close();
@@ -221,10 +234,48 @@ export function GlobalSearch({ collapsed = false, shortcut }: { collapsed?: bool
 							))}
 						</Group>
 					)}
+					{!search.isPending && !search.isError && flashcards.length > 0 && (
+						<Group label={tr('Flashcards', 'Cartões')}>
+							{flashcards.map((card, offset) => {
+								const index = results.notes.length + offset;
+								return (
+									<Option key={card.cardId} id={`global-search-${index}`} active={active === index} onClick={() => openItem({ kind: 'flashcard', card })}>
+										<span className="mt-0.5 text-primary" aria-hidden="true"><Layers className="size-4" /></span>
+										<span className="min-w-0 flex-1 space-y-0.5">
+											<span className="flex flex-wrap items-baseline gap-x-2">
+												<span className="font-medium">{card.lessonTitle}</span>
+												<span className="text-xs text-muted-foreground">{card.courseTitle}{card.positionSeconds !== null ? ` · ${formatDuration(card.positionSeconds)}` : ''}</span>
+											</span>
+											<Marked text={card.snippet} />
+										</span>
+									</Option>
+								);
+							})}
+						</Group>
+					)}
+					{!search.isPending && !search.isError && bookmarks.length > 0 && (
+						<Group label={tr('Marks', 'Marcadores')}>
+							{bookmarks.map((mark, offset) => {
+								const index = results.notes.length + flashcards.length + offset;
+								return (
+									<Option key={mark.bookmarkId} id={`global-search-${index}`} active={active === index} onClick={() => openItem({ kind: 'bookmark', mark })}>
+										<span className="mt-0.5 text-primary" aria-hidden="true"><Bookmark className="size-4" /></span>
+										<span className="min-w-0 flex-1 space-y-0.5">
+											<span className="flex flex-wrap items-baseline gap-x-2">
+												<span className="font-medium">{mark.lessonTitle}</span>
+												<span className="text-xs text-muted-foreground">{mark.courseTitle} · {mark.kind === 'pdf' ? tr(`Page ${mark.positionSeconds}`, `Página ${mark.positionSeconds}`) : formatDuration(mark.positionSeconds)}</span>
+											</span>
+											<Marked text={mark.snippet} />
+										</span>
+									</Option>
+								);
+							})}
+						</Group>
+					)}
 					{!search.isPending && !search.isError && results.courses.length > 0 && (
 						<Group label={tr('Courses', 'Cursos')}>
 							{results.courses.map((course, offset) => {
-								const index = results.notes.length + offset;
+								const index = results.notes.length + flashcards.length + bookmarks.length + offset;
 								return (
 									<Option key={course.courseId} id={`global-search-${index}`} active={active === index} onClick={() => openItem({ kind: 'course', course })}>
 										<span className="mt-0.5 text-primary" aria-hidden="true"><BookOpen className="size-4" /></span>
@@ -237,7 +288,7 @@ export function GlobalSearch({ collapsed = false, shortcut }: { collapsed?: bool
 					{!search.isPending && !search.isError && results.lessons.length > 0 && (
 						<Group label={tr('Lessons', 'Aulas')}>
 							{results.lessons.map((lesson, offset) => {
-								const index = results.notes.length + results.courses.length + offset;
+								const index = results.notes.length + flashcards.length + bookmarks.length + results.courses.length + offset;
 								return (
 									<Option key={lesson.mediaId} id={`global-search-${index}`} active={active === index} onClick={() => openItem({ kind: 'lesson', lesson })}>
 										<span className="mt-0.5 text-primary" aria-hidden="true"><Play className="size-4" /></span>

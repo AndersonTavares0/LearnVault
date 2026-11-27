@@ -26,7 +26,7 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::UNIX_EPOCH,
+    time::{Duration, Instant, UNIX_EPOCH},
 };
 
 use axum::{
@@ -450,6 +450,8 @@ fn find_first_video_file(course_root: &Path) -> Option<PathBuf> {
     None
 }
 
+const COVER_FFMPEG_TIMEOUT: Duration = Duration::from_secs(15);
+
 /// Extracts a single JPEG frame from the course's first video via `ffmpeg`, returning `None`
 /// when no video exists or `ffmpeg` cannot decode a frame (e.g., unavailable or dummy file).
 fn extract_fallback_video_cover_with(
@@ -462,26 +464,59 @@ fn extract_fallback_video_cover_with(
         .ok()?
         .to_str()?
         .to_owned();
+    let ffmpeg = crate::transcode::ffmpeg_path();
     for seek in ["00:00:05", "00:00:00"] {
         let args = cover_ffmpeg_args(&video_path, seek)?;
         before_open(&video_path);
         // Each attempt gets its own handle (own offset), opened confined and inspected as a
         // regular file; it is the only way FFmpeg sees the video.
         let video = learnvault_core::media::open_confined_file(course_root, &relative).ok()?;
-        let output = Command::new("ffmpeg")
+        let mut child = Command::new(&ffmpeg)
             .args(args)
             .stdin(Stdio::from(video))
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
-            .output()
+            .spawn()
             .ok()?;
 
-        if output.status.success()
-            && !output.stdout.is_empty()
-            && output.stdout.len() <= MAX_COVER_BYTES
-            && detect_image_type(&output.stdout).is_some()
+        let mut stdout = child.stdout.take()?;
+        let outcome = std::thread::scope(|scope| {
+            let reader = scope.spawn(move || {
+                let mut buf = Vec::new();
+                let mut limited = stdout.by_ref().take((MAX_COVER_BYTES + 1) as u64);
+                let _ = limited.read_to_end(&mut buf);
+                buf
+            });
+            let deadline = Instant::now() + COVER_FFMPEG_TIMEOUT;
+            let status = loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => break Some(status),
+                    Ok(None) => {
+                        if Instant::now() >= deadline {
+                            let _ = child.kill();
+                            let _ = child.wait();
+                            break None;
+                        }
+                        std::thread::sleep(Duration::from_millis(25));
+                    }
+                    Err(_) => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        break None;
+                    }
+                }
+            };
+            let bytes = reader.join().ok()?;
+            status.map(|s| (s, bytes))
+        });
+
+        if let Some((status, bytes)) = outcome
+            && status.success()
+            && !bytes.is_empty()
+            && bytes.len() <= MAX_COVER_BYTES
+            && detect_image_type(&bytes).is_some()
         {
-            return Some(output.stdout);
+            return Some(bytes);
         }
     }
     None

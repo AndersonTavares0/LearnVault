@@ -65,10 +65,14 @@ test('migration notes ignore Rust comments and detect newly appended SQL migrati
 	assert.equal(hasMigrationChanges(source, commentOnly), false);
 	assert.equal(renderMigrations(hasMigrationChanges(source, commentOnly)), 'No database migrations.');
 
-	const withNewMigration = source.replace(
-		'pub(crate) const MIGRATIONS: &[&str] = &[',
-		'const V22: &str = "\nCREATE TABLE migration_smoke (id INTEGER PRIMARY KEY);\n";\npub(crate) const MIGRATIONS: &[&str] = &['
-	).replace('V19, V20, V21,', 'V19, V20, V21, V22,');
+	const nextNum = (source.match(/^const V\d+: &str =/gm) ?? []).length + 1;
+	const nextName = `V${nextNum}`;
+	const withNewMigration = source
+		.replace(
+			'pub(crate) const MIGRATIONS: &[&str] = &[',
+			`const ${nextName}: &str = "\nCREATE TABLE migration_smoke (id INTEGER PRIMARY KEY);\n";\npub(crate) const MIGRATIONS: &[&str] = &[`
+		)
+		.replace(/(pub\(crate\) const MIGRATIONS: &\[&str\] = &\[[\s\S]*?)(\n\];)/, `$1 ${nextName},$2`);
 	assert.equal(hasMigrationChanges(source, withNewMigration), true);
 	assert.match(renderMigrations(hasMigrationChanges(source, withNewMigration)), /changes the schema migrations/);
 });

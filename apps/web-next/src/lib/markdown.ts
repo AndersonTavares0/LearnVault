@@ -7,7 +7,8 @@ export type Inline = { text: string; bold?: boolean; italic?: boolean; underline
 export type Block =
 	| { kind: 'paragraph'; lines: Inline[][] }
 	| { kind: 'heading'; level: 2 | 3; inlines: Inline[] }
-	| { kind: 'list'; ordered: boolean; items: Inline[][] };
+	| { kind: 'list'; ordered: boolean; items: Inline[][] }
+	| { kind: 'code'; language?: string; code: string };
 
 // Inline code runs first so asterisks or double underscores inside code stay literal.
 // Underline needs a boundary on both sides, so a name like __init__ or snake__case stays as typed.
@@ -25,7 +26,22 @@ export function parseInline(text: string): Inline[] {
 
 export function parseMarkdown(source: string): Block[] {
 	const blocks: Block[] = [];
+	let fence: { language?: string; lines: string[] } | null = null;
 	for (const line of source.replace(/\r\n?/g, '\n').split('\n')) {
+		const fenceMatch = /^```([a-z0-9_+-]*)\s*$/i.exec(line);
+		if (fence) {
+			if (fenceMatch) {
+				blocks.push({ kind: 'code', ...(fence.language ? { language: fence.language } : {}), code: fence.lines.join('\n') });
+				fence = null;
+			} else {
+				fence.lines.push(line);
+			}
+			continue;
+		}
+		if (fenceMatch) {
+			fence = { ...(fenceMatch[1] ? { language: fenceMatch[1] } : {}), lines: [] };
+			continue;
+		}
 		const heading = /^(#{2,3}) (.+)$/.exec(line);
 		const bullet = /^[-*] (.+)$/.exec(line);
 		const numbered = /^\d+\. (.+)$/.exec(line);
@@ -42,6 +58,7 @@ export function parseMarkdown(source: string): Block[] {
 		else if (last?.kind === 'paragraph') last.lines.push(parseInline(line));
 		else blocks.push({ kind: 'paragraph', lines: [parseInline(line)] });
 	}
+	if (fence) blocks.push({ kind: 'code', ...(fence.language ? { language: fence.language } : {}), code: fence.lines.join('\n') });
 	return blocks.filter((block) => block.kind !== 'paragraph' || block.lines.length > 0);
 }
 
@@ -51,13 +68,14 @@ export function plainTextMarkdown(source: string): string {
 		.map((block) => {
 			if (block.kind === 'heading') return block.inlines.map((part) => part.text).join('');
 			if (block.kind === 'list') return block.items.map((item) => item.map((part) => part.text).join('')).join(' · ');
+			if (block.kind === 'code') return block.code.replace(/\s+/g, ' ').trim();
 			return block.lines.map((line) => line.map((part) => part.text).join('')).join(' ');
 		})
 		.join(' ')
 		.trim();
 }
 
-export type Format = 'bold' | 'italic' | 'underline' | 'h2' | 'h3' | 'bullets' | 'numbered';
+export type Format = 'bold' | 'italic' | 'underline' | 'code' | 'h2' | 'h3' | 'bullets' | 'numbered';
 
 /** Applies a format to the selected text, returning the new text and where the selection ends up. */
 export function applyFormat(value: string, start: number, end: number, format: Format): { value: string; start: number; end: number } {
@@ -69,6 +87,16 @@ export function applyFormat(value: string, start: number, end: number, format: F
 	if (format === 'bold') return wrap('**');
 	if (format === 'italic') return wrap('*');
 	if (format === 'underline') return wrap('__');
+	if (format === 'code') {
+		const selected = value.slice(start, end);
+		if (selected.includes('\n')) {
+			const inner = selected || 'code';
+			const open = '```\n';
+			const close = '\n```';
+			return { value: `${value.slice(0, start)}${open}${inner}${close}${value.slice(end)}`, start: start + open.length, end: start + open.length + inner.length };
+		}
+		return wrap('`');
+	}
 	// Line formats work on whole lines touched by the selection.
 	const lineStart = start === 0 ? 0 : value.lastIndexOf('\n', start - 1) + 1;
 	// A selection that ends right after a line break does not include the next line.

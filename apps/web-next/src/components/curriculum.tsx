@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Star, TriangleAlert } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronDown, Star, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
@@ -24,11 +24,38 @@ type Props = {
 	compact?: boolean;
 	/** Saved position of the lesson to resume (the active row); shown as "Resume at m:ss" when set. */
 	resumeSeconds?: number | null;
+	/** Show Up/Down reorder buttons on siblings (must only be enabled when all siblings are visible). */
+	reorderMode?: boolean;
+	reordering?: boolean;
+	onMove?: (parent: string, children: string[]) => void;
+	/** Optional batch action for marking a module's lessons completed/uncompleted. */
+	onBatchComplete?: (mediaIds: string[], completed: boolean) => void;
+	batchPending?: boolean;
 };
 
-type NodeProps = Props & { numbers: ReadonlyMap<string, number> };
+type NodeProps = Props & {
+	numbers: ReadonlyMap<string, number>;
+	parentPath: string;
+	siblingPaths: string[];
+	siblingIndex: number;
+};
 
 export const lessonMediaId = (node: CatalogNode) => [...node.files, ...node.looseFiles].find((file) => file.kind === 'media' && file.mediaId)?.mediaId ?? lessonPdfId(node);
+const moduleMediaIds = (node: CatalogNode): string[] => {
+	if (node.role === 'lesson') {
+		if (isLessonMissing(node)) return [];
+		const id = lessonMediaId(node);
+		return id ? [id] : [];
+	}
+	return node.children.flatMap(moduleMediaIds);
+};
+function swapSiblings(paths: string[], index: number, delta: -1 | 1): string[] {
+	const next = [...paths];
+	const target = index + delta;
+	if (target < 0 || target >= next.length) return next;
+	[next[index], next[target]] = [next[target], next[index]];
+	return next;
+}
 // Walks the children rather than trusting path prefixes: on a course picked inside an SMB or
 // WebDAV source a module's path is relative to the course while its lessons keep the full path.
 const contains = (node: CatalogNode, path: string | null | undefined): boolean => Boolean(path) && (node.path === path || path!.startsWith(`${node.path}/`) || node.children.some((child) => contains(child, path)));
@@ -49,10 +76,52 @@ const chevron = 'size-4 shrink-0 text-muted-foreground transition-transform dura
  */
 export function Curriculum(props: Props) {
 	const numbers = lessonNumbers(props.nodes);
+	const rootSiblings = props.nodes.map((node) => node.path);
 	return (
 		<ul className={cn(props.compact ? 'space-y-2' : 'space-y-6')}>
-			{props.nodes.map((node, index) => <CurriculumNode key={node.path} node={node} index={index + 1} numbers={numbers} {...props} />)}
+			{props.nodes.map((node, index) => (
+				<CurriculumNode
+					key={node.path}
+					node={node}
+					index={index + 1}
+					numbers={numbers}
+					parentPath=""
+					siblingPaths={rootSiblings}
+					siblingIndex={index}
+					{...props}
+				/>
+			))}
 		</ul>
+	);
+}
+
+function ReorderControls({ title, siblingIndex, siblingPaths, parentPath, disabled, onMove }: { title: string; siblingIndex: number; siblingPaths: string[]; parentPath: string; disabled?: boolean; onMove: (parent: string, children: string[]) => void }) {
+	if (siblingPaths.length < 2) return null;
+	return (
+		<span className="inline-flex shrink-0 items-center gap-0.5">
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="size-9"
+				disabled={disabled || siblingIndex === 0}
+				aria-label={tr(`Move “${title}” up`, `Mover “${title}” para cima`)}
+				onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMove(parentPath, swapSiblings(siblingPaths, siblingIndex, -1)); }}
+			>
+				<ArrowUp className="size-3.5" aria-hidden="true" />
+			</Button>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="size-9"
+				disabled={disabled || siblingIndex === siblingPaths.length - 1}
+				aria-label={tr(`Move “${title}” down`, `Mover “${title}” para baixo`)}
+				onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMove(parentPath, swapSiblings(siblingPaths, siblingIndex, 1)); }}
+			>
+				<ArrowDown className="size-3.5" aria-hidden="true" />
+			</Button>
+		</span>
 	);
 }
 
@@ -73,6 +142,9 @@ function CurriculumNode({ node, index, moduleTitle, ...props }: NodeProps & { no
 	if (node.role === 'lesson') return <LessonRow node={node} moduleTitle={moduleTitle} {...props} />;
 	const { done, total } = courseProgress(node, props.completed);
 	const current = contains(node, props.activePath);
+	const childSiblings = node.children.map((child) => child.path);
+	const mediaIds = !props.compact && props.onBatchComplete ? moduleMediaIds(node) : [];
+	const allModuleDone = mediaIds.length > 0 && mediaIds.every((id) => props.completed.has(id));
 	return (
 		<li>
 			<details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group">
@@ -80,12 +152,36 @@ function CurriculumNode({ node, index, moduleTitle, ...props }: NodeProps & { no
 					{index !== undefined && <span className="w-6 shrink-0 text-right text-[12.5px] tabular-nums text-muted-foreground" aria-hidden="true">{index}</span>}
 					<span className={cn('min-w-0 flex-1 font-semibold', props.compact ? 'text-sm leading-snug' : 'text-[15px] tracking-tight')}>{node.title}{current && props.compact && <span className="sr-only">{tr(' (current module)', ' (módulo atual)')}</span>}</span>
 					{total > 0 && <span className="shrink-0 text-[12.5px] tabular-nums text-muted-foreground">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span>}
+					{props.reorderMode && props.onMove && (
+						<ReorderControls title={node.title} siblingIndex={props.siblingIndex} siblingPaths={props.siblingPaths} parentPath={props.parentPath} disabled={props.reordering} onMove={props.onMove} />
+					)}
 					<ChevronDown className={chevron} aria-hidden="true" />
 				</summary>
+				{!props.compact && studySyncSupported && props.onBatchComplete && mediaIds.length > 0 && (
+					<div className="flex justify-end border-b border-[var(--study-rule)] py-1.5">
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							disabled={props.batchPending}
+							onClick={() => props.onBatchComplete!(mediaIds, !allModuleDone)}
+						>
+							{allModuleDone ? tr('Mark module incomplete', 'Desmarcar módulo') : tr('Mark module complete', 'Marcar módulo como concluído')}
+						</Button>
+					</div>
+				)}
 				{node.children.length > 0 && (
 					<ul>
-						{node.children.map((child) => (
-							<CurriculumNode key={child.path} node={child} moduleTitle={node.children.length === 1 ? node.title : undefined} {...props} />
+						{node.children.map((child, childIndex) => (
+							<CurriculumNode
+								key={child.path}
+								node={child}
+								moduleTitle={node.children.length === 1 ? node.title : undefined}
+								{...props}
+								parentPath={node.path}
+								siblingPaths={childSiblings}
+								siblingIndex={childIndex}
+							/>
 						))}
 					</ul>
 				)}
@@ -94,7 +190,7 @@ function CurriculumNode({ node, index, moduleTitle, ...props }: NodeProps & { no
 	);
 }
 
-function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePath, compact, resumeSeconds, numbers }: NodeProps & { node: CatalogNode; moduleTitle?: string }) {
+function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePath, compact, resumeSeconds, numbers, reorderMode, reordering, onMove, parentPath, siblingPaths, siblingIndex }: NodeProps & { node: CatalogNode; moduleTitle?: string }) {
 	const setCompleted = useSetLessonCompleted();
 	const toggleFavorite = useToggleLessonFavorite();
 	const mediaId = lessonMediaId(node);
@@ -159,6 +255,9 @@ function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePa
 					aria-label={isFavorite ? tr(`Remove “${node.title}” from favorites`, `Remover “${node.title}” dos favoritos`) : tr(`Add “${node.title}” to favorites`, `Adicionar “${node.title}” aos favoritos`)}>
 					<Star className={cn(isFavorite ? 'fill-primary text-primary' : 'text-muted-foreground')} />
 				</Button>
+			)}
+			{reorderMode && onMove && (
+				<ReorderControls title={label} siblingIndex={siblingIndex} siblingPaths={siblingPaths} parentPath={parentPath} disabled={reordering} onMove={onMove} />
 			)}
 		</li>
 	);

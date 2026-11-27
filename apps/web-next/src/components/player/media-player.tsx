@@ -12,6 +12,7 @@ import {
 	resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, subtitleFormat, subtitleLanguage, type PlaybackSpeed
 } from '@/lib/player';
 import { lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from '@/lib/player-preferences';
+import { decodeText } from '@/lib/text-lesson';
 import { transport, type FileEntry, type Lesson } from '@/lib/transport';
 
 export type PlayerHandle = { seek: (seconds: number) => void; pause: () => void; play: () => void };
@@ -39,25 +40,22 @@ type Props = {
 };
 
 const SAVE_INTERVAL_MS = 5000;
-// HTTP build only. The inline build constant lets the bundler drop the `fetch` from the
-// desktop bundle, which must never open the network (src/build-output.test.ts).
-const loadSrtAsVtt = __LEARNVAULT_TRANSPORT__ === 'http'
-	? async (url: string) => {
-		const response = await fetch(url);
-		if (!response.ok) throw new Error(tr('Failed to load subtitle.', 'Falha ao carregar legenda.'));
-		return URL.createObjectURL(new Blob([srtToWebVtt(await response.text())], { type: 'text/vtt' }));
-	}
-	: async (_url: string): Promise<string | null> => null;
+const SUBTITLE_SLICE_LIMIT = 512 * 1024;
+
+async function loadSrtAsVtt(subtitle: FileEntry, courseId: string): Promise<string> {
+	const { bytes } = await transport.readMediaSlice(subtitle, courseId, SUBTITLE_SLICE_LIMIT);
+	return URL.createObjectURL(new Blob([srtToWebVtt(decodeText(bytes))], { type: 'text/vtt' }));
+}
 
 /** Turns a subtitle file into something `<track>` can play, or explains why it cannot. */
 function useCaptions(subtitle: FileEntry | null, courseId: string) {
 	const url = subtitle ? transport.mediaUrl(subtitle, courseId) : null;
 	const format = subtitle ? subtitleFormat(subtitle.path) : null;
 	const converted = useQuery({
-		queryKey: ['captions', url],
-		enabled: Boolean(url) && format === 'srt' && srtConversionSupported,
+		queryKey: ['captions', courseId, subtitle?.mediaId ?? subtitle?.path ?? url],
+		enabled: Boolean(subtitle && url && format === 'srt' && srtConversionSupported),
 		staleTime: Infinity,
-		queryFn: () => loadSrtAsVtt(url!)
+		queryFn: () => loadSrtAsVtt(subtitle!, courseId)
 	});
 	if (!subtitle || !url) return { src: null, message: '', download: null };
 	if (format === 'vtt') return { src: url, message: '', download: url };

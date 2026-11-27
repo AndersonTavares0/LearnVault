@@ -58,6 +58,7 @@ fn main() {
             "desktop_restart_to_update",
             "desktop_media_capabilities",
             "desktop_open_in_system_player",
+            "desktop_read_media_slice",
             "desktop_playback_preferences",
             "desktop_save_playback_preferences",
             "desktop_sync_state",

@@ -48,4 +48,11 @@ describe('markdown', () => {
 	it('strips block and inline markers for compact plain-text previews', () => {
 		expect(plainTextMarkdown('## Summary\nRun **important** `docker image prune`\n- first\n- second')).toBe('Summary Run important docker image prune first · second');
 	});
+
+	it('parses fenced code blocks cleanly without interpreting inner markers', () => {
+		expect(parseMarkdown('```rs\nlet x = **not bold**;\n```')).toEqual([
+			{ kind: 'code', language: 'rs', code: 'let x = **not bold**;' }
+		]);
+		expect(applyFormat('a\nb', 0, 3, 'code').value).toBe('```\na\nb\n```');
+	});
 });

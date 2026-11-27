@@ -93,13 +93,14 @@ export function useRescan() {
 	});
 }
 
-/** Desktop opens the native folder picker; the server registers the path an admin typed. */
+/** Desktop opens the native folder picker; the server registers the path or discovered folder. */
 export function useImportCourse() {
 	const client = useQueryClient();
 	return useMutation({
-		mutationFn: async (path?: string) => {
+		mutationFn: async (input?: string | { path?: string; folder?: string }) => {
 			if (transportKind === 'desktop') await transport.importCourse();
-			else await transport.importCoursePath(path?.trim() ?? '');
+			else if (typeof input === 'string') await transport.importCoursePath(input.trim());
+			else await transport.importCoursePath(input?.path?.trim() ?? '', input?.folder?.trim());
 			await transport.rescan();
 		},
 		onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: keys.catalog }), client.invalidateQueries({ queryKey: keys.recent })])
@@ -135,6 +136,33 @@ export function useSetLessonCompleted() {
 			client.setQueryData<StudyProgress[]>(keys.recent, (items = []) => [updated, ...items.filter((item) => item.mediaId !== updated.mediaId)]);
 			void client.invalidateQueries({ queryKey: keys.rewards });
 		}
+	});
+}
+
+/** Marks several lessons completed or not in one batch without flooding the query cache. */
+export function useSetLessonsCompleted() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: async ({ mediaIds, completed }: { mediaIds: string[]; completed: boolean }) => {
+			const updated: StudyProgress[] = [];
+			for (const mediaId of mediaIds) updated.push(await transport.setCompleted(mediaId, completed));
+			return updated;
+		},
+		onSuccess: (updated) => {
+			const byId = new Map(updated.map((item) => [item.mediaId, item]));
+			client.setQueryData<StudyProgress[]>(keys.recent, (items = []) => [...updated, ...items.filter((item) => !byId.has(item.mediaId))]);
+			for (const item of updated) client.setQueryData(['progress', item.mediaId], item);
+			void client.invalidateQueries({ queryKey: keys.rewards });
+		}
+	});
+}
+
+export function useSetCourseOrder() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: ({ courseId, parent, children }: { courseId: string; parent: string; children: string[] }) =>
+			transport.setCourseOrder(courseId, parent, children),
+		onSuccess: () => client.invalidateQueries({ queryKey: keys.catalog })
 	});
 }
 
@@ -181,6 +209,14 @@ export function useSearch(query: string, enabled = true) {
 
 export function useFocusSummary(enabled = true) {
 	return useQuery({ queryKey: ['focus-summary'], enabled: enabled && studySyncSupported, queryFn: () => transport.focusSummary() });
+}
+
+export function useFocusSessions(enabled = true, limit = 100) {
+	return useQuery({
+		queryKey: ['focus-sessions', limit],
+		enabled: enabled && studySyncSupported && typeof transport.listFocusSessions === 'function',
+		queryFn: () => transport.listFocusSessions(limit)
+	});
 }
 
 export function useClaimMission() {

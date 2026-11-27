@@ -320,6 +320,7 @@ async fn apply_course(
             root.as_ref().unwrap_or(&registered_root).as_path(),
         )
         .ok()?;
+        drop(database);
         if let Some(root) = root {
             let _ =
                 crate::covers::auto_detect_course_cover(&covers_dir, &library_id, root.as_path());

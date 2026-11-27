@@ -228,6 +228,21 @@ pub(crate) async fn media_transcode(
         Err(_) => return service_unavailable(),
     };
 
+    if method != Method::HEAD && !is_ffmpeg_available() {
+        return (
+            StatusCode::NOT_IMPLEMENTED,
+            [
+                (header::CACHE_CONTROL, "private, no-store"),
+                (header::CONTENT_TYPE, "application/json"),
+            ],
+            Json(serde_json::json!({
+                "error": "transcoding_unavailable",
+                "message": "FFmpeg is not available on the server for on-demand transcoding"
+            })),
+        )
+            .into_response();
+    }
+
     let stream_permit = if method == Method::HEAD {
         None
     } else {
@@ -278,21 +293,6 @@ pub(crate) async fn media_transcode(
         );
         headers.insert(header::ACCEPT_RANGES, HeaderValue::from_static("none"));
         return response;
-    }
-
-    if !is_ffmpeg_available() {
-        return (
-            StatusCode::NOT_IMPLEMENTED,
-            [
-                (header::CACHE_CONTROL, "private, no-store"),
-                (header::CONTENT_TYPE, "application/json"),
-            ],
-            Json(serde_json::json!({
-                "error": "transcoding_unavailable",
-                "message": "FFmpeg is not available on the server for on-demand transcoding"
-            })),
-        )
-            .into_response();
     }
 
     let Some(stream_permit) = stream_permit else {

@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { Catalog, CatalogNode, FileEntry } from '@/lib/transport';
+import { transport, type Catalog, type CatalogNode, type FileEntry } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
 
 const file = (name: string, kind: string, availability = 'available'): FileEntry => ({ name, path: `rust/${name}`, size: 1, mediaId: kind === 'media' ? name : undefined, kind, availability });
@@ -117,6 +117,41 @@ describe('course page', () => {
 			expect(covers[0].hasAttribute('data-ready')).toBe(detail);
 		} finally {
 			read.mockRestore();
+		}
+	});
+
+	it('filters lessons, marks a module complete, reorders siblings, and resets progress', async () => {
+		const setCompleted = vi.spyOn(transport, 'setCompleted').mockImplementation(async (mediaId, completed) => ({
+			mediaId,
+			positionSeconds: 0,
+			completed,
+			updatedAt: 10,
+			recorded: true
+		}));
+		const setOrder = vi.spyOn(transport, 'setCourseOrder').mockResolvedValue(undefined);
+		try {
+			renderApp('/course/rust', { catalog, recent: [{ mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
+			await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
+
+			// Filter incomplete lessons
+			fireEvent.click(screen.getByRole('button', { name: 'Incomplete only' }));
+			expect(screen.queryByRole('link', { name: /^Ownership/ })).toBeNull();
+			expect(screen.getByRole('link', { name: /^Borrowing/ })).toBeTruthy();
+			fireEvent.click(screen.getByRole('button', { name: 'Incomplete only' }));
+
+			// Expand all and mark Basics module complete (Ownership + Borrowing)
+			fireEvent.click(screen.getByRole('button', { name: 'Expand all' }));
+			fireEvent.click(screen.getByRole('button', { name: 'Mark module complete' }));
+			await waitFor(() => expect(setCompleted).toHaveBeenCalledWith('own.mp4', true));
+			expect(setCompleted).toHaveBeenCalledWith('borrow.mp4', true);
+
+			// Reorder mode: move Basics down below Advanced
+			fireEvent.click(screen.getByRole('button', { name: 'Reorder' }));
+			fireEvent.click(screen.getByRole('button', { name: 'Move “Basics” down' }));
+			await waitFor(() => expect(setOrder).toHaveBeenCalledWith('rust', '', ['rust/Advanced', 'rust/Basics']));
+		} finally {
+			setCompleted.mockRestore();
+			setOrder.mockRestore();
 		}
 	});
 });

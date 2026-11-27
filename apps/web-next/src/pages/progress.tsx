@@ -14,8 +14,9 @@ import { buildLibrary } from '@/lib/library';
 import { studySyncSupported } from '@/lib/player';
 import { href } from '@/lib/router';
 import { cn } from '@/lib/utils';
-import { useCatalog, useClaimMission, useFavorites, useFocusSummary, useRecent, useRewards, useSession } from '@/app/data';
+import { useCatalog, useClaimMission, useFavorites, useFocusSessions, useFocusSummary, useRecent, useRewards, useSession } from '@/app/data';
 import { PageHeader } from '@/app/shell';
+import type { FocusSessionRecord } from '@/lib/transport';
 
 const weekday = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { weekday: 'short' });
 const localDayKey = (seconds: number) => {
@@ -32,11 +33,13 @@ export function ProgressPage() {
 	const rewards = useRewards();
 	const profile = useSession().data?.user?.userId ?? '';
 	const focus = useFocusSummary();
+	const sessions = useFocusSessions();
 	const catalog = useCatalog();
 	const recent = useRecent();
 	const favorites = useFavorites();
 	const claim = useClaimMission();
 	const [range, setRange] = useState<'week' | 'all'>('week');
+	const [showAllSessions, setShowAllSessions] = useState(false);
 	const library = useMemo(() => buildLibrary({ catalog: catalog.data, recent: recent.data ?? [], favoriteCourseIds: new Set(favorites.data?.courseIds ?? []) }), [catalog.data, recent.data, favorites.data]);
 	const game = rewards.data ? buildGamification({ rewards: rewards.data, completedCourses: library.entries.filter((entry) => entry.status === 'completed').length }) : null;
 	const dayActivity = useMemo(() => {
@@ -65,6 +68,7 @@ export function ProgressPage() {
 		}
 		return map;
 	}, [recent.data, focus.data?.days, rewards.data?.study.activeDaysYear]);
+	const allTimeDays = useMemo(() => buildAllTimeChartDays(sessions.data ?? [], rewards.data?.study.today ?? ''), [sessions.data, rewards.data?.study.today]);
 
 	if (!studySyncSupported) return <PageHeader title={tr('Your progress', 'Seu progresso')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	if (rewards.isPending) return <><PageHeader title={tr('Your progress', 'Seu progresso')} /><p role="status" className="text-muted-foreground">{tr('Loading your progress…', 'Carregando seu progresso…')}</p></>;
@@ -77,10 +81,11 @@ export function ProgressPage() {
 
 	const minutes = new Map((focus.data?.days ?? []).map((day) => [day.day, day.minutes]));
 	const weekDays = study.days.map((day) => ({ day: day.day, label: weekday(day.day), minutes: minutes.get(day.day) ?? 0, active: day.active }));
+	const chartDays = range === 'week' ? weekDays : (allTimeDays.length > 0 ? allTimeDays : weekDays);
 	const total = range === 'week' ? focus.data?.weekMinutes ?? weekDays.reduce((sum, day) => sum + day.minutes, 0) : focus.data?.totalMinutes ?? 0;
-	const best = weekDays.reduce<(typeof weekDays)[number] | null>((top, day) => (day.minutes > (top?.minutes ?? 0) ? day : top), null);
+	const best = chartDays.reduce<(typeof chartDays)[number] | null>((top, day) => (day.minutes > (top?.minutes ?? 0) ? day : top), null);
 	const focusFailed = Boolean(focus.error);
-	const noFocus = !focusFailed && weekDays.every((day) => day.minutes === 0);
+	const noFocus = !focusFailed && chartDays.every((day) => day.minutes === 0);
 	const lessonsDone = library.entries.reduce((sum, entry) => sum + entry.done, 0);
 	const startedCourses = library.entries.filter((entry) => entry.status !== 'not_started').length;
 	const resume = library.resume[0];
@@ -140,13 +145,16 @@ export function ProgressPage() {
 				<Panel variant="open" className="lg:col-span-12"><ActivityHeatmap today={study.today} activeDays={study.activeDaysYear} activity={dayActivity} /></Panel>
 
 				<Panel variant="open" className="flex flex-col lg:col-span-8"><section aria-labelledby="focus-heading" className="flex flex-1 flex-col space-y-4">
-					<h2 id="focus-heading" className="text-[15px] font-semibold">{tr('Weekly breakdown', 'Detalhamento semanal')}</h2>
+					<h2 id="focus-heading" className="text-[15px] font-semibold">{range === 'week' ? tr('Weekly breakdown', 'Detalhamento semanal') : tr('All-time focus', 'Foco em todo o tempo')}</h2>
 					{focus.isPending ? (
 						<p role="status" className="text-sm text-muted-foreground">{tr('Loading focus statistics…', 'Carregando estatísticas de foco…')}</p>
 					) : focusFailed ? (
 						<p role="alert" className="text-sm text-destructive">{tr('Focus statistics could not be loaded.', 'Não foi possível carregar as estatísticas de foco.')}</p>
 					) : (
-						<FocusChart days={weekDays} emptyAction={noFocus ? <Link to={focusHref} className={buttonVariants({ variant: 'outline' })}>{tr('Start a focus session', 'Iniciar uma sessão de foco')}</Link> : undefined} />
+						<FocusChart range={range} days={chartDays} emptyAction={noFocus ? <Link to={focusHref} className={buttonVariants({ variant: 'outline' })}>{tr('Start a focus session', 'Iniciar uma sessão de foco')}</Link> : undefined} />
+					)}
+					{!focusFailed && (sessions.data?.length ?? 0) > 0 && (
+						<FocusSessionLog sessions={sessions.data!} expanded={showAllSessions} onToggle={() => setShowAllSessions((value) => !value)} />
 					)}
 				</section></Panel>
 
@@ -241,17 +249,56 @@ function formatMinutes(total: number): string {
 }
 
 /**
- * Focus minutes for each day of the week as a smooth area, with the busiest day labelled. The
- * numbers are also in a table for screen readers, so nothing depends on seeing the curve.
+ * Buckets historical completed focus sessions for the All-time chart: daily up to 14 distinct days,
+ * or monthly across longer history, capped cleanly to readable chart points.
  */
-function FocusChart({ days, emptyAction }: { days: ChartDay[]; emptyAction?: ReactNode }) {
+function buildAllTimeChartDays(sessions: FocusSessionRecord[], today: string): ChartDay[] {
+	const completed = sessions.filter((session) => session.kind === 'focus' && session.completed && session.endedAt > 0);
+	if (completed.length === 0) return [];
+	const byDay = new Map<string, number>();
+	for (const session of completed) {
+		const day = localDayKey(session.endedAt);
+		byDay.set(day, (byDay.get(day) ?? 0) + Math.floor(session.actualSeconds / 60));
+	}
+	const sortedDays = [...byDay.keys()].sort();
+	const useMonths = sortedDays.length > 14;
+	if (!useMonths) {
+		const recent = sortedDays.slice(-10);
+		return recent.map((day) => ({
+			day,
+			label: new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric' }),
+			minutes: byDay.get(day) ?? 0,
+			active: day === today || (byDay.get(day) ?? 0) > 0
+		}));
+	}
+	const byMonth = new Map<string, number>();
+	for (const [day, mins] of byDay.entries()) {
+		const month = day.slice(0, 7);
+		byMonth.set(month, (byMonth.get(month) ?? 0) + mins);
+	}
+	return [...byMonth.entries()]
+		.sort(([a], [b]) => a.localeCompare(b))
+		.slice(-12)
+		.map(([month, mins]) => ({
+			day: month,
+			label: new Date(`${month}-15T12:00:00`).toLocaleDateString(getLocale(), { month: 'short' }),
+			minutes: mins,
+			active: mins > 0
+		}));
+}
+
+/**
+ * Focus minutes for each day of the week (or all-time buckets) as a smooth area, with the peak labelled.
+ * The numbers are also in a table for screen readers, so nothing depends on seeing the curve.
+ */
+function FocusChart({ range, days, emptyAction }: { range: 'week' | 'all'; days: ChartDay[]; emptyAction?: ReactNode }) {
 	const width = 700;
 	const empty = days.every((day) => day.minutes === 0);
 	const height = 170;
 	const top = 28;
 	const max = Math.max(1, ...days.map((day) => day.minutes));
 	const step = days.length > 1 ? (width - 40) / (days.length - 1) : 0;
-	const points = days.map((day, index) => ({ x: 20 + index * step, y: top + (1 - day.minutes / max) * (height - top - 8) }));
+	const points = days.map((day, index) => ({ x: days.length === 1 ? width / 2 : 20 + index * step, y: top + (1 - day.minutes / max) * (height - top - 8) }));
 	// A smooth line through the points: each segment's control points sit a third of the way along.
 	const line = points.map((point, index) => {
 		if (index === 0) return `M${point.x},${point.y}`;
@@ -259,14 +306,17 @@ function FocusChart({ days, emptyAction }: { days: ChartDay[]; emptyAction?: Rea
 		const dx = (point.x - before.x) / 3;
 		return `C${before.x + dx},${before.y} ${point.x - dx},${point.y} ${point.x},${point.y}`;
 	}).join(' ');
-	const area = points.length ? `${line} L${points.at(-1)!.x},${height} L${points[0].x},${height} Z` : '';
+	const area = points.length > 1 ? `${line} L${points.at(-1)!.x},${height} L${points[0].x},${height} Z` : '';
 	const peak = days.findIndex((day) => day.minutes === max && day.minutes > 0);
+	const chartLabel = range === 'week'
+		? tr('Chart of focus minutes for each day this week; the same numbers are in the table below.', 'Gráfico dos minutos de foco em cada dia desta semana; os mesmos números estão na tabela abaixo.')
+		: tr('Chart of focus minutes across recorded study periods; the same numbers are in the table below.', 'Gráfico dos minutos de foco ao longo dos períodos registrados; os mesmos números estão na tabela abaixo.');
 	return (
 		<div className="flex flex-1 flex-col">
 			{!empty ? (
-				<svg viewBox={`0 0 ${width} ${height + 24}`} role="img" aria-label={tr('Chart of focus minutes for each day this week; the same numbers are in the table below.', 'Gráfico dos minutos de foco em cada dia desta semana; os mesmos números estão na tabela abaixo.')} className="mt-2 w-full">
-				<path d={area} className="fill-brand-tint" />
-				<path d={line} fill="none" strokeWidth="2.5" strokeLinecap="round" className="stroke-primary" />
+				<svg viewBox={`0 0 ${width} ${height + 24}`} role="img" aria-label={chartLabel} className="mt-2 w-full">
+				{area && <path d={area} className="fill-brand-tint" />}
+				{points.length > 1 && <path d={line} fill="none" strokeWidth="2.5" strokeLinecap="round" className="stroke-primary" />}
 				{peak >= 0 && (
 					<g>
 						<circle cx={points[peak].x} cy={points[peak].y} r="4.5" className="fill-card stroke-primary" strokeWidth="2.5" />
@@ -300,6 +350,36 @@ function FocusChart({ days, emptyAction }: { days: ChartDay[]; emptyAction?: Rea
 					<tbody>{days.map((day) => <tr key={day.day}><th scope="row">{day.label}</th><td>{day.minutes}</td></tr>)}</tbody>
 				</table>
 			</div>
+		</div>
+	);
+}
+
+function FocusSessionLog({ sessions, expanded, onToggle }: { sessions: FocusSessionRecord[]; expanded: boolean; onToggle: () => void }) {
+	const visible = expanded ? sessions.slice(0, 20) : sessions.slice(0, 5);
+	const kindLabel = (kind: FocusSessionRecord['kind']) =>
+		kind === 'focus' ? tr('Focus', 'Foco') : kind === 'short' ? tr('Short break', 'Pausa curta') : tr('Long break', 'Pausa longa');
+	return (
+		<div className="border-t border-[var(--study-rule)] pt-3">
+			<div className="flex items-center justify-between gap-2">
+				<h3 className="text-xs font-semibold tracking-wider uppercase text-muted-foreground">{tr('Recent sessions', 'Sessões recentes')}</h3>
+				{sessions.length > 5 && (
+					<Button variant="ghost" size="sm" onClick={onToggle}>{expanded ? tr('Show less', 'Mostrar menos') : tr(`Show ${Math.min(20, sessions.length)}`, `Mostrar ${Math.min(20, sessions.length)}`)}</Button>
+				)}
+			</div>
+			<ul className="mt-2 divide-y divide-[var(--study-rule)] text-sm">
+				{visible.map((session) => (
+					<li key={session.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 py-2">
+						<span className="font-medium text-foreground">{kindLabel(session.kind)}</span>
+						<span className="study-timecode text-xs text-muted-foreground">{formatMinutes(session.actualSeconds / 60)}</span>
+						<span className={cn('text-xs', session.completed ? 'text-primary' : 'text-muted-foreground')}>
+							{session.completed ? tr('Completed', 'Concluída') : tr('Stopped early', 'Encerrada antes')}
+						</span>
+						<time dateTime={new Date(session.endedAt * 1000).toISOString()} className="ml-auto text-xs text-muted-foreground">
+							{new Date(session.endedAt * 1000).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+						</time>
+					</li>
+				))}
+			</ul>
 		</div>
 	);
 }

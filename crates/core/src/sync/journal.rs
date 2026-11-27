@@ -271,7 +271,7 @@ fn backfill(conn: &Connection, owner_id: &str) -> Result<()> {
             },
         );
     }
-    let mut statement = conn.prepare("SELECT card_id, media_id, position_seconds, front, back, created_at, updated_at FROM flashcard WHERE owner_id = ?1")?;
+    let mut statement = conn.prepare("SELECT card_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at FROM flashcard WHERE owner_id = ?1")?;
     for row in statement.query_map([owner_id], |row| {
         Ok((
             row.get::<_, String>(0)?,
@@ -281,9 +281,21 @@ fn backfill(conn: &Connection, owner_id: &str) -> Result<()> {
             row.get::<_, String>(4)?,
             row.get::<_, i64>(5)?,
             row.get::<_, i64>(6)?,
+            row.get::<_, i64>(7)?,
+            row.get::<_, i64>(8)?,
         ))
     })? {
-        let (card_id, media_id, position_seconds, front, back, created_at, updated_at) = row?;
+        let (
+            card_id,
+            media_id,
+            position_seconds,
+            front,
+            back,
+            interval_days,
+            next_due,
+            created_at,
+            updated_at,
+        ) = row?;
         add(
             updated_at,
             SyncPayload::FlashcardCreated {
@@ -293,6 +305,8 @@ fn backfill(conn: &Connection, owner_id: &str) -> Result<()> {
                 front,
                 back,
                 created_at,
+                interval_days: Some(interval_days),
+                next_due: Some(next_due),
             },
         );
     }

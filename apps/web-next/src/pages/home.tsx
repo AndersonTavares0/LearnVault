@@ -1,4 +1,4 @@
-import { Award, ChevronRight, Flame, FolderPlus, Play, RefreshCw, Search, Sparkles, Star, Target } from 'lucide-react';
+import { Award, ChevronRight, Flame, FolderPlus, Play, RefreshCw, Search, Sparkles, Star, Target, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { flushSync } from 'react-dom';
 import { Link, useNavigate, useSearchParams } from 'react-router';
@@ -21,7 +21,7 @@ import { buildLibrary, type CourseEntry, type LibraryFilter } from '@/lib/librar
 import { LIBRARY_VIEW_STORAGE_KEY, parseLibraryView, persistLibrarySort, persistLibraryView, readLibrarySort, type LibrarySort, type LibraryView } from '@/lib/library-view';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findLessonLocation, href, type LessonLocation } from '@/lib/router';
-import { courseIdOf, isCredentialsChange, transportKind, type Catalog, type CatalogNode, type RewardSummary, type StudyProgress } from '@/lib/transport';
+import { courseIdOf, isCredentialsChange, transportKind, type Catalog, type CatalogNode, type DiscoveredCourse, type RewardSummary, type StudyProgress } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { refreshMessage } from '@/lib/library-refresh';
 import { useCatalog, useFavorites, useImportCourse, useRecent, useRescan, useRewards, useSession } from '@/app/data';
@@ -54,6 +54,8 @@ export function HomePage() {
 	});
 	const [sort, setSort] = useState<LibrarySort>(() => readLibrarySort(safeStorage()));
 	const [message, setMessage] = useState('');
+	const [discovered, setDiscovered] = useState<DiscoveredCourse[]>([]);
+	const importDiscovered = useImportCourse();
 
 	const query = params.get('q') ?? '';
 	const filter = (params.get('filter') as LibraryFilter | null) ?? 'all';
@@ -113,12 +115,50 @@ export function HomePage() {
 				{user?.isAdmin && library.entries.length > 0 && (
 					<div className="flex flex-wrap items-center justify-end gap-2">
 						<p role="status" aria-live="polite" className="order-last w-full text-right text-xs font-medium text-muted-foreground empty:hidden sm:order-first sm:w-auto sm:text-left">{message}</p>
-						<LibraryActions onMessage={setMessage} />
+						<LibraryActions onMessage={setMessage} onDiscovered={setDiscovered} />
 					</div>
 				)}
 			</div>
 			{(!user?.isAdmin || library.entries.length === 0) && (
 				<p role="status" aria-live="polite" className="text-sm text-muted-foreground empty:hidden">{message}</p>
+			)}
+			{user?.isAdmin && discovered.length > 0 && (
+				<section aria-label={tr('New course folders found', 'Novas pastas de cursos encontradas')} className="study-surface flex flex-col gap-3 p-4">
+					<div className="flex items-start justify-between gap-3">
+						<div className="space-y-0.5">
+							<h2 className="text-sm font-semibold">{tr('New folders in your library', 'Novas pastas na sua biblioteca')}</h2>
+							<p className="text-xs text-muted-foreground">{tr('These folders were found under the library folder and have not been imported yet.', 'Estas pastas foram encontradas na pasta raiz da biblioteca e ainda não foram importadas.')}</p>
+						</div>
+						<Button type="button" variant="ghost" size="icon-xs" aria-label={tr('Dismiss discovered folders', 'Fechar pastas encontradas')} onClick={() => setDiscovered([])}><X /></Button>
+					</div>
+					<ul className="divide-y divide-[var(--study-rule)]">
+						{discovered.map((item) => (
+							<li key={item.id} className="flex flex-wrap items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+								<div className="min-w-0">
+									<p className="truncate text-sm font-medium">{item.title || item.folder}</p>
+									<p className="truncate text-xs text-muted-foreground">{item.folder}</p>
+								</div>
+								<Button
+									type="button"
+									size="sm"
+									variant="outline"
+									disabled={importDiscovered.isPending}
+									onClick={() => {
+										importDiscovered.mutate({ folder: item.folder }, {
+											onSuccess: () => {
+												setDiscovered((current) => current.filter((entry) => entry.id !== item.id));
+												setMessage(tr(`Imported “${item.title || item.folder}”.`, `“${item.title || item.folder}” importado.`));
+											},
+											onError: (error) => setMessage(error instanceof Error ? error.message : tr('Could not import folder.', 'Não foi possível importar a pasta.'))
+										});
+									}}
+								>
+									<FolderPlus />{tr('Import', 'Importar')}
+								</Button>
+							</li>
+						))}
+					</ul>
+				</section>
 			)}
 
 			{wide && library.entries.length > 0 ? (
@@ -141,7 +181,7 @@ export function HomePage() {
 				{pills}
 				{library.entries.length > 0 && <div className="flex flex-wrap items-center gap-2">{search}{tools}</div>}
 				{library.entries.length === 0 ? (
-					<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} onMessage={setMessage} />
+					<EmptyLibrary isAdmin={Boolean(user?.isAdmin)} onMessage={setMessage} onDiscovered={setDiscovered} />
 				) : library.visible.length === 0 ? (
 					<EmptyResults filter={query || category ? 'all' : filter} onClear={() => setParams({}, { replace: true })} />
 				) : view === 'shelf' ? (
@@ -539,7 +579,7 @@ function Filters(props: { categories: string[]; category: string | null; onCateg
 	);
 }
 
-export function LibraryActions({ onMessage, primaryImport = false }: { onMessage: (message: string) => void; primaryImport?: boolean }) {
+export function LibraryActions({ onMessage, onDiscovered, primaryImport = false }: { onMessage: (message: string) => void; onDiscovered?: (items: DiscoveredCourse[]) => void; primaryImport?: boolean }) {
 	const rescan = useRescan();
 	const importCourse = useImportCourse();
 	const navigate = useNavigate();
@@ -570,7 +610,7 @@ export function LibraryActions({ onMessage, primaryImport = false }: { onMessage
 
 	return (
 		<>
-			<Button variant="ghost" aria-label={tr('Refresh courses', 'Atualizar cursos')} className="px-3 sm:px-3.5" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => onMessage(refreshMessage(outcome)), onError: (error) => onMessage(failure(error)) }); }}>
+			<Button variant="ghost" aria-label={tr('Refresh courses', 'Atualizar cursos')} className="px-3 sm:px-3.5" disabled={rescan.isPending} onClick={() => { onMessage(tr('Reading courses…', 'Lendo os cursos…')); rescan.mutate({ onProgress: onMessage }, { onSuccess: (outcome) => { onMessage(refreshMessage(outcome)); onDiscovered?.(outcome.discovered); }, onError: (error) => onMessage(failure(error)) }); }}>
 				<RefreshCw className={cn(rescan.isPending && 'motion-safe:animate-spin')} />
 				<span className="hidden sm:inline">{tr('Refresh courses', 'Atualizar cursos')}</span>
 				<span className="sm:hidden" aria-hidden="true">{tr('Refresh', 'Atualizar')}</span>
@@ -605,7 +645,7 @@ export function LibraryActions({ onMessage, primaryImport = false }: { onMessage
 }
 
 /** First run: say what the app does, and put the one action that matters right here. */
-function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (message: string) => void }) {
+function EmptyLibrary({ isAdmin, onMessage, onDiscovered }: { isAdmin: boolean; onMessage: (message: string) => void; onDiscovered?: (items: DiscoveredCourse[]) => void }) {
 	return (
 		<div className="mx-auto max-w-xl space-y-5 rounded-2xl border border-dashed p-8 text-center sm:p-12">
 			<p className="text-2xl font-semibold text-balance">{tr('Bring in the courses you already have', 'Traga os cursos que você já tem')}</p>
@@ -614,7 +654,7 @@ function EmptyLibrary({ isAdmin, onMessage }: { isAdmin: boolean; onMessage: (me
 					? tr('Import a folder with videos or documents. Your files stay where they are.', 'Importe uma pasta com vídeos ou documentos. Seus arquivos ficam onde estão.')
 					: tr('Ask an administrator to give you access to a course.', 'Peça a um administrador acesso a um curso.')}
 			</p>
-			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions primaryImport onMessage={onMessage} /></div>}
+			{isAdmin && <div className="flex flex-wrap justify-center gap-2"><LibraryActions primaryImport onMessage={onMessage} onDiscovered={onDiscovered} /></div>}
 		</div>
 	);
 }

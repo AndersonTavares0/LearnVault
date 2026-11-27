@@ -12,7 +12,10 @@ use std::collections::HashMap;
 
 use learnvault_core::{Database, SearchResults};
 
-use crate::dto::{SearchCourseDto, SearchLessonDto, SearchNoteDto, SearchResultsDto};
+use crate::dto::{
+    SearchBookmarkDto, SearchCourseDto, SearchFlashcardDto, SearchLessonDto, SearchNoteDto,
+    SearchResultsDto,
+};
 use crate::error::IpcError;
 use crate::study::LOCAL_OWNER_ID;
 
@@ -90,10 +93,45 @@ fn present(results: SearchResults, titles: &HashMap<&str, &str>) -> SearchResult
             })
         })
         .collect();
+    let flashcards = results
+        .flashcards
+        .into_iter()
+        .filter_map(|hit| {
+            Some(SearchFlashcardDto {
+                course_title: titles.get(hit.course_id.as_str())?.to_string(),
+                lesson_title: lesson_title(&hit.relative_path),
+                card_id: hit.card_id,
+                media_id: hit.media_id,
+                course_id: hit.course_id,
+                lesson_path: hit.relative_path,
+                position_seconds: hit.position_seconds,
+                snippet: hit.snippet,
+            })
+        })
+        .collect();
+    let bookmarks = results
+        .bookmarks
+        .into_iter()
+        .filter_map(|hit| {
+            Some(SearchBookmarkDto {
+                course_title: titles.get(hit.course_id.as_str())?.to_string(),
+                lesson_title: lesson_title(&hit.relative_path),
+                bookmark_id: hit.bookmark_id,
+                kind: hit.kind,
+                media_id: hit.media_id,
+                course_id: hit.course_id,
+                lesson_path: hit.relative_path,
+                position_seconds: hit.position_seconds,
+                snippet: hit.snippet,
+            })
+        })
+        .collect();
     SearchResultsDto {
         notes,
         courses,
         lessons,
+        flashcards,
+        bookmarks,
     }
 }
 

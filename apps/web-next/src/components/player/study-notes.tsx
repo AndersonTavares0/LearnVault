@@ -19,8 +19,8 @@ export function useLessonNotes(mediaId: string | null) {
 /** The amber timestamp chip: a note's time, and the draft's time while it is being written. */
 const chip = 'inline-flex min-h-11 items-center rounded-md border border-primary/45 px-2 text-[11.5px] font-semibold tabular-nums text-primary hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-ring lg:min-h-7 lg:px-1.5';
 
-/** Timestamped notes for one lesson; a note's time button seeks the player. */
-export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCard, allNotesTo }: { mediaId: string; currentTime: number; onSeek: (seconds: number) => void; addRequest: number; onMakeCard?: (note: StudyNote) => void; allNotesTo?: string }) {
+/** Timestamped notes for one lesson; a note's time button seeks the player when playback time exists. */
+export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCard, allNotesTo }: { mediaId: string; currentTime: number; onSeek?: (seconds: number) => void; addRequest: number; onMakeCard?: (note: StudyNote) => void; allNotesTo?: string }) {
 	const client = useQueryClient();
 	const notes = useLessonNotes(mediaId);
 	const [draft, setDraft] = useState<{ position: number; content: string } | null>(null);
@@ -70,8 +70,8 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCar
 			{error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 			{draft ? (
 				<div className="space-y-3 rounded-xl border border-[var(--study-rule)] bg-background p-3">
-					<span className={chip}>{formatDuration(draft.position)}</span>
-					<NoteEditor id="note-draft" label={tr(`Note at ${formatDuration(draft.position)}`, `Nota em ${formatDuration(draft.position)}`)} focusOnOpen rows={3} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} onKeyDown={onKeyDown} describedBy="note-draft-hint" />
+					{onSeek && <span className={chip}>{formatDuration(draft.position)}</span>}
+					<NoteEditor id="note-draft" label={onSeek ? tr(`Note at ${formatDuration(draft.position)}`, `Nota em ${formatDuration(draft.position)}`) : tr('Note text', 'Texto da nota')} focusOnOpen rows={3} value={draft.content} onChange={(content) => setDraft({ ...draft, content })} onKeyDown={onKeyDown} describedBy="note-draft-hint" />
 					<div className="flex flex-wrap items-center justify-between gap-2">
 						<p id="note-draft-hint" className="text-xs text-muted-foreground">{tr('Ctrl+Enter saves the note.', 'Ctrl+Enter salva a nota.')}</p>
 						<div className="flex gap-2">
@@ -82,21 +82,23 @@ export function StudyNotes({ mediaId, currentTime, onSeek, addRequest, onMakeCar
 				</div>
 			) : (
 				// Desktop: standard secondary outline trigger. Phone: primary filled action.
-				<button type="button" onClick={() => setDraft({ position: Math.floor(currentTime), content: '' })} className={`${buttonVariants({ variant: 'outline' })} w-full justify-center max-lg:border-primary max-lg:bg-primary max-lg:font-semibold max-lg:text-primary-foreground max-lg:hover:bg-primary/90 dark:max-lg:border-primary dark:max-lg:bg-primary dark:max-lg:text-primary-foreground dark:max-lg:hover:bg-primary/90`}>
-					<PenLine className="size-4 shrink-0" aria-hidden="true" />{tr(`Write a note at ${formatDuration(currentTime)}`, `Escrever uma nota em ${formatDuration(currentTime)}`)}
+				<button type="button" onClick={() => setDraft({ position: onSeek ? Math.floor(currentTime) : 0, content: '' })} className={`${buttonVariants({ variant: 'outline' })} w-full justify-center max-lg:border-primary max-lg:bg-primary max-lg:font-semibold max-lg:text-primary-foreground max-lg:hover:bg-primary/90 dark:max-lg:border-primary dark:max-lg:bg-primary dark:max-lg:text-primary-foreground dark:max-lg:hover:bg-primary/90`}>
+					<PenLine className="size-4 shrink-0" aria-hidden="true" />{onSeek ? tr(`Write a note at ${formatDuration(currentTime)}`, `Escrever uma nota em ${formatDuration(currentTime)}`) : tr('Write a note', 'Escrever uma nota')}
 				</button>
 			)}
 			{notes.isPending ? (
 				<p role="status" className="text-sm text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
 			) : items.length === 0 && !draft ? (
-				<p className="text-sm text-muted-foreground">{tr('No notes in this lesson yet. Notes are tied to the moment in the lesson, so you can jump back later.', 'Ainda não há notas nesta aula. As notas ficam presas ao momento da aula, para você voltar depois.')}</p>
+				<p className="text-sm text-muted-foreground">{onSeek ? tr('No notes in this lesson yet. Notes are tied to the moment in the lesson, so you can jump back later.', 'Ainda não há notas nesta aula. As notas ficam presas ao momento da aula, para você voltar depois.') : tr('No notes in this lesson yet.', 'Ainda não há notas nesta aula.')}</p>
 			) : (
 				<ul className="divide-y divide-[var(--study-rule)]">
 					{items.map((note) => (
 						<li key={note.noteId} className="flex items-start gap-3 py-3">
-							<button type="button" onClick={() => onSeek(note.positionSeconds)} aria-label={tr(`Play from ${formatDuration(note.positionSeconds)}`, `Reproduzir de ${formatDuration(note.positionSeconds)}`)} className={chip}>
-								{formatDuration(note.positionSeconds)}
-							</button>
+							{onSeek && (
+								<button type="button" onClick={() => onSeek(note.positionSeconds)} aria-label={tr(`Play from ${formatDuration(note.positionSeconds)}`, `Reproduzir de ${formatDuration(note.positionSeconds)}`)} className={chip}>
+									{formatDuration(note.positionSeconds)}
+								</button>
+							)}
 							<div className="min-w-0 flex-1 space-y-1">
 								{editing?.id === note.noteId ? (
 									<form className="space-y-2" onSubmit={(event) => { event.preventDefault(); saveEdit(); }}>

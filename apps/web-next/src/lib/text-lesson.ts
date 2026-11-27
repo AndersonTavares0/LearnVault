@@ -1,5 +1,4 @@
-import { tr } from './i18n';
-import type { FileEntry, Lesson } from './transport';
+import { transport, type FileEntry, type Lesson } from './transport';
 
 /** Most bytes of a text file the lesson page reads; a longer one is cut and says so. */
 export const TEXT_LIMIT = 256 * 1024;
@@ -27,15 +26,8 @@ export function decodeText(bytes: Uint8Array): string {
 	return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
-// HTTP build only. The inline build constant lets the bundler drop the `fetch` from the
-// desktop bundle, which must never open the network (src/build-output.test.ts).
-export const loadText = __LEARNVAULT_TRANSPORT__ === 'http'
-	? async (url: string): Promise<{ text: string; truncated: boolean }> => {
-		const response = await fetch(url, { headers: { Range: `bytes=0-${TEXT_LIMIT - 1}` } });
-		if (!response.ok) throw new Error(tr('Could not load this text.', 'Não foi possível carregar este texto.'));
-		const bytes = new Uint8Array(await response.arrayBuffer());
-		const range = response.headers.get('content-range');
-		const total = range ? Number(range.split('/')[1]) : bytes.length;
-		return { text: decodeText(bytes.subarray(0, TEXT_LIMIT)), truncated: Number.isFinite(total) && total > TEXT_LIMIT };
-	}
-	: null;
+/** Loads a bounded prefix of a text/markdown lesson over either HTTP Range or Desktop IPC. */
+export async function loadText(file: FileEntry, courseId: string): Promise<{ text: string; truncated: boolean }> {
+	const { bytes, total } = await transport.readMediaSlice(file, courseId, TEXT_LIMIT);
+	return { text: decodeText(bytes.subarray(0, TEXT_LIMIT)), truncated: Number.isFinite(total) && total > TEXT_LIMIT };
+}

@@ -1,9 +1,13 @@
 import { formatCount } from '@/lib/catalog';
 import { tr } from '@/lib/i18n';
-import type { Transport } from '@/lib/transport';
+import type { DiscoveredCourse, Transport } from '@/lib/transport';
 
 /** What "Refresh courses" did beyond the local courses. */
-export type RefreshOutcome = { sources: number; failed: { name: string; message: string }[] };
+export type RefreshOutcome = {
+	sources: number;
+	failed: { name: string; message: string }[];
+	discovered: DiscoveredCourse[];
+};
 
 /** The server refuses to rescan when no local course is registered; the transport names that error. */
 export const isNoCourses = (error: unknown): boolean => error instanceof Error && error.name === 'NoCoursesError';
@@ -20,8 +24,10 @@ export async function refreshLibrary(
 ): Promise<RefreshOutcome> {
 	// Only a server administrator can list sources; the desktop has none. Anything else means "no sources".
 	const sources = ((await transport.listSources?.().catch(() => [])) ?? []).filter((source) => !source.credentialError);
+	let discovered: DiscoveredCourse[] = [];
 	try {
-		await transport.rescan();
+		const outcome = await transport.rescan();
+		if (outcome && Array.isArray(outcome.discovered)) discovered = outcome.discovered;
 	} catch (error) {
 		if (!(sources.length > 0 && isNoCourses(error))) throw error;
 	}
@@ -34,10 +40,10 @@ export async function refreshLibrary(
 			failed.push({ name: source.name, message: error instanceof Error ? error.message : '' });
 		}
 	}
-	return { sources: sources.length, failed };
+	return { sources: sources.length, failed, discovered };
 }
 
-export function refreshMessage(outcome: RefreshOutcome): string {
+export function refreshMessage(outcome: Omit<RefreshOutcome, 'discovered'> & { discovered?: DiscoveredCourse[] }): string {
 	if (outcome.failed.length > 0) {
 		const names = outcome.failed.map((source) => `“${source.name}”`).join(', ');
 		const one = outcome.failed.length === 1;

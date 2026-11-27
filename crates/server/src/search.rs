@@ -33,6 +33,33 @@ struct SearchResponse {
     notes: Vec<NoteResult>,
     courses: Vec<CourseResult>,
     lessons: Vec<LessonResult>,
+    flashcards: Vec<FlashcardResult>,
+    bookmarks: Vec<BookmarkResult>,
+}
+
+#[derive(Serialize)]
+struct FlashcardResult {
+    card_id: String,
+    media_id: String,
+    course_id: String,
+    course_title: String,
+    lesson_path: String,
+    lesson_title: String,
+    position_seconds: Option<i64>,
+    snippet: String,
+}
+
+#[derive(Serialize)]
+struct BookmarkResult {
+    bookmark_id: String,
+    kind: String,
+    media_id: String,
+    course_id: String,
+    course_title: String,
+    lesson_path: String,
+    lesson_title: String,
+    position_seconds: i64,
+    snippet: String,
 }
 
 #[derive(Serialize)]
@@ -93,25 +120,55 @@ pub(crate) async fn search(
     let admin = user.is_admin;
 
     let registered = state.courses_snapshot();
-    let titles: HashMap<String, String> = registered
+    let sources = state.sources_snapshot();
+    let mut base_titles: HashMap<String, String> = registered
         .iter()
         .map(|course| (course.id.clone(), course.title.clone()))
         .collect();
-    let index: Vec<(String, String)> = registered
+    let mut base_index: Vec<(String, String)> = registered
         .iter()
         .map(|course| (course.id.clone(), course.title.clone()))
         .collect();
 
     let outcome = run_study(&state, move |db| {
-        learnvault_core::sync_course_index(db, &index)?;
-        learnvault_core::search(db, &owner, admin, &text, limit)
+        let allowed = if admin {
+            None
+        } else {
+            learnvault_core::list_user_course_access(db, &owner)?
+        };
+        let is_allowed = |id: &str| {
+            allowed
+                .as_ref()
+                .is_none_or(|ids| ids.iter().any(|candidate| candidate == id))
+        };
+        for source in &sources {
+            base_titles
+                .entry(source.id.clone())
+                .or_insert_with(|| source.name.clone());
+            base_index.push((source.id.clone(), source.name.clone()));
+
+            let roots = learnvault_core::list_roots(db, &source.id)?;
+            let all_titles = crate::catalog::root_titles(&roots);
+            for (root, title) in roots.iter().zip(all_titles) {
+                base_index.push((root.library_id.clone(), title));
+            }
+            let visible: Vec<_> = roots
+                .into_iter()
+                .filter(|root| is_allowed(&root.library_id))
+                .collect();
+            let visible_titles = crate::catalog::root_titles(&visible);
+            for (root, title) in visible.into_iter().zip(visible_titles) {
+                base_titles.insert(root.library_id, title);
+            }
+        }
+        learnvault_core::sync_course_index(db, &base_index)?;
+        let results = learnvault_core::search(db, &owner, admin, &text, limit)?;
+        Ok(present(results, &base_titles))
     })
     .await;
 
     match outcome {
-        Ok(results) => {
-            crate::catalog::private_no_store(Json(present(results, &titles)).into_response())
-        }
+        Ok(response) => crate::catalog::private_no_store(Json(response).into_response()),
         Err(failure) => study_failure_response(failure),
     }
 }
@@ -158,10 +215,47 @@ fn present(results: SearchResults, titles: &HashMap<String, String>) -> SearchRe
             })
         })
         .collect();
+    let flashcards = results
+        .flashcards
+        .into_iter()
+        .filter_map(|hit| {
+            let course_title = titles.get(&hit.course_id)?.clone();
+            Some(FlashcardResult {
+                card_id: hit.card_id,
+                media_id: hit.media_id,
+                course_id: hit.course_id,
+                course_title,
+                lesson_title: lesson_title(&hit.relative_path),
+                lesson_path: hit.relative_path,
+                position_seconds: hit.position_seconds,
+                snippet: hit.snippet,
+            })
+        })
+        .collect();
+    let bookmarks = results
+        .bookmarks
+        .into_iter()
+        .filter_map(|hit| {
+            let course_title = titles.get(&hit.course_id)?.clone();
+            Some(BookmarkResult {
+                bookmark_id: hit.bookmark_id,
+                kind: hit.kind,
+                media_id: hit.media_id,
+                course_id: hit.course_id,
+                course_title,
+                lesson_title: lesson_title(&hit.relative_path),
+                lesson_path: hit.relative_path,
+                position_seconds: hit.position_seconds,
+                snippet: hit.snippet,
+            })
+        })
+        .collect();
     SearchResponse {
         notes,
         courses,
         lessons,
+        flashcards,
+        bookmarks,
     }
 }
 

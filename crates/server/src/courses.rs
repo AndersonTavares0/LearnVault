@@ -304,10 +304,59 @@ impl From<&RegisteredCourse> for CourseResponse {
     }
 }
 
-/// Body of the import request: the path of the course folder on the server.
+/// Unregistered course folder discovered under `--library-root`.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct DiscoveredCourse {
+    /// Deterministic identity of the candidate root.
+    pub id: String,
+    /// Human-readable title derived from the folder name.
+    pub title: String,
+    /// Relative folder path inside `--library-root` (never an absolute host path).
+    pub folder: String,
+}
+
+/// Discovers top-level/seeded folders inside `library_root` that are not yet registered.
+pub(crate) fn discover_unregistered_courses(
+    library_root: &Path,
+    registered: &[RegisteredCourse],
+) -> Vec<DiscoveredCourse> {
+    let Ok(canonical_root) = fs::canonicalize(library_root) else {
+        return Vec::new();
+    };
+    seeded_courses(library_root)
+        .into_iter()
+        .filter(|candidate| !registered.iter().any(|item| item.id == candidate.id))
+        .filter_map(|candidate| {
+            let rel = candidate
+                .root
+                .as_path()
+                .strip_prefix(&canonical_root)
+                .ok()?;
+            let folder = rel
+                .components()
+                .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+                .join("/");
+            if folder.is_empty() {
+                return None;
+            }
+            Some(DiscoveredCourse {
+                id: candidate.id,
+                title: candidate.title,
+                folder,
+            })
+        })
+        .collect()
+}
+
+/// Body of the import request: either an explicit server folder path or a relative folder
+/// discovered under `--library-root`.
 #[derive(Deserialize)]
 pub(crate) struct ImportRequest {
+    #[serde(default)]
     path: String,
+    #[serde(default)]
+    folder: String,
 }
 
 #[derive(Serialize)]
@@ -353,8 +402,24 @@ pub(crate) async fn import(
     };
     let courses = Arc::clone(&state.courses);
     let courses_file = state.courses_file.clone();
+    let library_root = state.config.library_root.clone();
     let outcome = tokio::task::spawn_blocking(move || {
         let _blocking_task = blocking_task;
+        let folder = request.folder.trim();
+        if !folder.is_empty() {
+            let Some(root) = library_root else {
+                return Err(ImportFailure::InvalidPath);
+            };
+            let Ok(canonical_root) = fs::canonicalize(&root) else {
+                return Err(ImportFailure::InvalidPath);
+            };
+            let Ok(resolved) = learnvault_core::paths::resolve_within(&canonical_root, folder)
+            else {
+                return Err(ImportFailure::InvalidPath);
+            };
+            let path_str = resolved.to_str().ok_or(ImportFailure::InvalidPath)?;
+            return import_course(&courses, &courses_file, path_str);
+        }
         import_course(&courses, &courses_file, &request.path)
     })
     .await;

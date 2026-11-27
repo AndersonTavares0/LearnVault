@@ -590,6 +590,10 @@ pub fn list_all_study_notes(db: &Database, owner_id: &str) -> Result<Vec<GlobalS
          FROM study_note n
          JOIN media m ON n.media_id = m.media_id
          WHERE n.owner_id = ?1
+           AND NOT EXISTS (SELECT 1
+                             FROM media_removal r
+                            WHERE r.library_id = m.library_id
+                              AND r.media_id = m.media_id)
          ORDER BY n.updated_at DESC, n.created_at DESC",
     )?;
     let rows = statement.query_map(rusqlite::params![owner_id], |row| {
@@ -641,7 +645,7 @@ pub(crate) fn create_study_note_on(
         return Err(Error::InvalidStudyPosition { position_seconds });
     }
     let trimmed = content.trim();
-    if trimmed.is_empty() || trimmed.len() > 10000 {
+    if trimmed.is_empty() || trimmed.chars().count() > 10000 {
         return Err(Error::InvalidStudyNoteContent);
     }
 
@@ -685,7 +689,7 @@ pub(crate) fn update_study_note_on(
 ) -> Result<StudyNote> {
     validate_owner(owner_id)?;
     let trimmed = content.trim();
-    if trimmed.is_empty() || trimmed.len() > 10000 {
+    if trimmed.is_empty() || trimmed.chars().count() > 10000 {
         return Err(Error::InvalidStudyNoteContent);
     }
 
@@ -755,18 +759,24 @@ fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyNote> {
 /// Rating of a flashcard review.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReviewRating {
-    /// The learner got it wrong or needs to repeat soon.
+    /// The learner got it wrong or needs to repeat soon (10 minutes).
     Again,
+    /// The learner recalled it with effort; shorter growth step.
+    Hard,
     /// The learner got it right and understood the concept.
     Good,
+    /// The learner recalled it effortlessly; faster interval growth.
+    Easy,
 }
 
 impl ReviewRating {
-    /// Converts from a string ("again" or "good"), case-insensitive.
+    /// Converts from a string (`"again"`, `"hard"`, `"good"`, or `"easy"`), case-insensitive.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "again" => Some(Self::Again),
+            "hard" => Some(Self::Hard),
             "good" => Some(Self::Good),
+            "easy" => Some(Self::Easy),
             _ => None,
         }
     }
@@ -775,7 +785,9 @@ impl ReviewRating {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Again => "again",
+            Self::Hard => "hard",
             Self::Good => "good",
+            Self::Easy => "easy",
         }
     }
 }
@@ -1054,11 +1066,35 @@ pub(crate) fn schedule_review(
 ) -> (i64, i64) {
     match rating {
         ReviewRating::Again => (0_i64, reviewed_at + 600),
+        ReviewRating::Hard => {
+            if prev_interval == 0 {
+                (0_i64, reviewed_at + 43_200)
+            } else {
+                let next_interval = (prev_interval.saturating_mul(6) / 5)
+                    .max(prev_interval)
+                    .min(365);
+                (
+                    next_interval,
+                    reviewed_at + next_interval.saturating_mul(86_400),
+                )
+            }
+        }
         ReviewRating::Good => {
             let next_interval = if prev_interval == 0 {
                 1_i64
             } else {
                 prev_interval.saturating_mul(2).min(365)
+            };
+            (
+                next_interval,
+                reviewed_at + next_interval.saturating_mul(86_400),
+            )
+        }
+        ReviewRating::Easy => {
+            let next_interval = if prev_interval == 0 {
+                4_i64
+            } else {
+                prev_interval.saturating_mul(3).min(365)
             };
             (
                 next_interval,

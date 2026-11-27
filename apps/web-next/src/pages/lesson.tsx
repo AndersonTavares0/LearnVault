@@ -75,7 +75,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const lesson = findLesson(catalog.data ?? null, courseId, lessonPath);
 	// A lesson with nothing to play and a PDF is a PDF lesson: the PDF is read here and drives progress.
 	const pdf = lesson ? findLessonPdf(lesson) : null;
-	const text = lesson && loadText ? findLessonText(lesson, Boolean(pdf)) : null;
+	const text = lesson ? findLessonText(lesson, Boolean(pdf)) : null;
 	const location = useMemo(() => {
 		const media = lesson?.media.find((file) => file.mediaId) ?? pdf;
 		return media?.mediaId ? findLessonLocation(catalog.data ?? null, media.mediaId) : null;
@@ -219,8 +219,7 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 
 	const position = sequence.findIndex((item) => item.path === lessonPath);
 	const hasCards = studySyncSupported && Boolean(mediaId);
-	// Notes are tied to a moment in time, so a PDF lesson has cards but no timed notes.
-	const hasNotes = hasCards && !pdf;
+	const hasNotes = hasCards;
 	const activeTab = (tab === 'notes' && !hasNotes) || (tab === 'cards' && !hasCards) ? 'contents' : tab;
 	const openNotes = () => {
 		if (hasNotes) {
@@ -354,19 +353,21 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 									<StudyNotes
 										mediaId={mediaId}
 										currentTime={time}
-										onSeek={(seconds) => player.current?.seek(seconds)}
+										onSeek={!pdf && !text ? (seconds) => player.current?.seek(seconds) : undefined}
 										addRequest={noteRequest}
 										onMakeCard={hasCards ? (note) => {
 											player.current?.pause();
 											setTab('cards');
-											setCardSeed({ key: (cardSeed?.key ?? 0) + 1, back: note.content, position: note.positionSeconds });
+											setCardSeed({ key: (cardSeed?.key ?? 0) + 1, back: note.content, position: !pdf && !text ? note.positionSeconds : null });
 										} : undefined}
 										allNotesTo={`/notes?course=${encodeURIComponent(courseId)}`}
 									/>
-									<section aria-label={tr('Timestamps', 'Marcadores')} className="space-y-3 border-t border-[var(--study-rule)] pt-4">
-										<h2 className="text-sm font-semibold">{tr('Timestamps', 'Marcadores')}</h2>
-										<Bookmarks mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} />
-									</section>
+									{!pdf && !text && (
+										<section aria-label={tr('Timestamps', 'Marcadores')} className="space-y-3 border-t border-[var(--study-rule)] pt-4">
+											<h2 className="text-sm font-semibold">{tr('Timestamps', 'Marcadores')}</h2>
+											<Bookmarks mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} />
+										</section>
+									)}
 								</TabsContent>
 							)}
 							{hasCards && mediaId && (
@@ -446,7 +447,7 @@ function PdfLesson({ file, courseId, ready, initialPage, onPage, preferences, on
 /** A lesson that is a text file: shown as plain text, never as HTML, and the original is never changed. */
 function TextLesson({ file, courseId }: { file: FileEntry; courseId: string }) {
 	const url = transport.mediaUrl(file, courseId);
-	const content = useQuery({ queryKey: ['lesson-text', url], enabled: Boolean(url && loadText), staleTime: Infinity, queryFn: () => loadText!(url!) });
+	const content = useQuery({ queryKey: ['lesson-text', courseId, file.mediaId ?? file.path], enabled: Boolean(url), staleTime: Infinity, queryFn: () => loadText(file, courseId) });
 	return (
 		<div className="space-y-3">
 			<p role="note" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
