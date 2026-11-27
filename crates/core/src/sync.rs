@@ -188,7 +188,8 @@ pub enum SyncPayload {
     FlashcardReview {
         /// Opaque card identifier.
         card_id: String,
-        /// Rating: `again` or `good`.
+        /// Review grade. The wire format distinguishes grades unsupported by v0.9.6.
+        #[serde(with = "review_rating_wire")]
         rating: String,
         /// Review instant reported by the device.
         reviewed_at: i64,
@@ -202,6 +203,36 @@ pub enum SyncPayload {
         /// Last subtitle language chosen; empty means no preference.
         subtitle_language: String,
     },
+}
+
+mod review_rating_wire {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(untagged)]
+    enum Rating<T> {
+        Legacy(T),
+        Extended { grade: T },
+    }
+
+    pub(super) fn serialize<S: Serializer>(rating: &str, serializer: S) -> Result<S::Ok, S::Error> {
+        // v0.9.6 silently skips unknown strings. An object rejects the batch before acknowledgment.
+        let wire = match super::ReviewRating::parse(rating) {
+            Some(super::ReviewRating::Hard | super::ReviewRating::Easy) => {
+                Rating::Extended { grade: rating }
+            }
+            _ => Rating::Legacy(rating),
+        };
+        wire.serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<String, D::Error> {
+        Ok(match Rating::deserialize(deserializer)? {
+            Rating::Legacy(rating) | Rating::Extended { grade: rating } => rating,
+        })
+    }
 }
 
 impl SyncPayload {

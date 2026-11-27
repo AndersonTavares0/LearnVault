@@ -883,7 +883,7 @@ fn a_version_nineteen_database_gets_the_coalesce_keys_of_its_journal() -> TestRe
 }
 
 #[test]
-fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestResult {
+fn populated_v096_database_migrates_without_losing_study_data() -> TestResult {
     let dir = tempfile::tempdir()?;
     let path = dir.path().join("learnvault.sqlite");
 
@@ -891,10 +891,11 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
         let mut conn = rusqlite::Connection::open(&path)?;
         conn.execute_batch("PRAGMA foreign_keys = ON;")?;
         let tx = conn.transaction()?;
-        for step in &learnvault_core::migration_steps_for_test()[..16] {
+        // v0.9.6 shipped schema 21. Build that schema without running current migrations first.
+        for step in &learnvault_core::migration_steps_for_test()[..21] {
             tx.execute_batch(step)?;
         }
-        tx.pragma_update(None, "user_version", 16)?;
+        tx.pragma_update(None, "user_version", 21)?;
         tx.commit()?;
 
         conn.execute_batch(
@@ -912,7 +913,14 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
              INSERT INTO study_note (note_id, owner_id, media_id, position_seconds, content, created_at, updated_at)
              VALUES ('note-1', 'owner-a', 'mid-1', 10, 'old note', 1760000000, 1760000000);
              INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
-             VALUES ('card-1', 'owner-a', 'mid-1', 'Q', 'A', 1, 1760000000, 1760000000, 1760000000);",
+             VALUES ('card-1', 'owner-a', 'mid-1', 'Photosynthesis', 'Plants use light', 1, 1760086400, 1760000000, 1760000000);
+             INSERT INTO flashcard_review (review_id, owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
+             VALUES (7, 'owner-a', 'card-1', 'good', 0, 1760086400, 1760000000);
+             INSERT INTO sync_state (owner_id, device_id, pull_cursor, updated_at)
+             VALUES ('owner-a', 'desktop-a', 42, 1760000000);
+             INSERT INTO sync_outbox (op_id, owner_id, device_id, client_at, payload, queued_at)
+             VALUES ('pending-review', 'owner-a', 'desktop-a', 1760000000,
+             '{\"kind\":\"flashcard_review\",\"card_id\":\"card-1\",\"rating\":\"good\",\"reviewed_at\":1760000000}', 1760000000);",
         )?;
     }
 
@@ -951,7 +959,24 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
         [],
         |row| row.get(0),
     )?;
-    assert_eq!(card_front, "Q");
+    assert_eq!(card_front, "Photosynthesis");
+    let history = learnvault_core::list_flashcard_reviews(&db, "owner-a", "card-1", 10)?;
+    assert_eq!(history.len(), 1);
+    assert_eq!((history[0].review_id, history[0].next_due), (7, 1760086400));
+    assert_eq!(history[0].rating, learnvault_core::ReviewRating::Good);
+    let results = learnvault_core::search::search(&db, "owner-a", true, "photosynthesis", 10)?;
+    assert_eq!(results.flashcards[0].card_id, "card-1");
+    let state = learnvault_core::sync_state(&db, "owner-a")?;
+    assert_eq!(
+        (state.device_id.as_str(), state.pull_cursor),
+        ("desktop-a", 42)
+    );
+    let pending = learnvault_core::pending_operations(&db, "owner-a", 10)?;
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].op_id, "pending-review");
+    assert!(
+        matches!(&pending[0].payload, learnvault_core::SyncPayload::FlashcardReview { rating, .. } if rating == "good")
+    );
 
     let position: i64 = db.connection().query_row(
         "SELECT position_seconds FROM study_state WHERE owner_id = 'owner-a' AND media_id = 'mid-1'",

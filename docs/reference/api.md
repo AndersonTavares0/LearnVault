@@ -250,13 +250,17 @@ with one of the payload kinds below:
 | `flashcard_created` | `card_id`, `media_id`, `position_seconds` (nullable), `front`, `back`, `created_at` |
 | `flashcard_updated` | `card_id`, `front`, `back`, `updated_at` |
 | `flashcard_deleted` | `card_id` |
-| `flashcard_review` | `card_id`, `rating` (`again`/`good`), `reviewed_at` |
+| `flashcard_review` | `card_id`, `rating` (string `"again"` or `"good"`, object `{"grade":"hard"}` or `{"grade":"easy"}`), `reviewed_at` |
 | `preference` | `video_speed`, `audio_speed` (percent of normal), `subtitle_language` |
 
 `op_id` is stable and globally unique: replaying a pushed operation is a duplicate and does
 not repeat its effect. `seq` is the monotonic pull cursor, so a
 device resumes from the last cursor it applied. A newer `progress` or `preference` operation replaces the older rows it supersedes under a new `seq`, inserted before the old rows are deleted, so incremental cursors keep working. Pulling excludes operations produced by the
 requesting `device_id`, because that device already applied them locally.
+
+Again and Good remain compatible with v0.9.6. Hard and Easy require an upgraded server
+and desktop: v0.9.6 rejects the push or cannot read the pull page, so the outbox or cursor
+stays unchanged. Upgrade both peers and sync again; do not reset the queue or cursor.
 
 Conflict rules:
 
