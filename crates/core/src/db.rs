@@ -766,6 +766,7 @@ const REQUIRED_TABLES: &[TableDefinition] = &[
             ("created_at", "INTEGER", true, None, 0),
             ("updated_at", "INTEGER", true, None, 0),
             ("position_seconds", "INTEGER", false, None, 0),
+            ("text_updated_at", "INTEGER", true, Some("0"), 0),
         ],
     },
     TableDefinition {
