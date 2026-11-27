@@ -142,23 +142,21 @@ pub(crate) async fn search(
                 .is_none_or(|ids| ids.iter().any(|candidate| candidate == id))
         };
         for source in &sources {
-            base_titles
-                .entry(source.id.clone())
-                .or_insert_with(|| source.name.clone());
-            base_index.push((source.id.clone(), source.name.clone()));
-
             let roots = learnvault_core::list_roots(db, &source.id)?;
-            let all_titles = crate::catalog::root_titles(&roots);
-            for (root, title) in roots.iter().zip(all_titles) {
-                base_index.push((root.library_id.clone(), title));
-            }
             let visible: Vec<_> = roots
                 .into_iter()
                 .filter(|root| is_allowed(&root.library_id))
                 .collect();
             let visible_titles = crate::catalog::root_titles(&visible);
             for (root, title) in visible.into_iter().zip(visible_titles) {
+                base_index.push((root.library_id.clone(), title.clone()));
                 base_titles.insert(root.library_id, title);
+            }
+            if is_allowed(&source.id) {
+                base_titles
+                    .entry(source.id.clone())
+                    .or_insert_with(|| source.name.clone());
+                base_index.push((source.id.clone(), source.name.clone()));
             }
         }
         learnvault_core::sync_course_index(db, &base_index)?;

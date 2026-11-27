@@ -1275,8 +1275,9 @@ fn apply_note(
     updated_at: i64,
     op_id: &str,
 ) -> Result<()> {
+    let note_id = note_id.trim();
     let content = content.trim();
-    if note_id.trim().is_empty()
+    if note_id.is_empty()
         || content.is_empty()
         || content.chars().count() > 10_000
         || position_seconds < 0
@@ -1449,8 +1450,9 @@ fn apply_bookmark(
     label: &str,
     created_at: i64,
 ) -> Result<()> {
+    let bookmark_id = bookmark_id.trim();
     let label = label.trim();
-    if bookmark_id.trim().is_empty()
+    if bookmark_id.is_empty()
         || label.is_empty()
         || label.chars().count() > crate::study::MAX_BOOKMARK_LABEL_CHARS
         || position_seconds < 0
@@ -1695,6 +1697,10 @@ fn apply_review(
     rating: &str,
     reviewed_at: i64,
 ) -> Result<()> {
+    let card_id = card_id.trim();
+    if card_id.is_empty() {
+        return Ok(());
+    }
     let Some(rating) = crate::study::ReviewRating::parse(rating) else {
         return Ok(());
     };
