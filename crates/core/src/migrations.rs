@@ -939,18 +939,30 @@ fn reconcile_v23_flashcard_text(conn: &Connection) -> rusqlite::Result<()> {
     }
 
     let mut journal: HashMap<(String, String), CardJournalState> = HashMap::new();
-    {
-        let mut stmt = conn.prepare(
-            "SELECT owner_id, payload
-               FROM sync_operation
-              WHERE json_extract(payload, '$.kind') IN ('flashcard_created', 'flashcard_updated')
-              ORDER BY seq ASC",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-        })?;
-        for row in rows {
-            let (owner_id, payload_json) = row?;
+    let queries: [(&str, Option<&str>); 2] = [
+        (
+            "SELECT owner_id, payload FROM sync_operation ORDER BY seq ASC",
+            None,
+        ),
+        (
+            "SELECT owner_id, payload FROM sync_outbox WHERE device_id = ?1 ORDER BY queued_at ASC, op_id ASC",
+            Some(crate::sync::SERVER_DEVICE_ID),
+        ),
+    ];
+    for (sql, device_filter) in queries {
+        let mut stmt = conn.prepare(sql)?;
+        let mut rows = match device_filter {
+            Some(device_id) => stmt.query([device_id])?,
+            None => stmt.query([])?,
+        };
+        while let Some(row) = rows.next()? {
+            let owner_id: String = row.get(0)?;
+            let payload_json: String = row.get(1)?;
+            if !payload_json.contains("flashcard_created")
+                && !payload_json.contains("flashcard_updated")
+            {
+                continue;
+            }
             let Ok(payload) = serde_json::from_str::<crate::sync::SyncPayload>(&payload_json)
             else {
                 continue;

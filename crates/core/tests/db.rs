@@ -991,9 +991,19 @@ fn a_fresh_replica_matches_the_upgraded_legacy_card_text() -> TestResult {
                INSERT INTO sync_device (owner_id, device_id, last_seen_at)
                VALUES ('owner-a', 'writer', 200);
                INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload) VALUES
+               ('bad-json', 'owner-other', 'writer', 50, 50, '{not-json'),
                ('create', 'owner-a', 'writer', 100, 100, '{"kind":"flashcard_created","card_id":"card-a","media_id":"media-a","front":"Original","back":"Answer","created_at":100}'),
                ('review', 'owner-a', 'writer', 200, 200, '{"kind":"flashcard_review","card_id":"card-a","rating":"good","reviewed_at":200}'),
-               ('edit', 'owner-a', 'offline', 150, 201, '{"kind":"flashcard_updated","card_id":"card-a","front":"Offline edit","back":"Answer","updated_at":150}');"#,
+               ('edit', 'owner-a', 'offline', 150, 201, '{"kind":"flashcard_updated","card_id":"card-a","front":"Offline edit","back":"Answer","updated_at":150}');
+               INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
+               VALUES ('card-b', 'owner-a', 'media-a', 'Browser edit', 'Answer', 1, 86600, 100, 200);
+               INSERT INTO flashcard_review (owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
+               VALUES ('owner-a', 'card-b', 'good', 0, 86600, 200);
+               INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload) VALUES
+               ('create-b', 'owner-a', 'writer', 100, 100, '{"kind":"flashcard_created","card_id":"card-b","media_id":"media-a","front":"Original B","back":"Answer","created_at":100}'),
+               ('edit-b-old', 'owner-a', 'offline', 150, 150, '{"kind":"flashcard_updated","card_id":"card-b","front":"Older edit","back":"Answer","updated_at":150}');
+               INSERT INTO sync_outbox (op_id, owner_id, device_id, client_at, payload, queued_at) VALUES
+               ('edit-b-server', 'owner-a', 'server', 180, '{"kind":"flashcard_updated","card_id":"card-b","front":"Browser edit","back":"Answer","updated_at":180}', 180);"#,
         )?;
         tx.commit()?;
     }
@@ -1002,8 +1012,17 @@ fn a_fresh_replica_matches_the_upgraded_legacy_card_text() -> TestResult {
     replica.connection().execute_batch(media)?;
     let page = learnvault_core::pull_operations(&server, "owner-a", "reader", 0, 10)?;
     learnvault_core::apply_operations(&replica, "owner-a", &page.items, page.cursor)?;
-    let server_cards = learnvault_core::list_flashcards(&server, "owner-a", "media-a")?;
-    let replica_cards = learnvault_core::list_flashcards(&replica, "owner-a", "media-a")?;
-    assert_eq!(server_cards[0].front, replica_cards[0].front);
+    let mut server_cards = learnvault_core::list_flashcards(&server, "owner-a", "media-a")?;
+    let mut replica_cards = learnvault_core::list_flashcards(&replica, "owner-a", "media-a")?;
+    server_cards.sort_by(|a, b| a.card_id.cmp(&b.card_id));
+    replica_cards.sort_by(|a, b| a.card_id.cmp(&b.card_id));
+    assert_eq!(server_cards.len(), 2);
+    assert_eq!(replica_cards.len(), 2);
+    for (server_card, replica_card) in server_cards.iter().zip(replica_cards.iter()) {
+        assert_eq!(server_card.card_id, replica_card.card_id);
+        assert_eq!(server_card.front, replica_card.front);
+    }
+    assert_eq!(server_cards[0].front, "Offline edit");
+    assert_eq!(server_cards[1].front, "Browser edit");
     Ok(())
 }
