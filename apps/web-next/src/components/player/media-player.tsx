@@ -261,14 +261,14 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
 		if (event.ctrlKey || event.metaKey || event.altKey) return;
 		const target = event.target as HTMLElement;
-		if (target.closest('input, textarea, select, [contenteditable="true"]')) return;
+		if (target.closest('input, textarea, select, [contenteditable="true"], [role="menu"], [role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"]')) return;
 		const element = media.current;
 		if (event.key === '[' || event.key === ']') { event.preventDefault(); changeSpeed(nextSpeed(speed, event.key === '[' ? 'down' : 'up')); return; }
 		if (event.key.toLowerCase() === 'f' && kind === 'video') { event.preventDefault(); toggleFullscreen(); return; }
 		if (event.key.toLowerCase() === 't' && kind === 'video' && onCinema) { event.preventDefault(); onCinema(); return; }
 		if (event.key.toLowerCase() === 'p' && kind === 'video' && supportsPip) { event.preventDefault(); void togglePip(); return; }
 		// Space on a focused button presses that button.
-		if (target.tagName === 'BUTTON' && event.key === ' ') return;
+		if ((target.tagName === 'BUTTON' || target.closest('[role="button"]')) && event.key === ' ') return;
 		const action = playerShortcutAction(event.key, true);
 		if (!action || !element) return;
 		event.preventDefault();

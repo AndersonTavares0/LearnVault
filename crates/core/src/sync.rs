@@ -188,7 +188,8 @@ pub enum SyncPayload {
     FlashcardReview {
         /// Opaque card identifier.
         card_id: String,
-        /// Rating: `again` or `good`.
+        /// Review grade. The wire format distinguishes grades unsupported by v0.9.6.
+        #[serde(with = "review_rating_wire")]
         rating: String,
         /// Review instant reported by the device.
         reviewed_at: i64,
@@ -202,6 +203,39 @@ pub enum SyncPayload {
         /// Last subtitle language chosen; empty means no preference.
         subtitle_language: String,
     },
+}
+
+mod review_rating_wire {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(untagged)]
+    enum Rating<T> {
+        Legacy(T),
+        Extended { grade: T },
+    }
+
+    pub(super) fn serialize<S: Serializer>(rating: &str, serializer: S) -> Result<S::Ok, S::Error> {
+        // v0.9.6 silently skips unknown strings. An object rejects the batch before acknowledgment.
+        let wire = match rating.trim() {
+            grade if grade.eq_ignore_ascii_case("hard") => Rating::Extended { grade: "hard" },
+            grade if grade.eq_ignore_ascii_case("easy") => Rating::Extended { grade: "easy" },
+            _ => Rating::Legacy(rating),
+        };
+        wire.serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<String, D::Error> {
+        match Rating::deserialize(deserializer)? {
+            Rating::Legacy(rating) => Ok(rating),
+            Rating::Extended { grade } if matches!(grade.as_str(), "hard" | "easy") => Ok(grade),
+            Rating::Extended { .. } => {
+                Err(serde::de::Error::custom("unknown extended review grade"))
+            }
+        }
+    }
 }
 
 impl SyncPayload {
@@ -1241,8 +1275,9 @@ fn apply_note(
     updated_at: i64,
     op_id: &str,
 ) -> Result<()> {
+    let note_id = note_id.trim();
     let content = content.trim();
-    if note_id.trim().is_empty()
+    if note_id.is_empty()
         || content.is_empty()
         || content.chars().count() > 10_000
         || position_seconds < 0
@@ -1415,8 +1450,9 @@ fn apply_bookmark(
     label: &str,
     created_at: i64,
 ) -> Result<()> {
+    let bookmark_id = bookmark_id.trim();
     let label = label.trim();
-    if bookmark_id.trim().is_empty()
+    if bookmark_id.is_empty()
         || label.is_empty()
         || label.chars().count() > crate::study::MAX_BOOKMARK_LABEL_CHARS
         || position_seconds < 0
@@ -1661,6 +1697,10 @@ fn apply_review(
     rating: &str,
     reviewed_at: i64,
 ) -> Result<()> {
+    let card_id = card_id.trim();
+    if card_id.is_empty() {
+        return Ok(());
+    }
     let Some(rating) = crate::study::ReviewRating::parse(rating) else {
         return Ok(());
     };
