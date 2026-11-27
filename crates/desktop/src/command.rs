@@ -899,6 +899,58 @@ pub async fn desktop_download_update(
     Ok(true)
 }
 
+/// Result of revalidating a held update version with the updater endpoint before restarting.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum RestartCheckOutcome {
+    /// Checking the endpoint failed with a transient error; keep the held bytes for retry.
+    CheckFailed,
+    /// Endpoint returned no matching update version; discard the stale held bytes.
+    NoMatchingUpdate,
+    /// Endpoint confirmed an update matching the expected version is available to install.
+    MatchedVersion(String),
+}
+
+/// Peeks the currently held update version without removing its bytes from state.
+pub(crate) fn resolve_pending_version_for_check(state: &DesktopState) -> Result<String, IpcError> {
+    state
+        .pending_update_version()?
+        .ok_or_else(IpcError::update_unavailable)
+}
+
+/// Applies the result of rechecking the remote feed: keeps held bytes on transient errors,
+/// clears stale bytes on mismatch/absence, and atomically takes matching bytes for install.
+pub(crate) fn prepare_pending_update_after_check(
+    state: &DesktopState,
+    expected_version: &str,
+    outcome: RestartCheckOutcome,
+) -> Result<crate::state::PendingUpdate, IpcError> {
+    match outcome {
+        RestartCheckOutcome::CheckFailed => Err(IpcError::update_check_failed()),
+        RestartCheckOutcome::NoMatchingUpdate => {
+            state.clear_update_if_version(expected_version)?;
+            Err(IpcError::update_unavailable())
+        }
+        RestartCheckOutcome::MatchedVersion(remote_version) => {
+            if remote_version != expected_version {
+                state.clear_update_if_version(expected_version)?;
+                return Err(IpcError::update_unavailable());
+            }
+            state
+                .take_update_if_version(&remote_version)?
+                .ok_or_else(IpcError::update_unavailable)
+        }
+    }
+}
+
+/// Restores held bytes if installation fails before restart, unless a newer download replaced them.
+pub(crate) fn handle_updater_install_failure(
+    state: &DesktopState,
+    pending: crate::state::PendingUpdate,
+) -> IpcError {
+    let _ = state.restore_update_if_empty(pending);
+    IpcError::update_unavailable()
+}
+
 /// Installs the held update and restarts the application, on an explicit request only.
 ///
 /// The version is checked again before installing: the held bytes are applied only while the
@@ -911,18 +963,24 @@ pub async fn desktop_restart_to_update(
 ) -> Result<bool, IpcError> {
     use tauri_plugin_updater::UpdaterExt;
 
-    let Some(pending) = state.take_update()? else {
+    let expected_version = resolve_pending_version_for_check(&state)?;
+    let updater = app.updater().map_err(|_| IpcError::update_unavailable())?;
+    let (update, outcome) = match updater.check().await {
+        Ok(Some(update)) if update.version == expected_version => {
+            let version = update.version.clone();
+            (Some(update), RestartCheckOutcome::MatchedVersion(version))
+        }
+        Ok(_) => (None, RestartCheckOutcome::NoMatchingUpdate),
+        Err(_) => (None, RestartCheckOutcome::CheckFailed),
+    };
+    let pending = prepare_pending_update_after_check(&state, &expected_version, outcome)?;
+    let Some(update) = update else {
+        let _ = state.restore_update_if_empty(pending);
         return Err(IpcError::update_unavailable());
     };
-    let updater = app.updater().map_err(|_| IpcError::update_unavailable())?;
-    let update = match updater.check().await {
-        Ok(Some(update)) if update.version == pending.version => update,
-        Ok(_) => return Err(IpcError::update_unavailable()),
-        Err(_) => return Err(IpcError::update_check_failed()),
-    };
-    update
-        .install(&pending.bytes)
-        .map_err(|_| IpcError::update_unavailable())?;
+    if update.install(&pending.bytes).is_err() {
+        return Err(handle_updater_install_failure(&state, pending));
+    }
 
     app.restart();
 }
@@ -1115,5 +1173,161 @@ mod flatpak_gate_tests {
     fn the_updater_is_off_inside_flatpak_and_on_elsewhere() {
         assert!(!updater_enabled(true));
         assert!(updater_enabled(false));
+    }
+}
+
+#[cfg(test)]
+mod updater_restart_tests {
+    use tempfile::tempdir;
+
+    use super::{
+        DesktopState, RestartCheckOutcome, handle_updater_install_failure,
+        prepare_pending_update_after_check, resolve_pending_version_for_check,
+    };
+    use crate::error::IpcErrorCode;
+
+    fn test_state() -> (tempfile::TempDir, DesktopState) {
+        let dir = tempdir().expect("tempdir for updater restart test");
+        let state = DesktopState::open(&dir.path().join("data"), &dir.path().join("config"))
+            .expect("open desktop state");
+        (dir, state)
+    }
+
+    #[test]
+    fn requires_held_update_before_rechecking() {
+        let (_dir, state) = test_state();
+        let err = resolve_pending_version_for_check(&state).expect_err("no held update");
+        assert_eq!(err.code, IpcErrorCode::UpdateUnavailable);
+    }
+
+    #[test]
+    fn check_failure_preserves_held_update_for_retry() {
+        let (_dir, state) = test_state();
+        state
+            .hold_update("1.2.3".to_owned(), b"signed-bytes".to_vec())
+            .expect("hold update");
+
+        let expected = resolve_pending_version_for_check(&state).expect("expected version");
+        assert_eq!(expected, "1.2.3");
+
+        let err =
+            prepare_pending_update_after_check(&state, &expected, RestartCheckOutcome::CheckFailed)
+                .expect_err("transient check failure");
+        assert_eq!(err.code, IpcErrorCode::UpdateCheckFailed);
+        assert_eq!(
+            state.pending_update_version().expect("peek pending"),
+            Some("1.2.3".to_owned())
+        );
+
+        let pending = prepare_pending_update_after_check(
+            &state,
+            &expected,
+            RestartCheckOutcome::MatchedVersion("1.2.3".to_owned()),
+        )
+        .expect("retry succeeds once check matches");
+        assert_eq!(pending.version, "1.2.3");
+        assert_eq!(pending.bytes, b"signed-bytes");
+        assert_eq!(state.pending_update_version().expect("peek empty"), None);
+    }
+
+    #[test]
+    fn no_matching_update_clears_stale_held_update_without_clobbering_newer_download() {
+        let (_dir, state) = test_state();
+        state
+            .hold_update("1.2.3".to_owned(), b"stale-bytes".to_vec())
+            .expect("hold stale");
+
+        let err = prepare_pending_update_after_check(
+            &state,
+            "1.2.3",
+            RestartCheckOutcome::NoMatchingUpdate,
+        )
+        .expect_err("stale update unavailable");
+        assert_eq!(err.code, IpcErrorCode::UpdateUnavailable);
+        assert_eq!(state.pending_update_version().expect("cleared"), None);
+
+        state
+            .hold_update("1.2.4".to_owned(), b"newer-bytes".to_vec())
+            .expect("hold newer concurrent download");
+        let err = prepare_pending_update_after_check(
+            &state,
+            "1.2.3",
+            RestartCheckOutcome::NoMatchingUpdate,
+        )
+        .expect_err("old check still fails");
+        assert_eq!(err.code, IpcErrorCode::UpdateUnavailable);
+        assert_eq!(
+            state.pending_update_version().expect("newer preserved"),
+            Some("1.2.4".to_owned())
+        );
+    }
+
+    #[test]
+    fn install_failure_restores_held_update_for_retry_unless_superseded() {
+        let (_dir, state) = test_state();
+        state
+            .hold_update("1.2.3".to_owned(), b"signed-bytes".to_vec())
+            .expect("hold update");
+        let pending = prepare_pending_update_after_check(
+            &state,
+            "1.2.3",
+            RestartCheckOutcome::MatchedVersion("1.2.3".to_owned()),
+        )
+        .expect("take for install");
+
+        let err = handle_updater_install_failure(&state, pending);
+        assert_eq!(err.code, IpcErrorCode::UpdateUnavailable);
+        assert_eq!(
+            state.pending_update_version().expect("restored for retry"),
+            Some("1.2.3".to_owned())
+        );
+
+        let pending_again = prepare_pending_update_after_check(
+            &state,
+            "1.2.3",
+            RestartCheckOutcome::MatchedVersion("1.2.3".to_owned()),
+        )
+        .expect("take again");
+        assert_eq!(pending_again.bytes, b"signed-bytes");
+        state
+            .hold_update("1.2.4".to_owned(), b"newer-bytes".to_vec())
+            .expect("concurrent newer download");
+        let err = handle_updater_install_failure(&state, pending_again);
+        assert_eq!(err.code, IpcErrorCode::UpdateUnavailable);
+        assert_eq!(
+            state.pending_update_version().expect("newer stays intact"),
+            Some("1.2.4".to_owned())
+        );
+    }
+
+    #[test]
+    fn matched_version_toctou_and_mismatch_preserve_newer_and_clear_stale() {
+        let (_dir, state) = test_state();
+        state
+            .hold_update("1.2.4".to_owned(), b"newer-bytes".to_vec())
+            .expect("concurrent newer download during check");
+        let err = prepare_pending_update_after_check(
+            &state,
+            "1.2.3",
+            RestartCheckOutcome::MatchedVersion("1.2.3".to_owned()),
+        )
+        .expect_err("must not take newer download when expecting older version");
+        assert_eq!(err.code, IpcErrorCode::UpdateUnavailable);
+        assert_eq!(
+            state.pending_update_version().expect("newer kept intact"),
+            Some("1.2.4".to_owned())
+        );
+
+        state
+            .hold_update("1.2.3".to_owned(), b"stale-bytes".to_vec())
+            .expect("hold stale version");
+        let err = prepare_pending_update_after_check(
+            &state,
+            "1.2.3",
+            RestartCheckOutcome::MatchedVersion("1.2.4".to_owned()),
+        )
+        .expect_err("version mismatch rejects install");
+        assert_eq!(err.code, IpcErrorCode::UpdateUnavailable);
+        assert_eq!(state.pending_update_version().expect("stale cleared"), None);
     }
 }
