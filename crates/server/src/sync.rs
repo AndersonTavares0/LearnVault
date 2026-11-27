@@ -150,6 +150,26 @@ fn check_media_access(
     Ok(())
 }
 
+fn check_existing_record_media(
+    db: &Database,
+    user_id: &str,
+    is_admin: bool,
+    raw_id: &str,
+    lookup: fn(&Database, &str, &str) -> learnvault_core::Result<Option<String>>,
+) -> learnvault_core::Result<()> {
+    let trimmed = raw_id.trim();
+    if let Some(existing_media) = lookup(db, user_id, trimmed)? {
+        check_media_access(db, user_id, is_admin, &existing_media)?;
+    }
+    // Also inspect the raw untrimmed key in case an older row was persisted before trimming.
+    if raw_id != trimmed
+        && let Some(existing_media) = lookup(db, user_id, raw_id)?
+    {
+        check_media_access(db, user_id, is_admin, &existing_media)?;
+    }
+    Ok(())
+}
+
 /// Refuses existing media outside the user's access; unknown media is accepted.
 fn require_sync_access(
     db: &Database,
@@ -166,52 +186,54 @@ fn require_sync_access(
                 note_id, media_id, ..
             } => {
                 check_media_access(db, user_id, is_admin, media_id)?;
-                if let Some(existing_media) =
-                    learnvault_core::study_note_media_id_for_owner(db, user_id, note_id.trim())?
-                {
-                    check_media_access(db, user_id, is_admin, &existing_media)?;
-                }
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    note_id,
+                    learnvault_core::study_note_media_id_for_owner,
+                )?;
             }
             SyncPayload::FlashcardCreated {
                 card_id, media_id, ..
             } => {
                 check_media_access(db, user_id, is_admin, media_id)?;
-                if let Some(existing_media) =
-                    learnvault_core::flashcard_media_id_for_owner(db, user_id, card_id.trim())?
-                {
-                    check_media_access(db, user_id, is_admin, &existing_media)?;
-                }
-            }
-            SyncPayload::NoteDeleted { note_id } => {
-                if let Some(existing_media) =
-                    learnvault_core::study_note_media_id_for_owner(db, user_id, note_id.trim())?
-                {
-                    check_media_access(db, user_id, is_admin, &existing_media)?;
-                }
-            }
-            SyncPayload::BookmarkDeleted { bookmark_id } => {
-                if let Some(existing_media) = learnvault_core::media_bookmark_media_id_for_owner(
+                check_existing_record_media(
                     db,
                     user_id,
-                    bookmark_id.trim(),
-                )? {
-                    check_media_access(db, user_id, is_admin, &existing_media)?;
-                }
+                    is_admin,
+                    card_id,
+                    learnvault_core::flashcard_media_id_for_owner,
+                )?;
+            }
+            SyncPayload::NoteDeleted { note_id } => {
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    note_id,
+                    learnvault_core::study_note_media_id_for_owner,
+                )?;
+            }
+            SyncPayload::BookmarkDeleted { bookmark_id } => {
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    bookmark_id,
+                    learnvault_core::media_bookmark_media_id_for_owner,
+                )?;
             }
             SyncPayload::FlashcardUpdated { card_id, .. }
-            | SyncPayload::FlashcardDeleted { card_id } => {
-                if let Some(existing_media) =
-                    learnvault_core::flashcard_media_id_for_owner(db, user_id, card_id.trim())?
-                {
-                    check_media_access(db, user_id, is_admin, &existing_media)?;
-                }
-            }
-            SyncPayload::FlashcardReview { card_id, .. } => {
-                if let Some(existing_media) =
-                    learnvault_core::flashcard_media_id_for_owner(db, user_id, card_id)?
-                {
-                    check_media_access(db, user_id, is_admin, &existing_media)?;
-                }
+            | SyncPayload::FlashcardDeleted { card_id }
+            | SyncPayload::FlashcardReview { card_id, .. } => {
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    card_id,
+                    learnvault_core::flashcard_media_id_for_owner,
+                )?;
             }
             SyncPayload::Preference { .. } => {}
         }
