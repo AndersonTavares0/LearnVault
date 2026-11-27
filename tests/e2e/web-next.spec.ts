@@ -310,6 +310,13 @@ test('an expired session sends the visitor back to sign in and returns them to t
 	page.on('request', (request) => { if (new URL(request.url()).pathname === '/api/me') sessionChecks += 1; });
 	await page.getByRole('link', { name: 'Notes' }).first().click();
 	await expect(page.getByRole('heading', { name: 'Sign in', level: 1 })).toBeVisible();
+	const notice = page.getByRole('status').filter({ hasText: 'Your session expired. Sign in again to continue.' });
+	await expect(notice).toBeVisible();
+	await page.setViewportSize({ width: 375, height: 640 });
+	await expectNoAxeViolations(page, 'expired session sign-in');
+	await page.getByRole('button', { name: 'Switch language to Português (Brasil)' }).click();
+	await expect(page.getByRole('status').filter({ hasText: 'Sua sessão expirou. Entre novamente para continuar.' })).toBeVisible();
+	await page.getByRole('button', { name: 'Mudar idioma para English' }).click();
 	// One check answers the question; a loop of checks was the bug.
 	expect(sessionChecks).toBeLessThanOrEqual(2);
 	await page.getByLabel('Username').fill('admin');

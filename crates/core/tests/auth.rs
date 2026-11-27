@@ -2,9 +2,9 @@
 
 use learnvault_core::{
     AuthSession, AuthUser, Database, Error, bootstrap_admin, can_user_access_course,
-    create_session, create_user, delete_session, delete_user, find_user_by_username, list_users,
-    prune_expired_sessions, session_user, set_user_course_access, touch_session,
-    update_credentials,
+    create_session, create_session_for_verified_password, create_user, delete_session, delete_user,
+    find_user_by_username, list_users, prune_expired_sessions, session_user,
+    set_user_course_access, touch_session, update_credentials, update_credentials_and_session,
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -61,6 +61,76 @@ fn bootstrap_admin_is_idempotent_and_lookup_is_case_insensitive() -> TestResult 
     assert_eq!(user.password_hash, PASSWORD_HASH);
     assert!(user.is_admin);
     assert!(user.must_change_credentials);
+    Ok(())
+}
+
+#[test]
+fn login_session_creation_requires_the_current_password_hash() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    bootstrap_admin(&mut db, USER_ID, USERNAME, PASSWORD_HASH, 1_000)?;
+    assert!(create_session_for_verified_password(
+        &db,
+        TOKEN_HASH,
+        USER_ID,
+        PASSWORD_HASH,
+        2_000,
+    )?);
+
+    update_credentials(&mut db, USER_ID, USERNAME, "new-hash")?;
+
+    assert!(!create_session_for_verified_password(
+        &db,
+        "obsolete",
+        USER_ID,
+        PASSWORD_HASH,
+        2_000,
+    )?);
+    assert!(session_user(&db, TOKEN_HASH, 1_100)?.is_none());
+    assert!(session_user(&db, "obsolete", 1_100)?.is_none());
+    assert!(create_session_for_verified_password(
+        &db, "current", USER_ID, "new-hash", 2_000,
+    )?);
+    Ok(())
+}
+
+#[test]
+fn credential_changes_require_the_current_unexpired_session_and_password_hash() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    bootstrap_admin(&mut db, USER_ID, USERNAME, PASSWORD_HASH, 1_000)?;
+    create_session(&mut db, TOKEN_HASH, USER_ID, 2_000)?;
+    assert!(update_credentials_and_session(
+        &mut db,
+        (TOKEN_HASH, PASSWORD_HASH),
+        USERNAME,
+        "new-hash",
+        "replacement",
+        1_100,
+        2_100,
+    )?);
+
+    for (token, hash, now) in [
+        (TOKEN_HASH, "new-hash", 1_200),
+        ("replacement", PASSWORD_HASH, 1_200),
+        ("replacement", "new-hash", 2_100),
+    ] {
+        assert!(!update_credentials_and_session(
+            &mut db,
+            (token, hash),
+            USERNAME,
+            "unexpected-hash",
+            "unexpected-session",
+            now,
+            3_000,
+        )?);
+    }
+    assert!(session_user(&db, TOKEN_HASH, 1_200)?.is_none());
+    assert!(session_user(&db, "unexpected-session", 1_200)?.is_none());
+    assert_eq!(
+        session_user(&db, "replacement", 1_200)?
+            .expect("replacement session remains valid")
+            .password_hash,
+        "new-hash"
+    );
     Ok(())
 }
 

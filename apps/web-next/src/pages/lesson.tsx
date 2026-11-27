@@ -170,18 +170,21 @@ export function LessonPage({ course, courseId, lessonPath: requestedPath }: { co
 	if (shownLesson !== requestedPath) {
 		setShownLesson(requestedPath);
 		setCountdown(null);
+		setNoteRequest(0);
+		setCardSeed(null);
 		setTime(0);
 	}
 
+	const nextPath = next?.path ?? null;
 	useEffect(() => {
 		if (countdown === null) return;
 		if (countdown === 0) {
-			if (next) goTo(next.path);
+			if (nextPath) navigate(path(href('course', courseId, nextPath)));
 			return;
 		}
 		const timer = setTimeout(() => setCountdown((value) => (value === null ? null : value - 1)), 1000);
 		return () => clearTimeout(timer);
-	});
+	}, [countdown, courseId, navigate, nextPath]);
 
 	// A finished focus block pauses the lesson (if the setting is on); a finished break offers to resume.
 	// Derived while rendering, like the per-lesson reset above; the effect below only pauses the media.
@@ -358,6 +361,7 @@ export function LessonPage({ course, courseId, lessonPath: requestedPath }: { co
 							{hasNotes && mediaId && (
 								<TabsContent value="notes" keepMounted className="space-y-6 p-4">
 									<StudyNotes
+										key={mediaId}
 										mediaId={mediaId}
 										currentTime={time}
 										onSeek={!pdf && !text ? (seconds) => player.current?.seek(seconds) : undefined}
@@ -372,14 +376,14 @@ export function LessonPage({ course, courseId, lessonPath: requestedPath }: { co
 									{!pdf && !text && (
 										<section aria-label={tr('Timestamps', 'Marcadores')} className="space-y-3 border-t border-[var(--study-rule)] pt-4">
 											<h2 className="text-sm font-semibold">{tr('Timestamps', 'Marcadores')}</h2>
-											<Bookmarks mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} />
+											<Bookmarks key={mediaId} mediaId={mediaId} currentTime={time} onSeek={(seconds) => player.current?.seek(seconds)} />
 										</section>
 									)}
 								</TabsContent>
 							)}
 							{hasCards && mediaId && (
 								<TabsContent value="cards" keepMounted className="p-4">
-									<Flashcards mediaId={mediaId} currentTime={time} cardSeed={cardSeed} />
+									<Flashcards key={mediaId} mediaId={mediaId} currentTime={time} cardSeed={cardSeed} />
 								</TabsContent>
 							)}
 							<TabsContent value="contents" className="space-y-4 p-4">
