@@ -443,8 +443,9 @@ impl AppState {
         &self,
         token_hash: String,
         user_id: String,
-    ) -> Result<(), StateError> {
-        let mut database = self.database.clone().lock_owned().await;
+        verified_password_hash: String,
+    ) -> Result<bool, StateError> {
+        let database = self.database.clone().lock_owned().await;
         let blocking_task = self
             .try_acquire_blocking_task()
             .ok_or(StateError::Capacity)?;
@@ -453,10 +454,11 @@ impl AppState {
             let now = unix_now();
             // Housekeeping on login keeps the table bounded without a scheduler.
             learnvault_core::prune_expired_sessions(&database, now)?;
-            learnvault_core::create_session(
-                &mut database,
+            learnvault_core::create_session_for_verified_password(
+                &database,
                 &token_hash,
                 &user_id,
+                &verified_password_hash,
                 now + SESSION_LIFETIME_SECONDS,
             )
         })
@@ -481,24 +483,27 @@ impl AppState {
 
     pub(crate) async fn update_credentials_and_session(
         &self,
-        user_id: String,
+        current_token_hash: String,
+        verified_password_hash: String,
         username: String,
         password_hash: String,
         token_hash: String,
-    ) -> Result<(), StateError> {
+    ) -> Result<bool, StateError> {
         let mut database = self.database.clone().lock_owned().await;
         let permit = self
             .try_acquire_blocking_task()
             .ok_or(StateError::Capacity)?;
         tokio::task::spawn_blocking(move || {
             let _permit = permit;
+            let now = unix_now();
             learnvault_core::update_credentials_and_session(
                 &mut database,
-                &user_id,
+                (&current_token_hash, &verified_password_hash),
                 &username,
                 &password_hash,
                 &token_hash,
-                unix_now() + SESSION_LIFETIME_SECONDS,
+                now,
+                now + SESSION_LIFETIME_SECONDS,
             )
         })
         .await
@@ -869,7 +874,7 @@ mod tests {
         ));
         assert!(matches!(
             state
-                .create_session("token".to_owned(), "user".to_owned())
+                .create_session("token".to_owned(), "user".to_owned(), "hash".to_owned())
                 .await,
             Err(StateError::Capacity)
         ));

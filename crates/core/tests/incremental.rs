@@ -137,6 +137,37 @@ fn a_moved_file_keeps_identity_notes_and_progress_even_when_mtime_changes() -> T
 }
 
 #[test]
+fn a_different_file_with_the_same_metadata_does_not_inherit_study_history() -> TestResult {
+    let mut db = Database::open_in_memory()?;
+    let library = tempfile::tempdir()?;
+    let root = library.path();
+    let timestamp = SystemTime::UNIX_EPOCH + Duration::from_secs(1_000);
+    let old = "Course/old.mp4";
+    let new = "Course/new.mp4";
+
+    write(root, old, b"old lesson")?;
+    set_mtime(&root.join(old), timestamp)?;
+    rescan(&mut db, LIB, root)?;
+    let old_id = media_id(&db, old).expect("the old file was indexed");
+    seed_history(&db, &old_id)?;
+
+    fs::remove_file(root.join(old))?;
+    write(root, new, b"new lesson")?;
+    set_mtime(&root.join(new), timestamp)?;
+    let summary = rescan(&mut db, LIB, root)?;
+
+    assert_eq!(summary.moved, 0);
+    assert_eq!(summary.inserted, 1);
+    assert_eq!(summary.marked_missing, 1);
+    let new_id = media_id(&db, new).expect("the new file was indexed");
+    assert_ne!(old_id, new_id);
+    assert_eq!(availability(&db, &old_id).as_deref(), Some("missing"));
+    assert_eq!(history(&db, &old_id), (42, 1, 1));
+    assert_eq!(count_where(&db, "study_state", &new_id), 0);
+    Ok(())
+}
+
+#[test]
 fn an_ambiguous_move_is_not_applied_to_any_row() -> TestResult {
     let mut db = Database::open_in_memory()?;
     let library = tempfile::tempdir()?;
