@@ -1208,3 +1208,66 @@ async fn a_course_taken_back_stays_back_until_it_is_chosen_again() {
     h.scan().await;
     assert_eq!(titles(&h.catalog(&h.cookie).await), ["Go", "Rust"]);
 }
+
+#[tokio::test]
+async fn search_does_not_leak_hidden_sibling_disambiguation_suffixes() {
+    let tree: Tree = HashMap::from([
+        ("", vec![("ClientAlpha", None), ("SecretProject", None)]),
+        ("ClientAlpha", vec![("Rust", None)]),
+        ("ClientAlpha/Rust", vec![("01.mp4", Some(10))]),
+        ("SecretProject", vec![("Rust", None)]),
+        ("SecretProject/Rust", vec![("02.mp4", Some(10))]),
+    ]);
+    let h = harness_with(tree).await;
+    assert_eq!(
+        h.pick("ClientAlpha/Rust", "course").await.status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(
+        h.pick("SecretProject/Rust", "course").await.status(),
+        StatusCode::CREATED
+    );
+    assert_eq!(h.scan().await.status(), StatusCode::OK);
+
+    let uri = format!("/api/admin/sources/{}/roots", h.source);
+    let roots = json(h.call("GET", &uri, None, false).await).await;
+    let alpha_id = roots["roots"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|root| root["path"] == "ClientAlpha/Rust")
+        .unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
+    let student = h.student("ana", &[alpha_id.as_str()]).await;
+
+    // Admin searches first so shared index would carry "ClientAlpha" if unguarded.
+    let admin_hit = json(
+        h.call("GET", "/api/search?q=ClientAlpha", None, false)
+            .await,
+    )
+    .await;
+    assert_eq!(admin_hit["courses"].as_array().unwrap().len(), 1);
+
+    let student_hidden = json(
+        h.call_as(&student, "GET", "/api/search?q=ClientAlpha", None, false)
+            .await,
+    )
+    .await;
+    assert!(
+        student_hidden["courses"].as_array().unwrap().is_empty(),
+        "student must not match hidden parent suffix: {student_hidden}"
+    );
+
+    let student_visible = json(
+        h.call_as(&student, "GET", "/api/search?q=Rust", None, false)
+            .await,
+    )
+    .await;
+    let courses = student_visible["courses"].as_array().unwrap();
+    assert_eq!(courses.len(), 1);
+    assert_eq!(courses[0]["course_id"], alpha_id);
+    assert_eq!(courses[0]["title"], "Rust");
+}
