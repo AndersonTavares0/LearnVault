@@ -414,7 +414,7 @@ fn known_media(
 /// refusing any ambiguous choice.
 struct MoveIndex<'a> {
     by_hash: BTreeMap<&'a str, Vec<&'a str>>,
-    by_metadata: BTreeMap<(i64, i64), Vec<&'a str>>,
+    by_metadata: BTreeMap<(i64, i64), Vec<&'a KnownMedia>>,
 }
 
 impl<'a> MoveIndex<'a> {
@@ -438,15 +438,14 @@ impl<'a> MoveIndex<'a> {
                 .by_metadata
                 .entry((row.size, row.mtime))
                 .or_default()
-                .push(&row.media_id);
+                .push(row);
         }
         index
     }
 
     /// Returns the missing identity that matches the new file, when the choice is
-    /// unique. A confirmed hash wins over the metadata comparison; two rows with the same
-    /// content or the same metadata make the move ambiguous, because choosing one would
-    /// tie notes and progress to the wrong file.
+    /// unique. A confirmed hash wins; metadata can only fill in a missing hash, not
+    /// override conflicting hashes. Several eligible rows make the move ambiguous.
     fn moved(
         &self,
         moved_ids: &BTreeSet<String>,
@@ -455,18 +454,24 @@ impl<'a> MoveIndex<'a> {
         hash: Option<&str>,
     ) -> Option<String> {
         if let Some(ids) = hash.and_then(|hash| self.by_hash.get(hash)) {
-            return unique_unclaimed(ids, moved_ids).map(str::to_owned);
+            return unique_unclaimed(ids.iter().copied(), moved_ids).map(str::to_owned);
         }
-        unique_unclaimed(self.by_metadata.get(&(size, mtime))?, moved_ids).map(str::to_owned)
+        let candidates = self
+            .by_metadata
+            .get(&(size, mtime))?
+            .iter()
+            .filter(|row| hash.is_none() || row.content_hash.is_none())
+            .map(|row| row.media_id.as_str());
+        unique_unclaimed(candidates, moved_ids).map(str::to_owned)
     }
 }
 
 /// Returns the only identifier not yet relocated, or `None` when there are zero or several.
-fn unique_unclaimed<'a>(ids: &[&'a str], moved_ids: &BTreeSet<String>) -> Option<&'a str> {
-    let mut fresh = ids
-        .iter()
-        .copied()
-        .filter(|media_id| !moved_ids.contains(*media_id));
+fn unique_unclaimed<'a>(
+    ids: impl Iterator<Item = &'a str>,
+    moved_ids: &BTreeSet<String>,
+) -> Option<&'a str> {
+    let mut fresh = ids.filter(|media_id| !moved_ids.contains(*media_id));
     match (fresh.next(), fresh.next()) {
         (Some(media_id), None) => Some(media_id),
         _ => None,
