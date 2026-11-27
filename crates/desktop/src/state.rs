@@ -61,6 +61,15 @@ pub(crate) struct PendingUpdate {
     pub(crate) bytes: Vec<u8>,
 }
 
+impl std::fmt::Debug for PendingUpdate {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PendingUpdate")
+            .field("version", &self.version)
+            .field("bytes_len", &self.bytes.len())
+            .finish()
+    }
+}
+
 impl DesktopState {
     /// Opens the local database and loads the registered courses from the configuration directory.
     ///
@@ -111,13 +120,58 @@ impl DesktopState {
         Ok(())
     }
 
-    /// Takes the held update bytes, leaving the state empty for the next download.
-    pub(crate) fn take_update(&self) -> Result<Option<PendingUpdate>, IpcError> {
-        Ok(self
+    /// Returns the version of the held update without consuming its bytes.
+    pub(crate) fn pending_update_version(&self) -> Result<Option<String>, IpcError> {
+        let guard = self
             .pending_update
             .lock()
-            .map_err(|_| IpcError::update_unavailable())?
-            .take())
+            .map_err(|_| IpcError::update_unavailable())?;
+        Ok(guard.as_ref().map(|pending| pending.version.clone()))
+    }
+
+    /// Clears the held update only if it still matches `expected_version`.
+    pub(crate) fn clear_update_if_version(&self, expected_version: &str) -> Result<(), IpcError> {
+        let mut guard = self
+            .pending_update
+            .lock()
+            .map_err(|_| IpcError::update_unavailable())?;
+        if guard
+            .as_ref()
+            .is_some_and(|pending| pending.version == expected_version)
+        {
+            *guard = None;
+        }
+        Ok(())
+    }
+
+    /// Takes the held update only if it still matches `expected_version`.
+    pub(crate) fn take_update_if_version(
+        &self,
+        expected_version: &str,
+    ) -> Result<Option<PendingUpdate>, IpcError> {
+        let mut guard = self
+            .pending_update
+            .lock()
+            .map_err(|_| IpcError::update_unavailable())?;
+        if guard
+            .as_ref()
+            .is_some_and(|pending| pending.version == expected_version)
+        {
+            return Ok(guard.take());
+        }
+        Ok(None)
+    }
+
+    /// Restores a taken update only when no newer download has already replaced it.
+    pub(crate) fn restore_update_if_empty(&self, pending: PendingUpdate) -> Result<(), IpcError> {
+        let mut guard = self
+            .pending_update
+            .lock()
+            .map_err(|_| IpcError::update_unavailable())?;
+        if guard.is_none() {
+            *guard = Some(pending);
+        }
+        Ok(())
     }
 
     /// Directory of the custom covers. Internal Rust use: it never crosses the IPC.
