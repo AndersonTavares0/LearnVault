@@ -44,7 +44,8 @@ RUN touch crates/core/src/lib.rs crates/server/src/lib.rs crates/server/src/main
     && cargo build --release --locked --package learnvault-server
 
 FROM alpine:3.24
-RUN apk add --no-cache ca-certificates wget ffmpeg tzdata \
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates wget ffmpeg tzdata \
     && addgroup -S -g 10001 learnvault \
     && adduser -S -D -H -u 10001 -G learnvault learnvault
 WORKDIR /app
