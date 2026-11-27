@@ -16,7 +16,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
-use learnvault_core::{Database, SyncOperationInput};
+use learnvault_core::{Database, SyncOperationInput, SyncPayload};
 use serde::Deserialize;
 
 use crate::AppState;
@@ -133,6 +133,43 @@ fn prune_once_a_day(db: &Database) {
     }
 }
 
+fn check_media_access(
+    db: &Database,
+    user_id: &str,
+    is_admin: bool,
+    media_id: &str,
+) -> learnvault_core::Result<()> {
+    let Some(library_id) = learnvault_core::find_media_library_id(db, media_id)? else {
+        return Ok(());
+    };
+    if !learnvault_core::can_user_access_course(db, user_id, is_admin, &library_id)? {
+        return Err(learnvault_core::Error::MediaNotFound {
+            media_id: media_id.to_owned(),
+        });
+    }
+    Ok(())
+}
+
+fn check_existing_record_media(
+    db: &Database,
+    user_id: &str,
+    is_admin: bool,
+    raw_id: &str,
+    lookup: fn(&Database, &str, &str) -> learnvault_core::Result<Option<String>>,
+) -> learnvault_core::Result<()> {
+    let trimmed = raw_id.trim();
+    if let Some(existing_media) = lookup(db, user_id, trimmed)? {
+        check_media_access(db, user_id, is_admin, &existing_media)?;
+    }
+    // Also inspect the raw untrimmed key in case an older row was persisted before trimming.
+    if raw_id != trimmed
+        && let Some(existing_media) = lookup(db, user_id, raw_id)?
+    {
+        check_media_access(db, user_id, is_admin, &existing_media)?;
+    }
+    Ok(())
+}
+
 /// Refuses existing media outside the user's access; unknown media is accepted.
 fn require_sync_access(
     db: &Database,
@@ -141,16 +178,64 @@ fn require_sync_access(
     operations: &[SyncOperationInput],
 ) -> learnvault_core::Result<()> {
     for operation in operations {
-        let Some(media_id) = operation.payload.media_id() else {
-            continue;
-        };
-        let Some(library_id) = learnvault_core::find_media_library_id(db, media_id)? else {
-            continue;
-        };
-        if !learnvault_core::can_user_access_course(db, user_id, is_admin, &library_id)? {
-            return Err(learnvault_core::Error::MediaNotFound {
-                media_id: media_id.to_owned(),
-            });
+        match &operation.payload {
+            SyncPayload::Progress { media_id, .. } | SyncPayload::Bookmark { media_id, .. } => {
+                check_media_access(db, user_id, is_admin, media_id)?;
+            }
+            SyncPayload::Note {
+                note_id, media_id, ..
+            } => {
+                check_media_access(db, user_id, is_admin, media_id)?;
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    note_id,
+                    learnvault_core::study_note_media_id_for_owner,
+                )?;
+            }
+            SyncPayload::FlashcardCreated {
+                card_id, media_id, ..
+            } => {
+                check_media_access(db, user_id, is_admin, media_id)?;
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    card_id,
+                    learnvault_core::flashcard_media_id_for_owner,
+                )?;
+            }
+            SyncPayload::NoteDeleted { note_id } => {
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    note_id,
+                    learnvault_core::study_note_media_id_for_owner,
+                )?;
+            }
+            SyncPayload::BookmarkDeleted { bookmark_id } => {
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    bookmark_id,
+                    learnvault_core::media_bookmark_media_id_for_owner,
+                )?;
+            }
+            SyncPayload::FlashcardUpdated { card_id, .. }
+            | SyncPayload::FlashcardDeleted { card_id }
+            | SyncPayload::FlashcardReview { card_id, .. } => {
+                check_existing_record_media(
+                    db,
+                    user_id,
+                    is_admin,
+                    card_id,
+                    learnvault_core::flashcard_media_id_for_owner,
+                )?;
+            }
+            SyncPayload::Preference { .. } => {}
         }
     }
     Ok(())
