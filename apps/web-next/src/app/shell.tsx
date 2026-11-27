@@ -123,6 +123,7 @@ export function AppShell() {
 		return next;
 	});
 	const userId = session.data?.user?.userId ?? null;
+	const [sessionExpired, setSessionExpired] = useState(false);
 	// Focus sessions and unsaved positions queue per user, so a shared browser never mixes accounts.
 	useEffect(() => {
 		const scope = playerPreferencesScope(transportKind, userId);
@@ -136,14 +137,16 @@ export function AppShell() {
 	// A 401 from any API call re-reads the session; the guard below sends the visitor to /login.
 	useEffect(() => {
 		const onExpired = () => {
+			if (!userId) return;
+			setSessionExpired(true);
 			void client.invalidateQueries({ queryKey: keys.session });
 		};
 		window.addEventListener(SESSION_EXPIRED_EVENT, onExpired);
 		return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired);
-	}, [client]);
+	}, [client, userId]);
 
 	if (session.isPending) return <p role="status" className="p-8 text-muted-foreground">{tr('Loading…', 'Carregando…')}</p>;
-	if (!session.data?.user) return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
+	if (!session.data?.user) return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}${location.hash}`, sessionExpired }} />;
 
 	const user = session.data.user;
 	// A temporary password only unlocks the account page: every other route would answer 403.
