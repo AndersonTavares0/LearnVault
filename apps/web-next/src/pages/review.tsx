@@ -382,8 +382,9 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 						)}
 					</div>
 					{importMessage && <p role="status" className="text-sm text-muted-foreground">{importMessage}</p>}
-					{saveEdit.error && <p role="alert" className="text-sm text-destructive">{saveEdit.error.message}</p>}
-					{remove.error && <p role="alert" className="text-sm text-destructive">{remove.error.message}</p>}
+					{(importCards.error || saveEdit.error || remove.error) && (
+						<p role="alert" className="text-sm text-destructive">{importCards.error?.message || saveEdit.error?.message || remove.error?.message}</p>
+					)}
 					{editing && (
 						<form onSubmit={submitEdit} className="space-y-3 rounded-lg border bg-card p-4" aria-label={tr('Edit card', 'Editar cartão')}>
 							<div className="space-y-1.5">

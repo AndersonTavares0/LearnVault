@@ -1529,7 +1529,7 @@ fn apply_flashcard_create(
     if existing_owner.is_some_and(|existing| existing != owner_id) {
         return Ok(());
     }
-    let interval_days = interval_days.unwrap_or(0).max(0);
+    let interval_days = interval_days.unwrap_or(0).clamp(0, 365);
     let next_due = next_due.unwrap_or(created_at);
     conn.execute(
         "INSERT INTO flashcard

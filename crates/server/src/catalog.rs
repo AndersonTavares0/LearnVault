@@ -439,12 +439,24 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     };
 
     let courses = state.courses_snapshot();
-    let discovered = state
-        .config
-        .library_root
-        .as_deref()
-        .map(|root| crate::courses::discover_unregistered_courses(root, &courses))
-        .unwrap_or_default();
+    let discovered = match state.config.library_root.clone() {
+        Some(root) => {
+            let Some(discover_permit) = state.try_acquire_blocking_task() else {
+                return service_unavailable();
+            };
+            let existing = courses.clone();
+            match tokio::task::spawn_blocking(move || {
+                let _discover_permit = discover_permit;
+                crate::courses::discover_unregistered_courses(&root, &existing)
+            })
+            .await
+            {
+                Ok(found) => found,
+                Err(_) => return internal_error("rescan failed"),
+            }
+        }
+        None => Vec::new(),
+    };
     if courses.is_empty() && discovered.is_empty() {
         return private_no_store(
             (

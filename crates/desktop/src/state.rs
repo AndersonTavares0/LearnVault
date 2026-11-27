@@ -1116,15 +1116,21 @@ impl DesktopState {
                 total,
             });
         }
-        let to_read = requested.min((total - start) as usize);
+        let to_read = (total - start).min(requested as u64) as usize;
         let mut file = opened.file;
         file.seek(SeekFrom::Start(start))
             .map_err(|_| IpcError::media_not_found())?;
         let mut buf = vec![0u8; to_read];
-        let read = file
-            .read(&mut buf)
-            .map_err(|_| IpcError::media_not_found())?;
-        buf.truncate(read);
+        let mut filled = 0;
+        while filled < to_read {
+            match file.read(&mut buf[filled..]) {
+                Ok(0) => break,
+                Ok(n) => filled += n,
+                Err(err) if err.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(_) => return Err(IpcError::media_not_found()),
+            }
+        }
+        buf.truncate(filled);
         Ok(MediaSliceDto { bytes: buf, total })
     }
 

@@ -417,7 +417,15 @@ pub(crate) async fn import(
             else {
                 return Err(ImportFailure::InvalidPath);
             };
-            let path_str = resolved.to_str().ok_or(ImportFailure::InvalidPath)?;
+            let Ok(resolved_canonical) = fs::canonicalize(&resolved) else {
+                return Err(ImportFailure::InvalidPath);
+            };
+            if !resolved_canonical.starts_with(&canonical_root) {
+                return Err(ImportFailure::InvalidPath);
+            }
+            let path_str = resolved_canonical
+                .to_str()
+                .ok_or(ImportFailure::InvalidPath)?;
             return import_course(&courses, &courses_file, path_str);
         }
         import_course(&courses, &courses_file, &request.path)
