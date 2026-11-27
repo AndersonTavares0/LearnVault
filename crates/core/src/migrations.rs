@@ -890,6 +890,161 @@ pub(crate) fn migrate_to_latest(conn: &mut Connection) -> rusqlite::Result<()> {
     for step in &MIGRATIONS[current..] {
         tx.execute_batch(step)?;
     }
+    if current < 23 {
+        reconcile_v23_flashcard_text(&tx)?;
+    }
     tx.pragma_update(None, "user_version", SCHEMA_VERSION as i64)?;
     tx.commit()
+}
+
+/// Reconciles V23 `text_updated_at` and card text with `sync_operation` for cards whose
+/// `updated_at` was bumped by a review in V22, so upgraded databases converge with fresh replicas.
+fn reconcile_v23_flashcard_text(conn: &Connection) -> rusqlite::Result<()> {
+    use std::collections::HashMap;
+
+    struct CardJournalState {
+        created_text: Option<(String, String)>,
+        text_updated_at: i64,
+        latest_edit: Option<(String, String, i64)>,
+    }
+
+    let mut cards: HashMap<(String, String), (i64, String, String)> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT f.owner_id, f.card_id, f.created_at, f.front, f.back
+               FROM flashcard f
+              WHERE EXISTS (
+                    SELECT 1 FROM flashcard_review r
+                     WHERE r.owner_id = f.owner_id
+                       AND r.card_id = f.card_id
+                       AND r.reviewed_at >= f.updated_at
+              )",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, String>(4)?,
+            ))
+        })?;
+        for row in rows {
+            let (owner_id, card_id, created_at, front, back) = row?;
+            cards.insert((owner_id, card_id), (created_at.max(0), front, back));
+        }
+    }
+    if cards.is_empty() {
+        return Ok(());
+    }
+
+    let mut journal: HashMap<(String, String), CardJournalState> = HashMap::new();
+    {
+        let mut stmt = conn.prepare(
+            "SELECT owner_id, payload
+               FROM sync_operation
+              WHERE json_extract(payload, '$.kind') IN ('flashcard_created', 'flashcard_updated')
+              ORDER BY seq ASC",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?;
+        for row in rows {
+            let (owner_id, payload_json) = row?;
+            let Ok(payload) = serde_json::from_str::<crate::sync::SyncPayload>(&payload_json)
+            else {
+                continue;
+            };
+            match payload {
+                crate::sync::SyncPayload::FlashcardCreated {
+                    card_id,
+                    front,
+                    back,
+                    created_at,
+                    text_updated_at,
+                    ..
+                } => {
+                    let key = (owner_id, card_id.trim().to_owned());
+                    if !cards.contains_key(&key) {
+                        continue;
+                    }
+                    let Ok((front, back)) = crate::study::validate_card_text(&front)
+                        .and_then(|f| crate::study::validate_card_text(&back).map(|b| (f, b)))
+                    else {
+                        continue;
+                    };
+                    let created_at = created_at.max(0);
+                    let ts = text_updated_at.unwrap_or(created_at).max(created_at);
+                    journal
+                        .entry(key)
+                        .and_modify(|state| {
+                            if ts >= state.text_updated_at {
+                                state.created_text = Some((front.clone(), back.clone()));
+                                state.text_updated_at = ts;
+                                state.latest_edit = None;
+                            }
+                        })
+                        .or_insert(CardJournalState {
+                            created_text: Some((front, back)),
+                            text_updated_at: ts,
+                            latest_edit: None,
+                        });
+                }
+                crate::sync::SyncPayload::FlashcardUpdated {
+                    card_id,
+                    front,
+                    back,
+                    updated_at,
+                } => {
+                    let key = (owner_id, card_id.trim().to_owned());
+                    let Some((created_at, _, _)) = cards.get(&key) else {
+                        continue;
+                    };
+                    let Ok((front, back)) = crate::study::validate_card_text(&front)
+                        .and_then(|f| crate::study::validate_card_text(&back).map(|b| (f, b)))
+                    else {
+                        continue;
+                    };
+                    let ts = updated_at.max(0);
+                    let entry = journal.entry(key).or_insert(CardJournalState {
+                        created_text: None,
+                        text_updated_at: *created_at,
+                        latest_edit: None,
+                    });
+                    if ts >= entry.text_updated_at {
+                        entry.text_updated_at = ts;
+                        entry.latest_edit = Some((front, back, ts));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    for ((owner_id, card_id), state) in journal {
+        if let Some((front, back, ts)) = state.latest_edit {
+            conn.execute(
+                "UPDATE flashcard
+                    SET front = ?1,
+                        back = ?2,
+                        updated_at = MAX(updated_at, ?3),
+                        text_updated_at = ?3
+                  WHERE owner_id = ?4 AND card_id = ?5",
+                rusqlite::params![front, back, ts, owner_id, card_id],
+            )?;
+        } else if let (Some((c_front, c_back)), Some((_, cur_front, cur_back))) = (
+            state.created_text,
+            cards.get(&(owner_id.clone(), card_id.clone())),
+        ) && cur_front == &c_front
+            && cur_back == &c_back
+        {
+            conn.execute(
+                "UPDATE flashcard
+                    SET text_updated_at = ?1
+                  WHERE owner_id = ?2 AND card_id = ?3",
+                rusqlite::params![state.text_updated_at, owner_id, card_id],
+            )?;
+        }
+    }
+    Ok(())
 }

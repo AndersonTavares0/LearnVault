@@ -967,3 +967,43 @@ fn populated_database_migrates_with_integrity_and_valid_foreign_keys() -> TestRe
     assert_eq!(position, 42);
     Ok(())
 }
+
+#[test]
+fn a_fresh_replica_matches_the_upgraded_legacy_card_text() -> TestResult {
+    let dir = tempfile::tempdir()?;
+    let path = dir.path().join("legacy.sqlite");
+    let media = "INSERT INTO library (library_id, available) VALUES ('library-1', 1);
+                 INSERT INTO media (media_id, library_id, relative_path, relative_path_key, size, mtime, availability)
+                 VALUES ('media-a', 'library-1', 'lesson.mp4', 'lesson.mp4', 128, 1, 'available');";
+    {
+        let mut conn = rusqlite::Connection::open(&path)?;
+        let tx = conn.transaction()?;
+        for step in &learnvault_core::migration_steps_for_test()[..21] {
+            tx.execute_batch(step)?;
+        }
+        tx.pragma_update(None, "user_version", 21)?;
+        tx.execute_batch(media)?;
+        tx.execute_batch(
+            r#"INSERT INTO flashcard (card_id, owner_id, media_id, front, back, interval_days, next_due, created_at, updated_at)
+               VALUES ('card-a', 'owner-a', 'media-a', 'Original', 'Answer', 1, 86600, 100, 200);
+               INSERT INTO flashcard_review (owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
+               VALUES ('owner-a', 'card-a', 'good', 0, 86600, 200);
+               INSERT INTO sync_device (owner_id, device_id, last_seen_at)
+               VALUES ('owner-a', 'writer', 200);
+               INSERT INTO sync_operation (op_id, owner_id, device_id, client_at, received_at, payload) VALUES
+               ('create', 'owner-a', 'writer', 100, 100, '{"kind":"flashcard_created","card_id":"card-a","media_id":"media-a","front":"Original","back":"Answer","created_at":100}'),
+               ('review', 'owner-a', 'writer', 200, 200, '{"kind":"flashcard_review","card_id":"card-a","rating":"good","reviewed_at":200}'),
+               ('edit', 'owner-a', 'offline', 150, 201, '{"kind":"flashcard_updated","card_id":"card-a","front":"Offline edit","back":"Answer","updated_at":150}');"#,
+        )?;
+        tx.commit()?;
+    }
+    let server = Database::open(&path)?;
+    let replica = Database::open_in_memory()?;
+    replica.connection().execute_batch(media)?;
+    let page = learnvault_core::pull_operations(&server, "owner-a", "reader", 0, 10)?;
+    learnvault_core::apply_operations(&replica, "owner-a", &page.items, page.cursor)?;
+    let server_cards = learnvault_core::list_flashcards(&server, "owner-a", "media-a")?;
+    let replica_cards = learnvault_core::list_flashcards(&replica, "owner-a", "media-a")?;
+    assert_eq!(server_cards[0].front, replica_cards[0].front);
+    Ok(())
+}
