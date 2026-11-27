@@ -866,6 +866,21 @@ fn session_cookie(state: &AppState, token: &str, clear: bool) -> Option<HeaderVa
     HeaderValue::from_str(&value).ok()
 }
 
+fn forwarded_host(headers: &HeaderMap) -> Option<&str> {
+    let raw = headers
+        .get("x-forwarded-host")
+        .and_then(|value| value.to_str().ok())?;
+    let host = raw.split(',').next()?.trim();
+    if host.is_empty()
+        || host.chars().any(|ch| {
+            ch.is_control() || ch.is_whitespace() || matches!(ch, '/' | '\\' | '@' | '?' | '#')
+        })
+    {
+        return None;
+    }
+    Some(host)
+}
+
 pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
     let host = headers
         .get("host")
@@ -889,7 +904,12 @@ pub(crate) fn same_origin(headers: &HeaderMap) -> bool {
     let Some(candidate) = candidate else {
         return false;
     };
-    candidate == format!("http://{host}") || candidate == format!("https://{host}")
+    if candidate == format!("http://{host}") || candidate == format!("https://{host}") {
+        return true;
+    }
+    forwarded_host(headers).is_some_and(|fwd| {
+        candidate == format!("http://{fwd}") || candidate == format!("https://{fwd}")
+    })
 }
 
 fn csrf_failed() -> Response {
@@ -972,5 +992,34 @@ mod tests {
         assert_eq!(second.len(), 64);
         assert_ne!(first, hash_session_token(&first));
         assert_eq!(hash_session_token(&first), hash_session_token(&first));
+    }
+
+    #[test]
+    fn same_origin_honors_valid_x_forwarded_host_and_rejects_malformed() {
+        use axum::http::{HeaderMap, HeaderValue};
+
+        let mut headers = HeaderMap::new();
+        headers.insert("host", HeaderValue::from_static("learnvault:8090"));
+        headers.insert(
+            "x-forwarded-host",
+            HeaderValue::from_static("vault.example.com"),
+        );
+        headers.insert(
+            "origin",
+            HeaderValue::from_static("https://vault.example.com"),
+        );
+        assert!(super::same_origin(&headers));
+
+        let mut bad = HeaderMap::new();
+        bad.insert("host", HeaderValue::from_static("learnvault:8090"));
+        bad.insert(
+            "x-forwarded-host",
+            HeaderValue::from_static("evil.com@good.com"),
+        );
+        bad.insert(
+            "origin",
+            HeaderValue::from_static("https://evil.com@good.com"),
+        );
+        assert!(!super::same_origin(&bad));
     }
 }

@@ -269,6 +269,17 @@ pub struct RecentStudyDto {
     pub items: Vec<StudyProgressDto>,
 }
 
+/// One page of the local owner's whole study state, newest first.
+///
+/// `next_cursor` is the opaque value to send back for the following page; `None` ends the walk.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct StudyStateDto {
+    /// Progress items of this page.
+    pub items: Vec<StudyProgressDto>,
+    /// Where the next page starts, when there is one.
+    pub next_cursor: Option<String>,
+}
+
 /// Playback preferences of the local owner.
 ///
 /// Speeds use the same contract as the HTTP adapter (percentages of normal speed), so
@@ -922,6 +933,50 @@ pub struct SearchLessonDto {
     pub title: String,
 }
 
+/// A flashcard matched by global search, shaped like the HTTP payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SearchFlashcardDto {
+    /// Stable identifier of the flashcard.
+    pub card_id: String,
+    /// Media identifier of the lesson attached to the flashcard.
+    pub media_id: String,
+    /// Identifier of the course containing the flashcard.
+    pub course_id: String,
+    /// Display title of the course containing the flashcard.
+    pub course_title: String,
+    /// Relative lesson path inside the course.
+    pub lesson_path: String,
+    /// Display title of the lesson.
+    pub lesson_title: String,
+    /// Optional lesson timestamp (in seconds) referenced by the card.
+    pub position_seconds: Option<i64>,
+    /// Highlighted or truncated search snippet from the card prompt or answer.
+    pub snippet: String,
+}
+
+/// A bookmark or PDF annotation matched by global search, shaped like the HTTP payload.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct SearchBookmarkDto {
+    /// Stable identifier of the bookmark or annotation.
+    pub bookmark_id: String,
+    /// Result kind (`"bookmark"` or `"annotation"`).
+    pub kind: String,
+    /// Media identifier of the lesson or material.
+    pub media_id: String,
+    /// Identifier of the course containing the bookmark or annotation.
+    pub course_id: String,
+    /// Display title of the course containing the bookmark or annotation.
+    pub course_title: String,
+    /// Relative lesson or material path inside the course.
+    pub lesson_path: String,
+    /// Display title of the lesson or material.
+    pub lesson_title: String,
+    /// Lesson timestamp (in seconds) or PDF page position.
+    pub position_seconds: i64,
+    /// Highlighted or truncated search snippet from the note text.
+    pub snippet: String,
+}
+
 /// Grouped global search results.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct SearchResultsDto {
@@ -931,4 +986,18 @@ pub struct SearchResultsDto {
     pub courses: Vec<SearchCourseDto>,
     /// Lessons whose path matched.
     pub lessons: Vec<SearchLessonDto>,
+    /// Flashcards of the local owner.
+    pub flashcards: Vec<SearchFlashcardDto>,
+    /// Bookmarks and PDF annotations of the local owner.
+    pub bookmarks: Vec<SearchBookmarkDto>,
+}
+
+/// Byte slice read from an authorized media item for offline desktop text/subtitle loading.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaSliceDto {
+    /// Read bytes starting at the requested offset.
+    pub bytes: Vec<u8>,
+    /// Total file size in bytes.
+    pub total: u64,
 }

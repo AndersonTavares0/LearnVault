@@ -1,6 +1,36 @@
+import { tr } from '@/lib/i18n';
+import type { ReviewRating } from '@/lib/transport';
+
 /** Anki's plain-text exchange: one card per line, front and back separated by a tab. */
 
 export type CardText = { front: string; back: string };
+
+export const REVIEW_RATINGS: readonly ReviewRating[] = ['again', 'hard', 'good', 'easy'] as const;
+
+export function ratingLabel(rating: ReviewRating): string {
+	switch (rating) {
+		case 'again': return tr('Again', 'De novo');
+		case 'hard': return tr('Hard', 'Difícil');
+		case 'good': return tr('Good', 'Bom');
+		case 'easy': return tr('Easy', 'Fácil');
+	}
+}
+
+/** Matches backend `schedule_review` rules so rating buttons preview the exact next interval. */
+export function previewIntervalLabel(intervalDays: number, rating: ReviewRating): string {
+	if (rating === 'again') return tr('10m', '10 min');
+	if (rating === 'hard') {
+		if (intervalDays === 0) return tr('12h', '12 h');
+		const next = Math.min(365, Math.max(intervalDays, Math.floor((intervalDays * 6) / 5)));
+		return tr(`${next}d`, `${next} d`);
+	}
+	if (rating === 'good') {
+		const next = intervalDays === 0 ? 1 : Math.min(365, intervalDays * 2);
+		return tr(`${next}d`, `${next} d`);
+	}
+	const next = intervalDays === 0 ? 4 : Math.min(365, intervalDays * 3);
+	return tr(`${next}d`, `${next} d`);
+}
 
 /** Most cards one import creates; a larger file is cut here and the reader is told. */
 export const MAX_IMPORT_CARDS = 500;

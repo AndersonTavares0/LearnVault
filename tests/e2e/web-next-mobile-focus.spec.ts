@@ -90,3 +90,40 @@ test('mobile bottom navigation does not obscure focused course controls (issue #
 
 	expect([...seen]).toEqual(targets);
 });
+
+test('phone search opens focused, keeps Tab inside, and returns focus on dismissal', async ({ page, origin }) => {
+	await page.setViewportSize({ width: 390, height: 760 });
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await signIn(page, origin);
+
+	const tab = page.getByRole('navigation', { name: 'Sections' }).getByRole('button', { name: 'Search' });
+	const search = page.getByRole('combobox', { name: 'Search notes, courses and lessons' });
+	const close = page.getByRole('button', { name: 'Close search' });
+
+	await tab.click();
+	await expect(search).toBeFocused();
+	await expect(search).toBeVisible();
+
+	await page.keyboard.press('Tab');
+	await expect(close).toBeFocused();
+	await page.keyboard.press('Tab');
+	await expect(search).toBeFocused();
+	await page.keyboard.press('Shift+Tab');
+	await expect(close).toBeFocused();
+
+	await page.keyboard.press('Escape');
+	await expect(tab).toBeFocused();
+	await expect(search).toBeHidden();
+
+	// The shortcut also opens the full-screen palette on a phone, where the rail field is hidden.
+	await page.keyboard.press('/');
+	await expect(search).toBeFocused();
+	await expect(search).toBeVisible();
+	await close.click();
+	await expect(tab).toBeFocused();
+
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.keyboard.press('/');
+	await expect(search).toBeFocused();
+	await expect(search).toBeVisible();
+});

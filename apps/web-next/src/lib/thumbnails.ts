@@ -106,7 +106,7 @@ export function thumbnailCacheKey(profile: string, courseId: string, source: Fil
 		!Number.isSafeInteger(source.size) || source.size! <= 0 ||
 		!Number.isSafeInteger(source.mtimeSeconds) || source.mtimeSeconds! < 0
 	) throw new Error('Fonte sem revisão válida para cache.');
-	return JSON.stringify([profile, courseId, source.mediaId, source.size, source.mtimeSeconds, 1]);
+	return JSON.stringify([profile, courseId, source.mediaId, source.size, source.mtimeSeconds, 2]);
 }
 
 export class ThumbnailCache {
@@ -358,6 +358,33 @@ function canvasToJpeg(canvas: HTMLCanvasElement): Promise<Blob | null> {
 	return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.82));
 }
 
+/** Rejects solid/blank intro frames (including compressed monochrome frames) so courses fall back to typographic covers. */
+function isFlatFrame(context: CanvasRenderingContext2D, width: number, height: number): boolean {
+	if (typeof context.getImageData !== 'function') return false;
+	const { data } = context.getImageData(0, 0, width, height);
+	const total = width * height;
+	if (total === 0 || data.length < 4) return true;
+	const step = Math.max(1, Math.floor(total / 64));
+	const buckets = new Map<number, number>();
+	let samples = 0;
+	let minLuma = 255;
+	let maxLuma = 0;
+	for (let p = 0; p < total; p += step) {
+		const offset = p * 4;
+		const r = data[offset];
+		const g = data[offset + 1];
+		const b = data[offset + 2];
+		const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+		if (luma < minLuma) minLuma = luma;
+		if (luma > maxLuma) maxLuma = luma;
+		const bucket = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+		buckets.set(bucket, (buckets.get(bucket) ?? 0) + 1);
+		samples += 1;
+	}
+	const maxBucket = Math.max(0, ...buckets.values());
+	return maxLuma - minLuma < 24 || maxBucket / Math.max(1, samples) >= 0.9;
+}
+
 /** Decodes a single media and exports a frame; any failure preserves the visual fallback. */
 export async function captureVideoThumbnail(
 	mediaUrl: string,
@@ -388,6 +415,7 @@ export async function captureVideoThumbnail(
 		const context = canvas.getContext('2d');
 		if (!context) return null;
 		context.drawImage(video, 0, 0, dimensions.width, dimensions.height);
+		if (isFlatFrame(context, dimensions.width, dimensions.height)) return null;
 		const blob = await canvasToJpeg(canvas);
 		if (!blob || blob.type !== 'image/jpeg' || blob.size === 0 || blob.size > THUMBNAIL_LIMITS.maxImageBytes) return null;
 		return blob;

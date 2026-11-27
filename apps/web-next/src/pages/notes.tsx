@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, Check, Download, NotebookPen, Search } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Download, NotebookPen, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { GONE } from '@/components/course-picker';
@@ -7,9 +7,10 @@ import { ConfirmDelete } from '@/components/confirm-delete';
 import { Markdown } from '@/components/markdown';
 import { NoteEditor } from '@/components/note-editor';
 import { Panel } from '@/components/panel';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useLocale } from '@/hooks/use-locale';
+import { displayLessonTitle } from '@/lib/catalog';
 import { getLocale, tr } from '@/lib/i18n';
 import { formatDuration, studySyncSupported } from '@/lib/player';
 import { findLessonLocation, href, type LessonLocation } from '@/lib/router';
@@ -18,12 +19,16 @@ import { normalizeForSearch } from '@/lib/search';
 import { transport, type StudyNote } from '@/lib/transport';
 import { cn } from '@/lib/utils';
 import { useCatalog, useNotes } from '@/app/data';
+import { QueryFailure } from '@/components/query-failure';
 import { PageHeader } from '@/app/shell';
 
 type Entry = { note: StudyNote; location: LessonLocation | null };
 
 const goneTitle = () => tr('Lessons no longer in the library', 'Aulas que não estão mais na biblioteca');
 const noteCourse = (location: LessonLocation | null) => location?.courseId ?? GONE;
+const noteTitle = ({ location, note }: Entry) => location
+	? displayLessonTitle(location.lesson.title, location.moduleTitle)
+	: note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida');
 
 /** Notes start from the notes: every note, newest lesson first, filtered by course on demand. */
 export function NotesPage() {
@@ -34,7 +39,10 @@ export function NotesPage() {
 	if (!studySyncSupported) return <PageHeader icon={NotebookPen} title={tr('Notes', 'Notas')} description={tr('Study tracking is off on this server.', 'O acompanhamento de estudo está desligado neste servidor.')} />;
 	// Wait for both lists: without the catalog every note would look like it belongs to a lesson that is gone.
 	if (notes.isPending || catalog.isPending) return <p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>;
-	if (notes.isError) return <p role="alert" className="text-destructive">{notes.error.message}</p>;
+	if (notes.isError || (catalog.isError && !catalog.data)) {
+		const failed = notes.isError ? notes : catalog;
+		return <QueryFailure message={tr('Could not load your notebook.', 'Não foi possível carregar seu caderno.')} retry={() => void failed.refetch()} />;
+	}
 	return <Notebook courseId={params.get('course')} />;
 }
 
@@ -51,6 +59,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 	const [view, setView] = useState<'lesson' | 'date'>('lesson');
 	const [editing, setEditing] = useState<{ id: string; content: string } | null>(null);
 	const [deleting, setDeleting] = useState<StudyNote | null>(null);
+	const firstCourse = catalog.data?.nodes.find((node) => node.role === 'course');
 	const refresh = () => client.invalidateQueries({ queryKey: ['notes'] });
 	const update = useMutation({ mutationFn: ({ id, content }: { id: string; content: string }) => transport.updateNote(id, content), onSuccess: () => { setEditing(null); return refresh(); } });
 	const remove = useMutation({ mutationFn: (id: string) => transport.deleteNote(id), onSuccess: () => { setDeleting(null); return refresh(); } });
@@ -66,10 +75,10 @@ function Notebook({ courseId }: { courseId: string | null }) {
 		const courses = [...named].map(([id, value]) => ({ id, ...value })).sort((a, b) => a.title.localeCompare(b.title, getLocale()));
 		const courseTitle = courseId === null ? tr('All courses', 'Todos os cursos') : named.get(courseId)?.title ?? (courseId === GONE ? goneTitle() : (catalog.data?.nodes ?? []).find((node) => node.courseId === courseId)?.title ?? courseId);
 		const inScope = entries.filter(({ location }) => courseId === null || noteCourse(location) === courseId).length;
-		const matches = entries.filter(({ note, location }) => (courseId === null || noteCourse(location) === courseId) && (!needle || [note.content, location?.courseTitle, location?.lesson.title, note.relativePath].some((text) => text && normalizeForSearch(text).includes(needle))));
+		const matches = entries.filter((entry) => (courseId === null || noteCourse(entry.location) === courseId) && (!needle || [entry.note.content, entry.location?.courseTitle, noteTitle(entry), entry.note.relativePath].some((text) => text && normalizeForSearch(text).includes(needle))));
 		const byLesson = new Map<string, { lesson: string; location: LessonLocation | null; updatedAt: number; items: Entry[] }>();
 		for (const entry of matches) {
-			const group = byLesson.get(entry.note.mediaId) ?? { lesson: entry.location?.lesson.title ?? entry.note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida'), location: entry.location, updatedAt: 0, items: [] };
+			const group = byLesson.get(entry.note.mediaId) ?? { lesson: noteTitle(entry), location: entry.location, updatedAt: 0, items: [] };
 			group.items.push(entry);
 			group.updatedAt = Math.max(group.updatedAt, entry.note.updatedAt);
 			byLesson.set(entry.note.mediaId, group);
@@ -102,7 +111,7 @@ function Notebook({ courseId }: { courseId: string | null }) {
 				const cTitle = entry.location?.courseTitle ?? goneTitle();
 				const course = byCourse.get(cId) ?? { id: cId, title: cTitle, lessons: new Map() };
 				const lKey = entry.note.mediaId;
-				const lTitle = entry.location?.lesson.title ?? entry.note.relativePath ?? tr('Unknown lesson', 'Aula desconhecida');
+				const lTitle = noteTitle(entry);
 				const lesson = course.lessons.get(lKey) ?? { title: lTitle, location: entry.location, items: [] };
 				lesson.items.push(entry);
 				course.lessons.set(lKey, lesson);
@@ -126,17 +135,17 @@ function Notebook({ courseId }: { courseId: string | null }) {
 	};
 
 	const renderItem = ({ note, location }: Entry) => (
-		<li key={note.noteId} className="group -mx-3 flex flex-wrap items-start gap-4 rounded-xl px-3 py-3 transition-colors duration-150 focus-within:bg-panel/60 hover:bg-panel/60 sm:flex-nowrap">
-			<div className="w-14 shrink-0 pt-0.5">
+		<li key={note.noteId} className="group grid grid-cols-[4.75rem_minmax(0,1fr)] items-start gap-x-3 gap-y-1 py-4 xl:grid-cols-[4.75rem_minmax(0,1fr)_auto] xl:gap-x-4">
+			<div className="shrink-0 pt-0.5">
 					{location ? (
-						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="relative inline-flex h-8 min-w-14 items-center justify-center rounded-lg bg-brand-soft px-2 text-sm font-semibold text-brand-ink tabular-nums after:absolute after:-inset-y-2 after:inset-x-0 after:content-[''] hover:underline">
-							{formatDuration(note.positionSeconds)}
+						<Link to={href('course', location.courseId, location.lesson.path, note.positionSeconds).replace(/^#/, '')} aria-label={tr(`Open ${location.lesson.title} at ${formatDuration(note.positionSeconds)}`, `Abrir ${location.lesson.title} em ${formatDuration(note.positionSeconds)}`)} className="relative inline-flex min-h-11 items-center after:absolute after:-inset-y-1 after:inset-x-0 after:content-[''] hover:underline"><span className="rounded-md border border-primary/45 px-2 py-0.5 text-[11.5px] font-semibold tabular-nums text-primary hover:bg-primary/10">
+							{formatDuration(note.positionSeconds)}</span>
 						</Link>
 					) : (
-						<span className="inline-flex h-8 min-w-14 items-center justify-center rounded-lg bg-muted px-2 text-sm text-muted-foreground tabular-nums">{formatDuration(note.positionSeconds)}</span>
+						<span className="inline-flex min-h-11 items-center rounded-md border border-border px-2 py-0.5 text-[11.5px] font-semibold tabular-nums text-muted-foreground">{formatDuration(note.positionSeconds)}</span>
 					)}
 			</div>
-			<div className="min-w-0 flex-1 space-y-1">
+			<div className="min-w-0 space-y-1">
 				{editing?.id === note.noteId ? (
 					<form className="space-y-2" onSubmit={(event) => { event.preventDefault(); if (editing.content.trim()) update.mutate({ id: editing.id, content: editing.content.trim() }); }}>
 						<label htmlFor={`edit-${note.noteId}`} className="sr-only">{tr('Note text', 'Texto da nota')}</label>
@@ -147,15 +156,13 @@ function Notebook({ courseId }: { courseId: string | null }) {
 						</div>
 					</form>
 				) : (
-					<Markdown text={note.content} className="max-w-prose font-[Literata_Variable,Georgia,serif] text-[1.0625rem] leading-relaxed" />
+					<Markdown text={note.content} className="max-w-[68ch] text-[15px] leading-[1.6] text-foreground" />
 				)}
 			</div>
-			<div className="ml-auto flex shrink-0 items-center gap-1 self-start text-xs text-muted-foreground">
-				<span className="whitespace-nowrap">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</span>
-				<span aria-hidden="true" className="opacity-50">·</span>
-				<Button variant="ghost" size="xs" className="h-9 px-1.5 text-xs font-medium text-muted-foreground hover:text-foreground" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}>{tr('Edit', 'Editar')}</Button>
-				<span aria-hidden="true" className="opacity-50">·</span>
-				<Button variant="ghost" size="xs" className="h-9 px-1.5 text-xs font-medium text-muted-foreground hover:text-destructive" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}>{tr('Delete', 'Excluir')}</Button>
+			<div className="col-start-2 flex flex-wrap items-center gap-x-2 text-[12.5px] text-muted-foreground xl:col-start-auto">
+				<time dateTime={new Date(note.updatedAt * 1000).toISOString()} className="whitespace-nowrap tabular-nums">{new Date(note.updatedAt * 1000).toLocaleDateString(getLocale(), { dateStyle: 'medium' })}</time>
+				<Button variant="ghost" size="xs" className="min-w-11 px-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-foreground" onClick={() => setEditing({ id: note.noteId, content: note.content })} aria-label={tr('Edit note', 'Editar nota')}>{tr('Edit', 'Editar')}</Button>
+				<Button variant="ghost" size="xs" className="min-w-11 px-1.5 text-[12.5px] font-medium text-muted-foreground hover:text-destructive" disabled={remove.isPending} onClick={() => setDeleting(note)} aria-label={tr('Delete note', 'Excluir nota')}>{tr('Delete', 'Excluir')}</Button>
 			</div>
 		</li>
 	);
@@ -166,69 +173,87 @@ function Notebook({ courseId }: { courseId: string | null }) {
 			<PageHeader
 				icon={NotebookPen}
 				title={courseId === null ? tr('Notes', 'Notas') : tr(`${courseTitle} notes`, `Notas de ${courseTitle}`)}
-				description={(courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso`)) + ` · ${tr(`${groups.length} ${groups.length === 1 ? 'lesson' : 'lessons'}`, `${groups.length} ${groups.length === 1 ? 'aula' : 'aulas'}`)} · ${tr(`${weekCount} this week`, `${weekCount} nesta semana`)}`}
+				description={totalNotes === 0 ? undefined : <span className="inline-flex flex-wrap gap-x-4 gap-y-1"><span>{courseId === null ? tr(`${total} ${total === 1 ? 'note' : 'notes'} across ${courses.length} ${courses.length === 1 ? 'course' : 'courses'}`, `${total} ${total === 1 ? 'nota' : 'notas'} em ${courses.length} ${courses.length === 1 ? 'curso' : 'cursos'}`) : tr(`${total} ${total === 1 ? 'note' : 'notes'} in this course`, `${total} ${total === 1 ? 'nota' : 'notas'} neste curso`)}</span><span>{tr(`${groups.length} ${groups.length === 1 ? 'lesson' : 'lessons'}`, `${groups.length} ${groups.length === 1 ? 'aula' : 'aulas'}`)}</span><span>{tr(`${weekCount} this week`, `${weekCount} nesta semana`)}</span></span>}
 				actions={matches.length > 0 ? (
-					<Button variant="outline" className="rounded-full" onClick={exportMarkdown}>
+					<Button variant="outline" onClick={exportMarkdown}>
 						<Download />
 						{isFiltered
 							? tr(`Export ${total} filtered ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar ${total} ${total === 1 ? 'nota filtrada' : 'notas filtradas'} em Markdown`)
-							: tr(`Export all ${total} ${total === 1 ? 'note' : 'notes'} as Markdown`, `Exportar todas as notas (${total}) em Markdown`)}
+							: total === 1
+								? tr('Export 1 note as Markdown', 'Exportar 1 nota em Markdown')
+								: tr(`Export all ${total} notes as Markdown`, `Exportar todas as ${total} notas em Markdown`)}
 					</Button>
 				) : undefined}
 			/>
 			<div className={cn('grid items-start gap-8', courses.length > 1 && 'lg:grid-cols-[15rem_minmax(0,1fr)]')}>
 				{courses.length > 1 && (
 					<aside aria-label={tr('Courses', 'Cursos')} className="hidden space-y-1 lg:block">
-						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-left text-sm transition-colors duration-150', courseId === null ? 'bg-panel font-semibold text-foreground' : 'text-muted-foreground hover:bg-brand-tint hover:text-foreground')}>
+						<button type="button" onClick={() => setParams({})} aria-pressed={courseId === null} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-[var(--radius)] px-3.5 py-2 text-left text-sm transition-colors', courseId === null ? 'bg-brand-soft font-semibold text-brand-ink' : 'text-muted-foreground hover:bg-panel/65 hover:text-foreground')}>
 							<span className="truncate">{tr('All courses', 'Todos os cursos')}</span>
 							<span className="shrink-0 text-xs tabular-nums">{totalNotes}</span>
 						</button>
 						{courses.map((course) => (
-							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-xl px-3.5 py-2 text-left text-sm transition-colors duration-150', courseId === course.id ? 'bg-panel font-semibold text-foreground' : 'text-muted-foreground hover:bg-brand-tint hover:text-foreground')}>
-								<span className="line-clamp-2 min-w-0">{course.title}</span>
+							<button key={course.id} type="button" onClick={() => setParams({ course: course.id })} aria-pressed={courseId === course.id} className={cn('flex min-h-11 w-full items-center justify-between gap-2 rounded-[var(--radius)] px-3.5 py-2 text-left text-sm transition-colors', courseId === course.id ? 'bg-brand-soft font-semibold text-brand-ink' : 'text-muted-foreground hover:bg-panel/65 hover:text-foreground')}>
+								<span className="line-clamp-2 min-w-0 [overflow-wrap:anywhere]">{course.title}</span>
 								<span className="shrink-0 text-xs tabular-nums">{course.count}</span>
 							</button>
 						))}
 					</aside>
 				)}
 				<div className="min-w-0 space-y-6">
-					<div className="flex flex-wrap items-center gap-3">
-						<div role="search" aria-label={tr('Notes', 'Notas')} className="relative min-w-0 flex-1 basis-60">
-							<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
-							<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes or lessons', 'Buscar notas ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
+					{totalNotes > 0 && (
+						<div className="flex flex-wrap items-center gap-3">
+							<div role="search" aria-label={tr('Notes', 'Notas')} className="relative min-w-0 flex-1 basis-60">
+								<Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+								<Input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={tr('Search notes or lessons', 'Buscar notas ou aulas')} aria-label={tr('Search notes', 'Buscar notas')} className="pl-9" />
+							</div>
+							{courses.length > 1 && (
+								<select aria-label={tr('Filter by course', 'Filtrar por curso')} value={courseId ?? ''} onChange={(event) => setParams(event.target.value ? { course: event.target.value } : {})} className="h-11 min-w-0 max-w-full rounded-[var(--radius)] border border-[var(--study-rule)] bg-card px-3 pr-8 text-sm sm:max-w-xs lg:hidden">
+									<option value="">{tr('All courses', 'Todos os cursos')}</option>
+									{courses.map((course) => <option key={course.id} value={course.id}>{course.title} ({course.count})</option>)}
+								</select>
+							)}
+							<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="inline-flex rounded-[var(--radius)] border border-[var(--study-rule)] bg-panel/75 p-0.5">
+								<button type="button" aria-pressed={view === 'lesson'} onClick={() => setView('lesson')} className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-[calc(var(--radius)-2px)] px-3 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', view === 'lesson' ? 'bg-card font-semibold text-foreground shadow-2xs' : 'font-medium text-muted-foreground hover:text-foreground')}>{tr('By lesson', 'Por aula')}</button>
+								<button type="button" aria-pressed={view === 'date'} onClick={() => setView('date')} className={cn('inline-flex min-h-11 items-center gap-1.5 rounded-[calc(var(--radius)-2px)] px-3 text-sm transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none', view === 'date' ? 'bg-card font-semibold text-foreground shadow-2xs' : 'font-medium text-muted-foreground hover:text-foreground')}>{tr('By date', 'Por data')}</button>
+							</div>
 						</div>
-						{courses.length > 1 && (
-							<select aria-label={tr('Filter by course', 'Filtrar por curso')} value={courseId ?? ''} onChange={(event) => setParams(event.target.value ? { course: event.target.value } : {})} className="h-11 min-w-0 max-w-full rounded-lg border border-input bg-background px-3 text-sm sm:max-w-xs lg:hidden">
-								<option value="">{tr('All courses', 'Todos os cursos')}</option>
-								{courses.map((course) => <option key={course.id} value={course.id}>{course.title} ({course.count})</option>)}
-							</select>
-						)}
-						<div role="group" aria-label={tr('Group notes', 'Agrupar notas')} className="flex gap-2">
-							<Button size="sm" variant={view === 'lesson' ? 'selected' : 'outline'} aria-pressed={view === 'lesson'} onClick={() => setView('lesson')}>{tr('By lesson', 'Por aula')}{view === 'lesson' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
-							<Button size="sm" variant={view === 'date' ? 'selected' : 'outline'} aria-pressed={view === 'date'} onClick={() => setView('date')}>{tr('By date', 'Por data')}{view === 'date' && <Check className="size-3.5 text-primary" aria-hidden="true" />}</Button>
-						</div>
-					</div>
+					)}
 					{(update.error || remove.error) && <p role="alert" className="text-sm text-destructive">{(update.error ?? remove.error)?.message}</p>}
 					{notes.isPending ? (
 						<p role="status" className="text-muted-foreground">{tr('Loading notes…', 'Carregando notas…')}</p>
 					) : inScope === 0 ? (
-						<Panel className="p-5 text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open the Notes tab or press n to write one tied to that moment.', 'Ainda não há notas. Assistindo a uma aula, abra a aba Notas ou aperte n para escrever uma presa àquele momento.')}</Panel>
+						(
+							<div className="study-empty">
+								<span aria-hidden="true" className="mb-1 inline-flex size-11 items-center justify-center rounded-xl border border-primary/20 bg-brand-soft text-brand-ink"><NotebookPen className="size-5" /></span>
+								<h2 className="text-lg font-semibold tracking-tight">{tr('Your study notebook', 'Seu caderno de estudo')}</h2>
+								<p className="text-sm text-muted-foreground">{tr('No notes yet. While watching a lesson, open Notes to write one tied to that moment.', 'Durante uma aula, use “Notas” para registrar uma ideia e voltar a esse trecho depois.')}</p>
+								<div className="flex flex-wrap items-center justify-start gap-2 pt-2">
+									{firstCourse?.courseId && <Link to={`/course/${encodeURIComponent(firstCourse.courseId)}`} className={buttonVariants({ variant: 'default' })}>{tr(`Open ${firstCourse.title}`, `Abrir ${firstCourse.title}`)}</Link>}
+									<Link to="/" className={buttonVariants({ variant: firstCourse?.courseId ? 'outline' : 'default' })}>{tr('Browse your library', 'Explorar a biblioteca')}</Link>
+									{courseId !== null && <Link to="/notes" className={buttonVariants({ variant: 'ghost' })}>{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
+								</div>
+							</div>
+						)
 					) : groups.length === 0 ? (
-						<p role="status" className="text-muted-foreground">{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
+						<div role="status" className="space-y-2 text-muted-foreground">
+							<p>{tr('No notes match your search.', 'Nenhuma nota corresponde à busca.')}</p>
+							{courseId !== null && <Link to="/notes" className="inline-flex min-h-11 items-center font-medium text-foreground underline underline-offset-4 hover:no-underline">{tr('Show notes from all courses', 'Mostrar notas de todos os cursos')}</Link>}
+						</div>
 					) : view === 'date' ? (
 						dayGroups.map(({ day, courses: dayCourses }) => (
 							<section key={day} aria-label={day}>
-								<Panel className="space-y-4">
-									<h2 className="font-heading text-xl font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { dateStyle: 'full' })}</h2>
+								<Panel variant="open" className="space-y-4">
+									<h2 className="text-[15px] font-semibold">{new Date(`${day}T12:00:00`).toLocaleDateString(getLocale(), { dateStyle: 'full' })}</h2>
 									<div className="space-y-4">
 										{dayCourses.map((course) => (
 											<div key={course.id} className="space-y-3 border-t pt-3 first:border-t-0 first:pt-0">
-												<h3 className="text-sm font-semibold text-muted-foreground">{course.title}</h3>
+												<h3 className="text-[15px] font-semibold">{course.title}</h3>
 												{course.lessons.map((lesson) => (
 													<div key={lesson.items[0].note.mediaId} className="space-y-1">
 														<div className="flex flex-wrap items-baseline justify-between gap-2">
-															<h4 className="text-base font-semibold text-balance">{lesson.title}</h4>
-															{lesson.location && <Link to={href('course', lesson.location.courseId, lesson.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+															<h4 className="text-sm font-medium text-muted-foreground text-balance">{lesson.title}</h4>
+															{lesson.location && <Link to={href('course', lesson.location.courseId, lesson.location.lesson.path).replace(/^#/, '')} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{tr('Open lesson', 'Abrir aula')}<ArrowUpRight aria-hidden="true" /></Link>}
 														</div>
 														<ul className="divide-y">{lesson.items.map((entry) => renderItem(entry))}</ul>
 													</div>
@@ -242,17 +267,17 @@ function Notebook({ courseId }: { courseId: string | null }) {
 					) : (
 						courseSections.map((section) => {
 							const lessons = section.groups.map((group) => (
-								<section key={group.items[0].note.mediaId} aria-label={group.lesson} className="border-t pt-5 pb-3">
+								<section key={group.items[0].note.mediaId} aria-label={group.lesson} className="pt-4">
 									<div className="flex flex-wrap items-baseline justify-between gap-2">
-										<h3 className="text-base font-semibold text-balance">{group.lesson}<span className="ml-2.5 text-xs font-normal text-muted-foreground tabular-nums">{tr(`${group.items.length} ${group.items.length === 1 ? 'note' : 'notes'}`, `${group.items.length} ${group.items.length === 1 ? 'nota' : 'notas'}`)}</span></h3>
-										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary hover:underline">{tr('Open lesson', 'Abrir aula')}</Link>}
+										<h3 className="text-sm font-medium text-muted-foreground text-balance">{group.lesson}<span className="ml-2.5 text-xs font-normal tabular-nums">{tr(`${group.items.length} ${group.items.length === 1 ? 'note' : 'notes'}`, `${group.items.length} ${group.items.length === 1 ? 'nota' : 'notas'}`)}</span></h3>
+										{group.location && <Link to={href('course', group.location.courseId, group.location.lesson.path).replace(/^#/, '')} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>{tr('Open lesson', 'Abrir aula')}<ArrowUpRight aria-hidden="true" /></Link>}
 									</div>
-									<ul className="mt-1 divide-y divide-border/50">{group.items.map((entry) => renderItem(entry))}</ul>
+									<ul className="divide-y divide-[var(--study-rule)]">{group.items.map((entry) => renderItem(entry))}</ul>
 								</section>
 							));
 							return courseId === null ? (
-								<section key={section.id} aria-label={section.title} className="space-y-1">
-									<h2 className="pt-2 font-sans text-xl font-bold text-balance">{section.title}<span className="ml-3 text-sm font-normal text-muted-foreground tabular-nums">{tr(`${section.count} ${section.count === 1 ? 'note' : 'notes'}`, `${section.count} ${section.count === 1 ? 'nota' : 'notas'}`)}</span></h2>
+								<section key={section.id} aria-label={section.title} className="space-y-1 pb-2">
+									<h2 className="border-t border-[var(--study-rule)] pt-6 text-[15px] font-semibold text-balance">{section.title}<span className="ml-3 text-sm font-normal text-muted-foreground tabular-nums">{tr(`${section.count} ${section.count === 1 ? 'note' : 'notes'}`, `${section.count} ${section.count === 1 ? 'nota' : 'notas'}`)}</span></h2>
 									{lessons}
 								</section>
 							) : <div key={section.id}>{lessons}</div>;

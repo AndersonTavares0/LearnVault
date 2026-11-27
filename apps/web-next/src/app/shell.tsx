@@ -1,8 +1,9 @@
-import { BookOpen, KeyRound, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
+import { BookMarked, BookOpen, KeyRound, ChartNoAxesColumn, History, Layers, LogOut, Moon, NotebookPen, PanelLeftClose, PanelLeftOpen, Search, Settings, Sun, UserRound, type LucideIcon } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate } from 'react-router';
-import { BrandMark } from '@/components/brand';
+import { routerPath } from '@/components/course-card';
+import { CourseCover } from '@/components/course-cover';
 import { DesktopTitlebar } from '@/components/desktop-titlebar';
 import { GlobalSearch } from '@/components/global-search';
 import { IndexingIndicator } from '@/components/indexing-indicator';
@@ -15,13 +16,15 @@ import { useLocale } from '@/hooks/use-locale';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore, resolveTheme, updateAppearance } from '@/lib/appearance';
 import { tr } from '@/lib/i18n';
+import { buildLibrary } from '@/lib/library';
+import { href } from '@/lib/router';
 import { focusSaved, focusSync, retryFocusSessions, setFocusOutboxScope } from '@/lib/pomodoro-store';
 import { playerPreferencesScope } from '@/lib/player-preferences';
 import { progressOutbox, setProgressOutboxScope } from '@/lib/progress-outbox';
 import { SESSION_EXPIRED_EVENT } from '@/lib/session-guard';
 import { transportKind } from '@/lib/transport';
 import { cn } from '@/lib/utils';
-import { keys, useSession, useSignOut } from './data';
+import { keys, useCatalog, useRecent, useSession, useSignOut } from './data';
 import { clearUserLocalData, safeStorage } from './preferences';
 
 const navItems = () => [
@@ -31,9 +34,23 @@ const navItems = () => [
 	{ to: '/notes', label: tr('Notes', 'Notas'), icon: NotebookPen }
 ];
 
+const SIDEBAR_COLLAPSED_KEY = 'learnvault-sidebar-collapsed';
+
+function readSidebarCollapsed(): boolean {
+	try {
+		return safeStorage()?.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+	} catch {
+		return false;
+	}
+}
+
+/** The shortcut GlobalSearch listens for, labelled for the platform. */
+const searchShortcut = () => (/Mac|iPhone|iPad|iPod/.test(navigator.userAgent) ? '⌘K' : 'Ctrl K');
+
 /**
- * App frame (docs/design/redesign.md, "Navigation"): topbar with the global destinations,
- * search and account menu; on phones a bottom tab bar replaces the topbar links.
+ * App frame (docs/design/redesign.md, "Navigation"): on phones and tablets a top bar with search
+ * and account menu, plus a bottom tab bar. From lg the same header becomes a left rail with the
+ * destinations, search, courses in progress and the account controls at its foot.
  * Server builds require a session; the desktop build has a local identity.
  */
 /**
@@ -80,7 +97,7 @@ function MainContent({ pathname }: { pathname: string }) {
 	}, [pathname]);
 
 	return (
-		<main ref={main} id="main" tabIndex={-1} className="app-scroll min-h-0 flex-1 overflow-y-auto scroll-pb-[calc(4.5rem+env(safe-area-inset-bottom))] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring lg:scroll-pb-4 print:overflow-visible [&_h1:focus-visible]:outline-2 [&_h1:focus-visible]:outline-offset-4 [&_h1:focus-visible]:outline-ring">
+		<main ref={main} id="main" tabIndex={-1} className="app-scroll min-h-0 flex-1 overflow-y-auto scroll-pb-[calc(4.5rem+env(safe-area-inset-bottom))] focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-ring lg:scroll-pb-4 print:overflow-visible [&_h1:focus]:outline-none">
 			{/* The phone tab bar floats over the bottom edge, hence the extra clearance. */}
 			<div className="mx-auto w-full max-w-[var(--container-max,88rem)] px-5 pt-8 pb-28 sm:px-10 sm:pt-10 sm:pb-32 lg:pb-10">
 				<Outlet />
@@ -95,6 +112,16 @@ export function AppShell() {
 	const location = useLocation();
 
 	const client = useQueryClient();
+	const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
+	const toggleCollapsed = () => setCollapsed((current) => {
+		const next = !current;
+		try {
+			safeStorage()?.setItem(SIDEBAR_COLLAPSED_KEY, next ? '1' : '0');
+		} catch {
+			// Ignore unavailable storage.
+		}
+		return next;
+	});
 	const userId = session.data?.user?.userId ?? null;
 	// Focus sessions and unsaved positions queue per user, so a shared browser never mixes accounts.
 	useEffect(() => {
@@ -129,32 +156,87 @@ export function AppShell() {
 			<DocumentLock />
 			<SkipLink />
 			<DesktopTitlebar />
-			<header className="shrink-0 border-b print:hidden">
-				<div className="mx-auto flex h-[4.5rem] max-w-[var(--container-max,88rem)] items-center gap-x-3 px-4 sm:gap-x-8 sm:px-10">
-					<Link to="/" className="inline-flex items-center gap-2 rounded-md font-heading text-xl font-bold tracking-tight sm:gap-2.5 sm:text-2xl" aria-label={tr('LearnVault home', 'Início do LearnVault')}><BrandMark className="size-7 text-foreground sm:size-8" />LearnVault</Link>
-					{!locked && <nav aria-label={tr('Main', 'Principal')} className="hidden flex-1 justify-center gap-1 lg:flex">
-						{navItems().map((item) => (
-							<NavLink key={item.to} to={item.to} end={item.end} className={({ isActive }) => cn('inline-flex min-h-11 items-center rounded-xl px-4 text-[0.95rem] font-medium whitespace-nowrap text-muted-foreground transition-colors duration-150 hover:bg-brand-tint hover:text-foreground', isActive && 'bg-brand-soft font-semibold text-brand-ink')}>
-								{item.label}
-							</NavLink>
-						))}
-					</nav>}
-					<div className="ml-auto flex items-center gap-1 lg:ml-0">
-						{!locked && <GlobalSearch />}
-						{!locked && <FocusMenu />}
-						<ThemeToggle />
-						<AccountMenu username={user.username} userId={user.userId} />
+			<div className="flex min-h-0 flex-1 flex-col lg:flex-row print:block">
+				<header
+					data-app-chrome
+					data-sidebar-collapsed={collapsed ? 'true' : undefined}
+					className={cn(
+						'shrink-0 border-b border-[var(--study-rule)] bg-background/95 lg:border-r lg:border-b-0 lg:bg-sidebar lg:transition-[width] lg:duration-200 lg:ease-[var(--ease-out)] print:hidden',
+						collapsed ? 'lg:w-[68px]' : 'lg:w-[236px]'
+					)}
+				>
+					<div className={cn('mx-auto flex h-16 max-w-[var(--container-max,88rem)] items-center gap-x-3 px-4 sm:gap-x-8 sm:px-10 lg:h-full lg:max-w-none lg:flex-col lg:gap-1 lg:py-4', collapsed ? 'lg:items-center lg:px-2' : 'lg:items-stretch lg:px-3')}>
+						<div className={cn('flex items-center lg:pb-2.5', collapsed ? 'lg:flex-col lg:gap-1' : 'lg:justify-between lg:gap-1')}>
+							<Link
+								to="/"
+								title="LearnVault"
+								aria-label={tr('LearnVault home', 'Início do LearnVault')}
+								className={cn(
+									'inline-flex min-h-11 items-center gap-2 rounded-lg font-heading text-xl font-bold tracking-tight transition-colors hover:text-primary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:text-2xl lg:text-base lg:font-semibold',
+									collapsed ? 'lg:size-11 lg:justify-center lg:px-0' : 'lg:px-2'
+								)}
+							>
+								{collapsed && (
+									<span aria-hidden="true" className="hidden size-7 shrink-0 place-items-center rounded-md border border-primary/25 bg-brand-soft text-brand-ink lg:grid"><BookMarked className="size-4" /></span>
+								)}
+								<span className={cn(collapsed && 'lg:sr-only')}>LearnVault</span>
+							</Link>
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								aria-expanded={!collapsed}
+								aria-controls="app-sidebar-nav"
+								aria-label={collapsed ? tr('Expand sidebar', 'Expandir barra lateral') : tr('Collapse sidebar', 'Compactar barra lateral')}
+								title={collapsed ? tr('Expand sidebar', 'Expandir barra lateral') : tr('Collapse sidebar', 'Compactar barra lateral')}
+								onClick={toggleCollapsed}
+								className="hidden shrink-0 text-muted-foreground hover:text-foreground lg:inline-flex"
+							>
+								{collapsed ? <PanelLeftOpen /> : <PanelLeftClose />}
+							</Button>
+						</div>
+						{!locked && <GlobalSearch collapsed={collapsed} shortcut={searchShortcut()} />}
+						{!locked && (
+							<nav id="app-sidebar-nav" aria-label={tr('Main', 'Principal')} className={cn('hidden flex-col gap-1 lg:mt-2 lg:flex', collapsed && 'lg:w-full lg:items-center')}>
+								{navItems().map((item) => (
+									<NavLink
+										key={item.to}
+										to={item.to}
+										end={item.end}
+										title={collapsed ? item.label : undefined}
+										className={({ isActive }) => cn(
+											'relative flex min-h-11 items-center rounded-lg text-sm font-medium whitespace-nowrap transition-colors duration-150 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+											collapsed ? 'lg:size-11 lg:justify-center lg:px-0' : 'gap-2.5 px-3',
+											isActive
+												? 'bg-brand-soft font-semibold text-brand-ink before:absolute before:inset-y-2.5 before:left-0 before:w-0.5 before:rounded-full before:bg-primary'
+												: 'text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground'
+										)}
+									>
+										<item.icon className="size-4 shrink-0" aria-hidden="true" />
+										<span className={cn(collapsed && 'lg:sr-only')}>{item.label}</span>
+									</NavLink>
+								))}
+							</nav>
+						)}
+						{!locked && !collapsed && <InProgress profile={user.userId} />}
+						<div className={cn('ml-auto flex items-center gap-1 lg:mt-auto lg:ml-0 lg:w-full lg:border-t lg:border-[var(--study-rule)] lg:pt-2.5', collapsed ? 'lg:flex-col lg:items-center lg:gap-1' : 'lg:gap-0.5')}>
+							{!locked && <FocusMenu collapsed={collapsed} />}
+							<ThemeToggle />
+							<AccountMenu username={user.username} userId={user.userId} collapsed={collapsed} />
+						</div>
 					</div>
+				</header>
+				<div className="flex min-h-0 min-w-0 flex-1 flex-col">
+					{locked ? <CredentialsBanner /> : (
+						<>
+							<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
+							<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
+						</>
+					)}
+					<MainContent pathname={location.pathname} />
 				</div>
-			</header>
-			{locked ? <CredentialsBanner /> : (
-				<>
-					<UpdateNotice isAdmin={Boolean(user.isAdmin)} />
-					<IndexingIndicator isAdmin={Boolean(user.isAdmin)} />
-				</>
-			)}
-			<MainContent pathname={location.pathname} />
-			{!locked && <MobileTabs />}
+				{!locked && <MobileTabs />}
+			</div>
 		</div>
 	);
 }
@@ -177,7 +259,7 @@ function ThemeToggle() {
 	const look = useStore(appearanceStore);
 	const dark = resolveTheme(look.theme) === 'dark';
 	return (
-		<Button variant="ghost" size="icon" aria-label={dark ? tr('Switch to the light theme', 'Usar o tema claro') : tr('Switch to the dark theme', 'Usar o tema escuro')} onClick={() => updateAppearance({ theme: dark ? 'light' : 'dark' }, safeStorage())}>
+		<Button variant="ghost" size="icon" className="text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground dark:hover:bg-foreground/[0.08]" aria-label={dark ? tr('Switch to the light theme', 'Usar o tema claro') : tr('Switch to the dark theme', 'Usar o tema escuro')} onClick={() => updateAppearance({ theme: dark ? 'light' : 'dark' }, safeStorage())}>
 			{dark ? <Sun /> : <Moon />}
 		</Button>
 	);
@@ -191,7 +273,7 @@ function SkipLink() {
 	);
 }
 
-function AccountMenu({ username, userId, wide }: { username: string; userId: string; wide?: boolean }) {
+function AccountMenu({ username, userId, collapsed = false }: { username: string; userId: string; collapsed?: boolean }) {
 	useLocale();
 	const navigate = useNavigate();
 	const signOut = useSignOut();
@@ -201,8 +283,10 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 	return (
 		<>
 			<DropdownMenu>
-				<DropdownMenuTrigger render={wide ? <Button variant="ghost" className="min-w-0 flex-1 justify-start gap-2" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} /> : <Button variant="ghost" size="icon" aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
-					<span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground" aria-hidden="true">{username.trim()[0]?.toUpperCase() ?? '?'}</span>{wide && <span className="truncate">{username}</span>}
+				<DropdownMenuTrigger render={<Button variant="ghost" size="icon" title={collapsed ? username : undefined} className={cn(!collapsed && 'lg:order-first lg:min-w-0 lg:flex-1 lg:justify-start lg:gap-2 lg:px-2')} aria-label={tr(`Account: ${username}`, `Conta: ${username}`)} />}>
+					{/* The initial is drawn by CSS so it stays out of the visible label, which must match "Account: <name>". */}
+					<span data-initial={username.trim()[0]?.toUpperCase() ?? '?'} className="grid size-8 shrink-0 place-items-center rounded-full border border-border bg-muted text-sm font-bold text-foreground before:content-[attr(data-initial)]" aria-hidden="true" />
+					<span className={cn('hidden truncate text-sm font-medium', !collapsed && 'lg:block')}>{username}</span>
 				</DropdownMenuTrigger>
 				<DropdownMenuContent align="end" className="w-56">
 					{/* Base UI requires group labels inside a group. */}
@@ -246,14 +330,40 @@ function AccountMenu({ username, userId, wide }: { username: string; userId: str
 	);
 }
 
+/** The rail's quiet list: up to five started courses, most recently studied first. Desktop only; hidden when empty. */
+function InProgress({ profile }: { profile: string }) {
+	useLocale();
+	const catalog = useCatalog();
+	const recent = useRecent();
+	const courses = useMemo(() => buildLibrary({ catalog: catalog.data, recent: recent.data ?? [], favoriteCourseIds: new Set() }).entries
+		.filter((entry) => entry.status === 'in_progress')
+		.sort((a, b) => b.lastStudiedAt - a.lastStudiedAt)
+		.slice(0, 5), [catalog.data, recent.data]);
+	if (courses.length === 0) return null;
+	return (
+		<section aria-labelledby="rail-in-progress" className="hidden pt-4 lg:block">
+			<h2 id="rail-in-progress" className="px-2.5 pb-1.5 text-xs font-medium text-muted-foreground">{tr('In progress', 'Em andamento')}</h2>
+			<ul className="space-y-0.5">
+				{courses.map((entry) => (
+					<li key={entry.courseId}>
+						<Link to={routerPath(href('course', entry.courseId))} className="flex min-h-8 items-center gap-2.5 rounded-[7px] px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
+							<CourseCover course={entry.course} profile={profile} compact className="aspect-video w-[34px] shrink-0 rounded-[4px] ring-0" />
+							<span className="min-w-0 truncate">{entry.course.title}</span>
+						</Link>
+					</li>
+				))}
+			</ul>
+		</section>
+	);
+}
 
 function MobileTabs() {
 	return (
-		<nav aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-xs lg:hidden print:hidden">
+		<nav data-app-chrome aria-label={tr('Sections', 'Seções')} className="fixed inset-x-0 bottom-0 z-40 border-t border-[var(--study-rule)] bg-sidebar pb-[env(safe-area-inset-bottom)] lg:hidden print:hidden">
 			<ul className="grid grid-cols-5">
 				{navItems().map((item) => (
 					<li key={item.to}>
-						<NavLink to={item.to} end={item.end} aria-label={item.to === '/' ? tr(`Library: ${item.label}`, `Biblioteca: ${item.label}`) : item.label} className={({ isActive }) => cn('flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-center text-xs text-muted-foreground', isActive && 'font-medium text-primary')}>
+						<NavLink to={item.to} end={item.end} aria-label={item.to === '/' ? tr(`Library: ${item.label}`, `Biblioteca: ${item.label}`) : item.label} className={({ isActive }) => cn('relative flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-center text-xs transition-colors', isActive ? 'font-semibold text-foreground before:absolute before:top-0 before:left-1/2 before:h-0.5 before:w-6 before:-translate-x-1/2 before:rounded-full before:bg-primary before:content-[""]' : 'text-muted-foreground')}>
 							<item.icon className="size-5" aria-hidden="true" />
 							{item.to === '/' ? tr('Library', 'Biblioteca') : item.label}
 						</NavLink>
@@ -271,20 +381,13 @@ function MobileTabs() {
 	);
 }
 
-/** Page title: a tinted icon tile, the title in serif with its last word in the accent, and an optional line under it. */
-export function PageHeader({ icon: Icon, title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
+/** Page title: display typography with no rule under it, so the lesson content leads. */
+export function PageHeader({ title, description, actions, className }: { title: string; description?: ReactNode; actions?: ReactNode; icon?: LucideIcon; className?: string }) {
 	return (
-		<div className={cn('mb-8 flex flex-wrap items-end justify-between gap-4', className)}>
-			<div className="flex min-w-0 items-center gap-3.5">
-				{Icon && (
-					<span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-2xl bg-brand-soft text-brand-ink ring-1 ring-primary/20">
-						<Icon className="size-5" />
-					</span>
-				)}
-				<div className="min-w-0 space-y-1">
-					<h1 className="font-heading text-3xl font-bold text-balance sm:text-4xl">{title}</h1>
-					{description && <div className="text-muted-foreground">{description}</div>}
-				</div>
+		<div className={cn('mb-6 flex flex-wrap items-end justify-between gap-x-6 gap-y-3', className)}>
+			<div className="min-w-0 space-y-2">
+				<h1 className="study-page-title">{title}</h1>
+				{description && <div className="max-w-[65ch] text-sm leading-relaxed text-muted-foreground">{description}</div>}
 			</div>
 			{actions && <div className="flex flex-wrap gap-2">{actions}</div>}
 		</div>

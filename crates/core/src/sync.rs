@@ -161,6 +161,12 @@ pub enum SyncPayload {
         back: String,
         /// Creation instant reported by the device.
         created_at: i64,
+        /// Persisted SRS interval in days when backfilled.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        interval_days: Option<i64>,
+        /// Persisted next due timestamp when backfilled.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        next_due: Option<i64>,
     },
     /// Flashcard text edited on the device.
     FlashcardUpdated {
@@ -870,6 +876,8 @@ pub fn queue_flashcard_create(
                 front: card.front,
                 back: card.back,
                 created_at: card.created_at,
+                interval_days: None,
+                next_due: None,
             },
             card.created_at,
         ))
@@ -1118,6 +1126,8 @@ fn apply_payload(
             front,
             back,
             created_at,
+            interval_days,
+            next_due,
         } => apply_flashcard_create(
             conn,
             owner_id,
@@ -1127,6 +1137,8 @@ fn apply_payload(
             front,
             back,
             *created_at,
+            *interval_days,
+            *next_due,
         ),
         SyncPayload::FlashcardUpdated {
             card_id,
@@ -1485,6 +1497,8 @@ fn apply_flashcard_create(
     front: &str,
     back: &str,
     created_at: i64,
+    interval_days: Option<i64>,
+    next_due: Option<i64>,
 ) -> Result<()> {
     let card_id = card_id.trim();
     let (Ok(front), Ok(back)) = (
@@ -1515,10 +1529,12 @@ fn apply_flashcard_create(
     if existing_owner.is_some_and(|existing| existing != owner_id) {
         return Ok(());
     }
+    let interval_days = interval_days.unwrap_or(0).clamp(0, 365);
+    let next_due = next_due.unwrap_or(created_at);
     conn.execute(
         "INSERT INTO flashcard
              (card_id, owner_id, media_id, position_seconds, front, back, interval_days, next_due, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?7, ?7)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
          ON CONFLICT (card_id) DO UPDATE SET
              media_id = excluded.media_id,
              position_seconds = excluded.position_seconds,
@@ -1534,6 +1550,8 @@ fn apply_flashcard_create(
             position_seconds,
             front,
             back,
+            interval_days,
+            next_due,
             created_at
         ],
     )?;

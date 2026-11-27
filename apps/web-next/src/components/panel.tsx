@@ -1,14 +1,19 @@
 import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-/** The look every page shares: wide rounded cards on the cream page, warm hairlines, small tracked labels. */
-export const Panel = ({ children, className }: { children: ReactNode; className?: string }) => (
-	<div data-panel className={cn('min-w-0 rounded-[2rem] border bg-card p-6 sm:p-8', className)}>{children}</div>
+/**
+ * A boxed card by default. `open` drops the box: a section with a hairline above it, for pages that
+ * separate their content with rules rather than containers.
+ */
+export const Panel = ({ children, className, variant = 'card' }: { children: ReactNode; className?: string; variant?: 'card' | 'open' }) => (
+	variant === 'open'
+		? <div className={cn('min-w-0 border-t border-[var(--study-rule)] py-6', className)}>{children}</div>
+		: <div data-panel className={cn('min-w-0 rounded-[var(--radius-xl)] border border-[var(--study-rule)] bg-card p-6 sm:p-8', className)}>{children}</div>
 );
 
-/** A tinted card for the one thing a page wants you to do first. */
+/** A tinted surface for the one thing a page wants you to do first. */
 export const Hero = ({ children, className }: { children: ReactNode; className?: string }) => (
-	<div data-panel className={cn('rounded-[2rem] border border-brand-soft bg-panel p-6 sm:p-10', className)}>{children}</div>
+	<div data-panel className={cn('rounded-[var(--radius-xl)] border border-[var(--study-rule)] bg-panel/65 p-6 sm:p-8', className)}>{children}</div>
 );
 
 export const Eyebrow = ({ children, className }: { children: ReactNode; className?: string }) => (
@@ -19,7 +24,7 @@ export const Eyebrow = ({ children, className }: { children: ReactNode; classNam
 export function Stat({ label, value, unit, note, icon, tone, bar, progress, compact = false, children, className }: { label: string; value: ReactNode; unit?: string; note?: string; icon?: ReactNode; tone?: 'amber' | 'violet' | 'green'; bar?: { value: number; max: number }; progress?: number; compact?: boolean; children?: ReactNode; className?: string }) {
 	const percent = Math.round(Math.min(1, Math.max(0, progress ?? 0)) * 100);
 	return (
-		<div data-panel className={cn('rounded-2xl border border-border bg-card', compact ? 'p-3.5' : 'p-4', tone && `stat-${tone}`, className)}>
+		<div data-panel className={cn('rounded-[var(--radius-lg)] border border-[var(--study-rule)] bg-card', compact ? 'p-3.5' : 'p-4', tone && `stat-${tone}`, className)}>
 			<div className="flex items-center justify-between gap-2">
 				<p className={cn('min-w-0 truncate font-semibold text-foreground/85', compact ? 'text-xs' : 'text-[0.875rem]')}>{label}</p>
 				{icon && (

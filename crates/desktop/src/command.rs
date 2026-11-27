@@ -22,7 +22,7 @@ use crate::dto::{
     FocusSessionDto, FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto,
     MediaRemovalOutcomeDto, NewPdfAnnotationDto, PdfAnnotationDto, PlaybackPreferencesDto,
     RecentStudyDto, RescanSummaryDto, RewardSummaryDto, SearchResultsDto, StudyFavoritesDto,
-    StudyNoteDto, StudyProgressDto, StudySummaryDto, SyncResultDto, SyncStateDto,
+    StudyNoteDto, StudyProgressDto, StudyStateDto, StudySummaryDto, SyncResultDto, SyncStateDto,
 };
 use crate::error::IpcError;
 use crate::ordering::CourseOrders;
@@ -330,6 +330,21 @@ pub async fn desktop_recent_study(
 ) -> Result<RecentStudyDto, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.recent_study(limit))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// IPC command: one page of the local owner's whole study state, newest first.
+///
+/// The cursor is the opaque `next_cursor` of the previous page; the webview never sends an owner.
+#[tauri::command]
+pub async fn desktop_study_state(
+    state: State<'_, DesktopState>,
+    limit: Option<usize>,
+    cursor: Option<String>,
+) -> Result<StudyStateDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.study_state(limit, cursor.as_deref()))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }
@@ -988,6 +1003,20 @@ pub async fn desktop_open_in_system_player(
 ) -> Result<bool, IpcError> {
     let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || state.open_in_system_player(&media_id))
+        .await
+        .map_err(|_| IpcError::study_unavailable())?
+}
+
+/// Reads a bounded byte slice from an authorized media or material file offline.
+#[tauri::command]
+pub async fn desktop_read_media_slice(
+    state: State<'_, DesktopState>,
+    media_id: String,
+    start: u64,
+    length: usize,
+) -> Result<crate::dto::MediaSliceDto, IpcError> {
+    let state = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || state.read_media_slice(&media_id, start, length))
         .await
         .map_err(|_| IpcError::study_unavailable())?
 }

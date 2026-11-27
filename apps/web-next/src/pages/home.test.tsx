@@ -34,7 +34,7 @@ describe('My learning', () => {
 		renderApp('/', { catalog: { ...catalog, nodes: [course('rust', 'Rust from zero', [])] } });
 
 		expect(screen.getByText('No lessons found')).toBeTruthy();
-		expect(await screen.findByText('1 lesson')).toBeTruthy();
+		expect((await screen.findAllByText('1 lesson')).length).toBeGreaterThan(0);
 		expect(screen.queryByText('No lessons found')).toBeNull();
 	});
 
@@ -63,9 +63,26 @@ describe('My learning', () => {
 		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r2', positionSeconds: 95, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		const resume = await screen.findByRole('region', { name: 'Continue learning' });
 		expect(within(resume).getByRole('heading', { name: 'Borrowing' })).toBeTruthy();
-		expect(within(resume).getByRole('link', { name: 'Resume' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
+		expect(within(resume).getByText('Lesson 2 of 2')).toBeTruthy();
+		expect(within(resume).getByText('You stopped at 1:35.')).toBeTruthy();
+		expect(within(resume).getByRole('link', { name: 'Resume at 1:35' }).getAttribute('href')).toBe('/course/rust/m%2Fr2?t=95');
+		expect(within(resume).getByRole('link', { name: 'Open course' }).getAttribute('href')).toBe('/course/rust');
 		expect(screen.getByRole('list', { name: 'Your habit' }).textContent).toMatch(/Streak.*2|2.*Streak/);
-		expect(screen.getAllByRole('progressbar', { name: /^50% complete/ }).length).toBeGreaterThan(0);
+		expect(screen.getAllByRole('progressbar', { name: '1 of 2 lessons done' }).length).toBeGreaterThan(0);
+	});
+
+	it('hands Up next to the next unfinished lesson once the last one is completed, and hides it when the course is done', async () => {
+		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 2, recorded: true }] });
+		const resume = await screen.findByRole('region', { name: 'Continue learning' });
+		expect(within(resume).getByRole('heading', { name: 'Borrowing' })).toBeTruthy();
+		expect(within(resume).getByText('Lesson 2 of 2')).toBeTruthy();
+		expect(within(resume).queryByText(/You stopped at/)).toBeNull();
+		expect(within(resume).getByRole('link', { name: 'Start lesson' }).getAttribute('href')).toBe('/course/rust/m%2Fr2');
+		cleanup();
+
+		renderApp('/', { catalog, rewards, recent: [{ mediaId: 'r1', positionSeconds: 0, completed: true, updatedAt: 2, recorded: true }, { mediaId: 'r2', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
+		await screen.findByRole('region', { name: 'Your library' });
+		expect(screen.queryByRole('region', { name: 'Continue learning' })).toBeNull();
 	});
 
 	it('filters by progress and offers to clear when nothing matches', async () => {
@@ -187,7 +204,7 @@ describe('Sign in', () => {
 		// A successful refresh invalidates the catalog and the recent study, which are fetched again.
 		beforeEach(() => {
 			vi.spyOn(transport, 'catalog').mockResolvedValue(catalog);
-			vi.spyOn(transport, 'recentStudy').mockResolvedValue({ items: [] });
+			vi.spyOn(transport, 'studyState').mockResolvedValue({ items: [], nextCursor: null });
 		});
 
 		it('also reads the remote sources and says so', async () => {

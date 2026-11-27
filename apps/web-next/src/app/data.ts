@@ -23,8 +23,22 @@ export function useCatalog(enabled = true) {
 	return useQuery({ queryKey: keys.catalog, queryFn: () => transport.catalog(), enabled, staleTime: 30_000 });
 }
 
-// The history covers the whole user: 100 items find the last lesson of any course.
-const RECENT_LIMIT = 100;
+// The history covers the whole user: every page of the authorized study state, so a course of
+// more than 100 lessons still shows all its progress. Pages are 500; the guard bounds a broken cursor.
+const STATE_PAGE = 500;
+const MAX_STATE_PAGES = 100;
+
+async function loadStudyState(): Promise<StudyProgress[]> {
+	const items: StudyProgress[] = [];
+	let cursor: string | null = null;
+	for (let page = 0; page < MAX_STATE_PAGES; page++) {
+		const result = await transport.studyState(cursor, STATE_PAGE);
+		items.push(...result.items);
+		if (!result.nextCursor) break;
+		cursor = result.nextCursor;
+	}
+	return items;
+}
 
 export function useRecent(enabled = true) {
 	return useQuery({
@@ -32,7 +46,7 @@ export function useRecent(enabled = true) {
 		enabled: enabled && studySyncSupported,
 		queryFn: async (): Promise<StudyProgress[]> => {
 			try {
-				return (await transport.recentStudy(RECENT_LIMIT)).items;
+				return await loadStudyState();
 			} catch (cause) {
 				// Study sync can be off on the server; the library still works without it.
 				if ((cause as { code?: string } | null)?.code === STUDY_NOT_AVAILABLE) return [];
@@ -79,13 +93,14 @@ export function useRescan() {
 	});
 }
 
-/** Desktop opens the native folder picker; the server registers the path an admin typed. */
+/** Desktop opens the native folder picker; the server registers the path or discovered folder. */
 export function useImportCourse() {
 	const client = useQueryClient();
 	return useMutation({
-		mutationFn: async (path?: string) => {
+		mutationFn: async (input?: string | { path?: string; folder?: string }) => {
 			if (transportKind === 'desktop') await transport.importCourse();
-			else await transport.importCoursePath(path?.trim() ?? '');
+			else if (typeof input === 'string') await transport.importCoursePath(input.trim());
+			else await transport.importCoursePath(input?.path?.trim() ?? '', input?.folder?.trim());
 			await transport.rescan();
 		},
 		onSuccess: () => Promise.all([client.invalidateQueries({ queryKey: keys.catalog }), client.invalidateQueries({ queryKey: keys.recent })])
@@ -121,6 +136,33 @@ export function useSetLessonCompleted() {
 			client.setQueryData<StudyProgress[]>(keys.recent, (items = []) => [updated, ...items.filter((item) => item.mediaId !== updated.mediaId)]);
 			void client.invalidateQueries({ queryKey: keys.rewards });
 		}
+	});
+}
+
+/** Marks several lessons completed or not in one batch without flooding the query cache. */
+export function useSetLessonsCompleted() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: async ({ mediaIds, completed }: { mediaIds: string[]; completed: boolean }) => {
+			const updated: StudyProgress[] = [];
+			for (const mediaId of mediaIds) updated.push(await transport.setCompleted(mediaId, completed));
+			return updated;
+		},
+		onSuccess: (updated) => {
+			const byId = new Map(updated.map((item) => [item.mediaId, item]));
+			client.setQueryData<StudyProgress[]>(keys.recent, (items = []) => [...updated, ...items.filter((item) => !byId.has(item.mediaId))]);
+			for (const item of updated) client.setQueryData(['progress', item.mediaId], item);
+			void client.invalidateQueries({ queryKey: keys.rewards });
+		}
+	});
+}
+
+export function useSetCourseOrder() {
+	const client = useQueryClient();
+	return useMutation({
+		mutationFn: ({ courseId, parent, children }: { courseId: string; parent: string; children: string[] }) =>
+			transport.setCourseOrder(courseId, parent, children),
+		onSuccess: () => client.invalidateQueries({ queryKey: keys.catalog })
 	});
 }
 
@@ -167,6 +209,14 @@ export function useSearch(query: string, enabled = true) {
 
 export function useFocusSummary(enabled = true) {
 	return useQuery({ queryKey: ['focus-summary'], enabled: enabled && studySyncSupported, queryFn: () => transport.focusSummary() });
+}
+
+export function useFocusSessions(enabled = true, limit = 100) {
+	return useQuery({
+		queryKey: ['focus-sessions', limit],
+		enabled: enabled && studySyncSupported && typeof transport.listFocusSessions === 'function',
+		queryFn: () => transport.listFocusSessions(limit)
+	});
 }
 
 export function useClaimMission() {

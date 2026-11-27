@@ -14,7 +14,7 @@ import { cn } from '@/lib/utils';
  * Pomodoro in the topbar. The timer keeps running while you move between screens; the
  * dialog only announces mode changes and completions, never every second (WCAG 4.1.3).
  */
-export function FocusMenu() {
+export function FocusMenu({ collapsed = false }: { collapsed?: boolean }) {
 	useLocale();
 	const state = useStore(pomodoro);
 	const sync = useStore(focusSync);
@@ -32,8 +32,8 @@ export function FocusMenu() {
 
 	return (
 		<Dialog open={open} onOpenChange={(next) => { setOpen(next); setConfirmAbandon(false); }}>
-			<DialogTrigger render={<Button variant={running ? 'secondary' : 'ghost'} size={running || paused ? 'sm' : 'icon'} aria-label={tr(`Pomodoro: ${status}, ${modeLabel(state.mode)}, ${clock}`, `Pomodoro: ${status}, ${modeLabel(state.mode)}, ${clock}`)} />}>
-				<Timer />{(running || paused) && <span className="font-mono tabular-nums">{clock}</span>}
+			<DialogTrigger render={<Button variant={running ? 'secondary' : 'ghost'} size={!collapsed && (running || paused) ? 'sm' : 'icon'} title={collapsed ? tr('Pomodoro timer', 'Cronômetro Pomodoro') : undefined} aria-label={tr(`Pomodoro: ${status}, ${modeLabel(state.mode)}, ${clock}`, `Pomodoro: ${status}, ${modeLabel(state.mode)}, ${clock}`)} />}>
+				<Timer />{!collapsed && (running || paused) && <span className="font-mono tabular-nums">{clock}</span>}
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-md">
 				<DialogHeader>

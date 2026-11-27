@@ -27,6 +27,18 @@ describe('lesson navigation', () => {
 		expect(lessonSequence([])).toEqual([]);
 	});
 
+	it('uses the module name for a generic filename without replacing numbered lesson titles', () => {
+		const course = container('Field recordings', 'field', 'course', [
+			container('Room tone', 'room', 'module', [lesson('Lesson', 'room/lesson'), lesson('Aula 2', 'room/aula-2')]),
+			lesson('Lesson', 'field/lesson')
+		]);
+		expect(lessonSequence([course])).toEqual([
+			{ title: 'Room tone', path: 'room/lesson' },
+			{ title: 'Aula 2', path: 'room/aula-2' },
+			{ title: 'Lesson', path: 'field/lesson' }
+		]);
+	});
+
 	it('ignores content containers that hold no lesson', () => {
 		expect(titles(lessonSequence([container('Vazia', 'cat-vazia', 'category', [])]))).toEqual([]);
 	});

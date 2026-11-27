@@ -1,11 +1,15 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CourseCard, progressLabel } from '@/components/course-card';
+import { transport } from '@/lib/transport';
 import type { CourseEntry } from '@/lib/library';
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.restoreAllMocks();
+});
 
 const entry = (patch: Partial<CourseEntry> = {}): CourseEntry => ({
 	course: { title: 'Rust from Zero', path: 'rust', role: 'course', courseId: 'c1', files: [], looseFiles: [], children: [] },
@@ -33,11 +37,29 @@ describe('CourseCard variants', () => {
 		expect(screen.getByRole('link', { name: 'Rust from Zero' }).getAttribute('href')).toContain('c1');
 	});
 
-	it('grid and shelf show progress and the favorite toggle; shelf is a fixed-width card', () => {
+	it('shelf shows progress and the favorite toggle in a fixed-width card', () => {
 		show('shelf');
 		expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25');
 		expect(screen.getByRole('button', { name: 'Add Rust from Zero to favorites' }).getAttribute('aria-pressed')).toBe('false');
 		expect(screen.getByRole('listitem').className).toContain('w-64');
+	});
+
+	it('grid is a borderless cover with lesson count, done count, segments and the favorite toggle', () => {
+		show('grid');
+		expect(screen.getAllByText('4 lessons')).toHaveLength(1);
+		expect(screen.getAllByText('Rust from Zero')).toHaveLength(1);
+		expect(screen.getByText('1 done')).toBeTruthy();
+		expect(screen.getByRole('progressbar', { name: '1 of 4 lessons done' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Add Rust from Zero to favorites' })).toBeTruthy();
+		expect(screen.queryByText('Resume')).toBeNull();
+	});
+
+	it('grid says Started or Not started when no lesson is finished', () => {
+		show('grid', { done: 0, status: 'in_progress' });
+		expect(screen.getByText('Started')).toBeTruthy();
+		cleanup();
+		show('grid', { done: 0, status: 'not_started' });
+		expect(screen.getByText('Not started')).toBeTruthy();
 	});
 
 	it('list shows the next lesson and Resume, without the favorite toggle', () => {
@@ -68,6 +90,20 @@ describe('CourseCard variants', () => {
 		expect(screen.getByRole('button', { name: 'Remove Rust from Zero from favorites' }).getAttribute('aria-pressed')).toBe('true');
 	});
 
+	it('announces a failed favorite change and lets the learner retry', async () => {
+		const save = vi.spyOn(transport, 'setCourseFavorite')
+			.mockRejectedValueOnce(new Error('Offline'))
+			.mockResolvedValueOnce(true);
+		show('grid');
+		const favorite = screen.getByRole('button', { name: 'Add Rust from Zero to favorites' });
+		fireEvent.click(favorite);
+		expect((await screen.findByRole('alert')).textContent).toContain('Try again');
+		expect(favorite.getAttribute('aria-pressed')).toBe('false');
+		fireEvent.click(favorite);
+		await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+		expect(save).toHaveBeenCalledTimes(2);
+	});
+
 	it('never offers local-only management for a course on a remote source', () => {
 		show('grid', { course: { ...entry().course, remote: true } }, true);
 		expect(screen.queryByRole('button', { name: 'Manage Rust from Zero' })).toBeNull();
@@ -84,14 +120,13 @@ describe('CourseCard variants', () => {
 		expect(screen.getByRole('button', { name: 'Manage Rust from Zero' })).toBeTruthy();
 	});
 
-	it('reserves trailing title space for every visible top-right action', () => {
+	it('puts the course link before its separate favorite and management controls', () => {
 		show('grid', undefined, true);
-		const heading = screen.getByRole('heading', { name: 'Rust from Zero' });
-		expect(heading.querySelector('[data-action-reserve]')?.className).toContain('w-[5.25rem]');
-		cleanup();
-		show('grid', undefined, false);
-		const favoriteOnlyHeading = screen.getByRole('heading', { name: 'Rust from Zero' });
-		expect(favoriteOnlyHeading.querySelector('[data-action-reserve]')?.className).toContain('w-11');
+		const course = screen.getByRole('link', { name: 'Rust from Zero' });
+		const favorite = screen.getByRole('button', { name: 'Add Rust from Zero to favorites' });
+		const manage = screen.getByRole('button', { name: 'Manage Rust from Zero' });
+		expect(course.compareDocumentPosition(favorite)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+		expect(favorite.compareDocumentPosition(manage)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
 	});
 });
 

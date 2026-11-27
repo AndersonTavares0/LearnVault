@@ -246,6 +246,11 @@ export function formatLocationContext(courseTitle: string, moduleTitle: string |
 	return joinParts([courseTitle, moduleTitle ?? '']);
 }
 
+/** Keep a course's own labels; only substitute the module for a generic media filename. */
+export function displayLessonTitle(title: string, moduleTitle?: string | null): string {
+	return moduleTitle && /^(lesson|aula)$/i.test(title.trim()) ? moduleTitle : title;
+}
+
 /**
  * Removes numeric prefixes and separators of category folders for a readable display.
  *
@@ -257,4 +262,3 @@ export function formatCategoryName(folder: string): string {
 	const cleaned = trimmed.replace(/^\d+[\s._-]+/, '').trim();
 	return cleaned || trimmed;
 }
-

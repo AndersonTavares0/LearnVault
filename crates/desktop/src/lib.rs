@@ -65,16 +65,16 @@ pub use command::{
     desktop_list_bookmarks, desktop_list_favorites, desktop_list_flashcard_reviews,
     desktop_list_flashcards, desktop_list_focus_sessions, desktop_list_notes,
     desktop_list_pdf_annotations, desktop_media_capabilities, desktop_media_removal_impact,
-    desktop_open_in_system_player, desktop_playback_preferences, desktop_recent_study,
-    desktop_record_focus_session, desktop_record_position, desktop_remove_course,
-    desktop_remove_course_cover, desktop_remove_media, desktop_rescan, desktop_reset_course_order,
-    desktop_restart_to_update, desktop_review_flashcard, desktop_reward_summary,
-    desktop_save_playback_preferences, desktop_search, desktop_set_completed,
-    desktop_set_course_favorite, desktop_set_course_order, desktop_set_lesson_favorite,
-    desktop_set_weekly_goal, desktop_study_progress, desktop_study_summary, desktop_sync_configure,
-    desktop_sync_login, desktop_sync_logout, desktop_sync_now, desktop_sync_state,
-    desktop_update_flashcard, desktop_update_note, desktop_update_pdf_annotation,
-    desktop_weekly_goal, open_in_system_player,
+    desktop_open_in_system_player, desktop_playback_preferences, desktop_read_media_slice,
+    desktop_recent_study, desktop_record_focus_session, desktop_record_position,
+    desktop_remove_course, desktop_remove_course_cover, desktop_remove_media, desktop_rescan,
+    desktop_reset_course_order, desktop_restart_to_update, desktop_review_flashcard,
+    desktop_reward_summary, desktop_save_playback_preferences, desktop_search,
+    desktop_set_completed, desktop_set_course_favorite, desktop_set_course_order,
+    desktop_set_lesson_favorite, desktop_set_weekly_goal, desktop_study_progress,
+    desktop_study_state, desktop_study_summary, desktop_sync_configure, desktop_sync_login,
+    desktop_sync_logout, desktop_sync_now, desktop_sync_state, desktop_update_flashcard,
+    desktop_update_note, desktop_update_pdf_annotation, desktop_weekly_goal, open_in_system_player,
 };
 pub use config::{DATABASE_FILE_NAME, DesktopConfigDto, database_path};
 pub use courses::{
@@ -91,8 +91,8 @@ pub use dto::{
     FocusSummaryDto, MediaBookmarkDto, MediaRemovalImpactDto, MediaRemovalOutcomeDto,
     NewPdfAnnotationDto, PdfAnnotationDto, PdfRectDto, PlaybackPreferencesDto, RecentStudyDto,
     RescanSummaryDto, RewardSummaryDto, SearchCourseDto, SearchLessonDto, SearchNoteDto,
-    SearchResultsDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudySummaryDto,
-    SyncResultDto, SyncStateDto,
+    SearchResultsDto, StudyFavoritesDto, StudyNoteDto, StudyProgressDto, StudyStateDto,
+    StudySummaryDto, SyncResultDto, SyncStateDto,
 };
 pub use error::{IpcError, IpcErrorCode};
 pub use ordering::{CourseOrders, OrderError, order_path};
@@ -134,6 +134,7 @@ pub fn run() {
             command::desktop_record_position,
             command::desktop_set_completed,
             command::desktop_recent_study,
+            command::desktop_study_state,
             command::desktop_study_summary,
             command::desktop_list_notes,
             command::desktop_create_note,
@@ -176,6 +177,7 @@ pub fn run() {
             command::desktop_restart_to_update,
             command::desktop_media_capabilities,
             command::desktop_open_in_system_player,
+            command::desktop_read_media_slice,
             command::desktop_playback_preferences,
             command::desktop_save_playback_preferences,
             command::desktop_sync_state,

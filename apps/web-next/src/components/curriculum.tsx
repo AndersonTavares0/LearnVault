@@ -1,11 +1,11 @@
-import { Check, ChevronDown, CircleCheck, CirclePlay, Circle, FileText, PlayCircle, Star, TriangleAlert } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, ChevronDown, Star, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button } from '@/components/ui/button';
-import { countCatalogFiles, courseProgress, formatLessonMeta, isLessonMissing } from '@/lib/catalog';
+import { courseProgress, isLessonMissing } from '@/lib/catalog';
 import { lessonPdfId } from '@/lib/pdf';
 import { tr } from '@/lib/i18n';
-import { studySyncSupported } from '@/lib/player';
+import { formatDuration, studySyncSupported } from '@/lib/player';
 import { href } from '@/lib/router';
 import type { CatalogNode } from '@/lib/transport';
 import { cn } from '@/lib/utils';
@@ -20,29 +20,112 @@ type Props = {
 	activePath?: string | null;
 	/** Bumping `n` opens or closes every module at once (the Expand all / Collapse all buttons). */
 	signal?: { open: boolean; n: number };
-	/** Tighter rows for the player sidebar: numbered modules with a count and a small bar, shorter lessons. */
+	/** Tighter rows for the player sidebar: shorter lessons and modules. */
 	compact?: boolean;
+	/** Saved position of the lesson to resume (the active row); shown as "Resume at m:ss" when set. */
+	resumeSeconds?: number | null;
+	/** Show Up/Down reorder buttons on siblings (must only be enabled when all siblings are visible). */
+	reorderMode?: boolean;
+	reordering?: boolean;
+	onMove?: (parent: string, children: string[]) => void;
+	/** Optional batch action for marking a module's lessons completed/uncompleted. */
+	onBatchComplete?: (mediaIds: string[], completed: boolean) => void;
+	batchPending?: boolean;
 };
 
-const lessonMediaId = (node: CatalogNode) => [...node.files, ...node.looseFiles].find((file) => file.kind === 'media' && file.mediaId)?.mediaId ?? lessonPdfId(node);
+type NodeProps = Props & {
+	numbers: ReadonlyMap<string, number>;
+	parentPath: string;
+	siblingPaths: string[];
+	siblingIndex: number;
+};
+
+export const lessonMediaId = (node: CatalogNode) => [...node.files, ...node.looseFiles].find((file) => file.kind === 'media' && file.mediaId)?.mediaId ?? lessonPdfId(node);
+const moduleMediaIds = (node: CatalogNode): string[] => {
+	if (node.role === 'lesson') {
+		if (isLessonMissing(node)) return [];
+		const id = lessonMediaId(node);
+		return id ? [id] : [];
+	}
+	return node.children.flatMap(moduleMediaIds);
+};
+function swapSiblings(paths: string[], index: number, delta: -1 | 1): string[] {
+	const next = [...paths];
+	const target = index + delta;
+	if (target < 0 || target >= next.length) return next;
+	[next[index], next[target]] = [next[target], next[index]];
+	return next;
+}
 // Walks the children rather than trusting path prefixes: on a course picked inside an SMB or
 // WebDAV source a module's path is relative to the course while its lessons keep the full path.
 const contains = (node: CatalogNode, path: string | null | undefined): boolean => Boolean(path) && (node.path === path || path!.startsWith(`${node.path}/`) || node.children.some((child) => contains(child, path)));
+/** Course-wide lesson numbers, so a module's lessons continue the count from the previous module. */
+const lessonNumbers = (nodes: CatalogNode[], numbers = new Map<string, number>()): Map<string, number> => {
+	for (const node of nodes) {
+		if (node.role === 'lesson') numbers.set(node.path, numbers.size + 1);
+		else lessonNumbers(node.children, numbers);
+	}
+	return numbers;
+};
+const chevron = 'size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180';
 
 /**
- * Course curriculum: modules are native disclosures (keyboard and screen-reader support
- * for free, #321), lessons show completion, type and favourite. Shared by the course page
- * and the player sidebar.
+ * Course curriculum as a tracklist: modules are native disclosures (keyboard and screen-reader
+ * support for free, #321), lessons show their number, completion state and favourite. Shared by
+ * the course page and the player sidebar.
  */
 export function Curriculum(props: Props) {
+	const numbers = lessonNumbers(props.nodes);
+	const rootSiblings = props.nodes.map((node) => node.path);
 	return (
-		<ul className={cn('divide-y', props.compact ? 'border-y' : 'overflow-hidden rounded-[1.25rem] border bg-card')}>
-			{props.nodes.map((node, index) => <CurriculumNode key={node.path} node={node} index={index + 1} {...props} />)}
+		<ul className={cn(props.compact ? 'space-y-2' : 'space-y-6')}>
+			{props.nodes.map((node, index) => (
+				<CurriculumNode
+					key={node.path}
+					node={node}
+					index={index + 1}
+					numbers={numbers}
+					parentPath=""
+					siblingPaths={rootSiblings}
+					siblingIndex={index}
+					{...props}
+				/>
+			))}
 		</ul>
 	);
 }
 
-function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; index?: number }) {
+function ReorderControls({ title, siblingIndex, siblingPaths, parentPath, disabled, onMove }: { title: string; siblingIndex: number; siblingPaths: string[]; parentPath: string; disabled?: boolean; onMove: (parent: string, children: string[]) => void }) {
+	if (siblingPaths.length < 2) return null;
+	return (
+		<span className="inline-flex shrink-0 items-center gap-0.5">
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="size-9"
+				disabled={disabled || siblingIndex === 0}
+				aria-label={tr(`Move “${title}” up`, `Mover “${title}” para cima`)}
+				onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMove(parentPath, swapSiblings(siblingPaths, siblingIndex, -1)); }}
+			>
+				<ArrowUp className="size-3.5" aria-hidden="true" />
+			</Button>
+			<Button
+				type="button"
+				variant="ghost"
+				size="icon"
+				className="size-9"
+				disabled={disabled || siblingIndex === siblingPaths.length - 1}
+				aria-label={tr(`Move “${title}” down`, `Mover “${title}” para baixo`)}
+				onClick={(event) => { event.preventDefault(); event.stopPropagation(); onMove(parentPath, swapSiblings(siblingPaths, siblingIndex, 1)); }}
+			>
+				<ArrowDown className="size-3.5" aria-hidden="true" />
+			</Button>
+		</span>
+	);
+}
+
+function CurriculumNode({ node, index, moduleTitle, ...props }: NodeProps & { node: CatalogNode; index?: number; moduleTitle?: string }) {
 	const [open, setOpen] = useState(() => contains(node, props.activePath));
 	const [seen, setSeen] = useState(props.signal?.n ?? 0);
 	if (props.signal && props.signal.n !== seen) {
@@ -56,40 +139,50 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 		setSeenActive(props.activePath);
 		if (contains(node, props.activePath)) setOpen(true);
 	}
-	if (node.role === 'lesson') return <LessonRow node={node} {...props} />;
+	if (node.role === 'lesson') return <LessonRow node={node} moduleTitle={moduleTitle} {...props} />;
 	const { done, total } = courseProgress(node, props.completed);
-	const complete = total > 0 && done === total;
 	const current = contains(node, props.activePath);
+	const childSiblings = node.children.map((child) => child.path);
+	const mediaIds = !props.compact && props.onBatchComplete ? moduleMediaIds(node) : [];
+	const allModuleDone = mediaIds.length > 0 && mediaIds.every((id) => props.completed.has(id));
 	return (
 		<li>
 			<details open={open} onToggle={(event) => setOpen(event.currentTarget.open)} className="group">
-				<summary className={cn('flex cursor-pointer list-none items-center gap-3 transition-colors duration-150 hover:bg-muted [&::-webkit-details-marker]:hidden', props.compact ? 'min-h-14 px-3 py-2' : 'min-h-14 bg-muted/50 px-4 py-3', current && 'bg-brand-tint')}>
-					{index !== undefined ? (
-						<span className={cn('grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold transition-colors duration-150', complete ? 'bg-primary text-primary-foreground' : 'bg-brand-soft', current && 'ring-2 ring-primary ring-offset-2 ring-offset-card')} aria-hidden="true">{complete ? <Check className="size-4" /> : index}</span>
-					) : (
-						<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />
+				<summary className={cn('flex min-h-11 cursor-pointer list-none items-center gap-3 border-b border-[var(--study-rule)] py-2 transition-colors duration-150 hover:text-foreground [&::-webkit-details-marker]:hidden', current && 'text-foreground')}>
+					{index !== undefined && <span className="w-6 shrink-0 text-right text-[12.5px] tabular-nums text-muted-foreground" aria-hidden="true">{index}</span>}
+					<span className={cn('min-w-0 flex-1 font-semibold', props.compact ? 'text-sm leading-snug' : 'text-[15px] tracking-tight')}>{node.title}{current && props.compact && <span className="sr-only">{tr(' (current module)', ' (módulo atual)')}</span>}</span>
+					{total > 0 && <span className="shrink-0 text-[12.5px] tabular-nums text-muted-foreground">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span>}
+					{props.reorderMode && props.onMove && (
+						<ReorderControls title={node.title} siblingIndex={props.siblingIndex} siblingPaths={props.siblingPaths} parentPath={props.parentPath} disabled={props.reordering} onMove={props.onMove} />
 					)}
-					<span className="min-w-0 flex-1">
-						<span className={cn('block font-semibold', props.compact ? 'text-sm leading-snug' : 'text-base')}>{node.title}{current && <span className="sr-only">{tr(' (current module)', ' (módulo atual)')}</span>}</span>
-						{!props.compact && total > 0 && <span className="block text-sm text-muted-foreground">{tr(`${total} ${total === 1 ? 'lesson' : 'lessons'}`, `${total} ${total === 1 ? 'aula' : 'aulas'}`)}</span>}
-					</span>
-					{total > 0 && props.compact ? (
-						<>
-							<span className="shrink-0 text-xs text-muted-foreground tabular-nums"><span className="sr-only">{tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}</span><span aria-hidden="true">{done}/{total}</span></span>
-							<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />
-						</>
-					) : total > 0 ? (
-						<>
-							<span className={cn('shrink-0 text-sm tabular-nums', (complete || current) ? 'rounded-full bg-brand-soft px-2.5 py-0.5 text-xs font-semibold text-brand-ink' : 'text-muted-foreground')}>
-								{complete ? tr('Completed', 'Concluído') : current ? tr('You are here', 'Você está aqui') : done === 0 ? tr('Not started', 'Não iniciado') : tr(`${done} of ${total} done`, `${done} de ${total} concluídas`)}
-							</span>
-							{index !== undefined && <ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-open:rotate-180" aria-hidden="true" />}
-						</>
-					) : null}
+					<ChevronDown className={chevron} aria-hidden="true" />
 				</summary>
+				{!props.compact && studySyncSupported && props.onBatchComplete && mediaIds.length > 0 && (
+					<div className="flex justify-end border-b border-[var(--study-rule)] py-1.5">
+						<Button
+							type="button"
+							variant="ghost"
+							size="sm"
+							disabled={props.batchPending}
+							onClick={() => props.onBatchComplete!(mediaIds, !allModuleDone)}
+						>
+							{allModuleDone ? tr('Mark module incomplete', 'Desmarcar módulo') : tr('Mark module complete', 'Marcar módulo como concluído')}
+						</Button>
+					</div>
+				)}
 				{node.children.length > 0 && (
-					<ul className="divide-y border-t bg-background/50">
-						{node.children.map((child) => <CurriculumNode key={child.path} node={child} {...props} />)}
+					<ul>
+						{node.children.map((child, childIndex) => (
+							<CurriculumNode
+								key={child.path}
+								node={child}
+								moduleTitle={node.children.length === 1 ? node.title : undefined}
+								{...props}
+								parentPath={node.path}
+								siblingPaths={childSiblings}
+								siblingIndex={childIndex}
+							/>
+						))}
 					</ul>
 				)}
 			</details>
@@ -97,17 +190,18 @@ function CurriculumNode({ node, index, ...props }: Props & { node: CatalogNode; 
 	);
 }
 
-function LessonRow({ node, courseId, completed, favorites, activePath, compact }: Props & { node: CatalogNode }) {
+function LessonRow({ node, moduleTitle, courseId, completed, favorites, activePath, compact, resumeSeconds, numbers, reorderMode, reordering, onMove, parentPath, siblingPaths, siblingIndex }: NodeProps & { node: CatalogNode; moduleTitle?: string }) {
 	const setCompleted = useSetLessonCompleted();
 	const toggleFavorite = useToggleLessonFavorite();
-	const counts = countCatalogFiles(node);
-	const meta = formatLessonMeta(counts);
 	const mediaId = lessonMediaId(node);
 	const missing = isLessonMissing(node);
 	const isDone = Boolean(mediaId && completed.has(mediaId));
 	const isFavorite = Boolean(mediaId && favorites.has(mediaId));
 	const active = activePath === node.path;
-	const Icon = active ? CirclePlay : counts.videos > 0 || (counts.audios ?? 0) > 0 ? PlayCircle : FileText;
+	// Only a lesson still to study carries the amber marker; a finished one never does.
+	const current = active && !isDone;
+	const label = /^(lesson|aula)(\s+\d+)?$/i.test(node.title.trim()) && moduleTitle ? moduleTitle : node.title;
+	const singleInModule = !compact && moduleTitle === label;
 	const row = useRef<HTMLLIElement>(null);
 	// In the player sidebar, bring the open lesson into view inside the panel (never the page).
 	useEffect(() => {
@@ -117,34 +211,53 @@ function LessonRow({ node, courseId, completed, favorites, activePath, compact }
 		box.scrollTop += element.getBoundingClientRect().top - box.getBoundingClientRect().top - box.clientHeight / 2 + element.clientHeight / 2;
 	}, [active, compact]);
 
+	// Solid means completed; an outline marks the next or open lesson without implying completion.
+	const mark = isDone ? (
+		<span className="grid size-3.5 place-items-center rounded-full bg-primary"><Check className="size-2.5 text-primary-foreground" strokeWidth={3} aria-hidden="true" /></span>
+	) : current ? (
+		<span className="size-3.5 rounded-full border-2 border-primary" />
+	) : (
+		<span className="size-3.5 rounded-full border-[1.5px] border-border" />
+	);
+	const status = isDone ? tr('Done', 'Concluída') : current && !missing
+		? resumeSeconds ? tr(`Resume at ${formatDuration(resumeSeconds)}`, `Retomar em ${formatDuration(resumeSeconds)}`)
+			: compact ? null : tr('Up next', 'A seguir')
+		: null;
+
 	return (
-		<li ref={row} className={cn('flex items-center gap-1 pr-2 transition-colors duration-150', active ? 'bg-brand-tint' : 'hover:bg-muted/40')}>
+		<li ref={row} className="relative flex min-h-11 items-center gap-1 border-b border-[var(--study-rule)] pr-1 transition-colors duration-150">
+			{current && <span aria-hidden="true" className="absolute inset-y-2 left-0 w-[3px] rounded-full bg-primary" />}
+			<span className="w-7 shrink-0 text-right text-[12.5px] tabular-nums text-muted-foreground" aria-hidden="true">{numbers.get(node.path)}</span>
 			{studySyncSupported && mediaId && !missing ? (
-				<Button variant="ghost" size="icon" aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone })}
+				<Button variant="ghost" size="icon" className="shrink-0" aria-pressed={isDone} disabled={setCompleted.isPending} onClick={() => setCompleted.mutate({ mediaId, completed: !isDone })}
 					aria-label={isDone ? tr(`Mark “${node.title}” as not completed`, `Marcar “${node.title}” como não concluída`) : tr(`Mark “${node.title}” as completed`, `Marcar “${node.title}” como concluída`)}>
-					{isDone ? <CircleCheck className="text-primary" /> : <Circle className="text-muted-foreground" />}
+					{mark}
 				</Button>
 			) : (
-				<span className="size-11 shrink-0" aria-hidden="true" />
+				<span className="grid size-11 shrink-0 place-items-center" aria-hidden="true">{missing ? <TriangleAlert className="size-4 text-muted-foreground" /> : mark}</span>
 			)}
 			{missing ? (
 				<div className="flex min-h-11 min-w-0 flex-1 items-center gap-3 py-2 text-muted-foreground">
-					<TriangleAlert className="size-4 shrink-0" aria-hidden="true" />
-					<span className="min-w-0 flex-1">{node.title}</span>
+					<span className="min-w-0 flex-1">{label}</span>
 					<span className="shrink-0 text-xs">{tr('Missing media', 'Mídia ausente')}</span>
 				</div>
 			) : (
-				<Link to={href('course', courseId, node.path).replace(/^#/, '')} aria-current={active ? 'page' : undefined} className={cn('flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-md py-2 hover:underline', active && 'font-semibold')}>
-					<Icon className={cn('size-4 shrink-0', active ? 'fill-primary text-primary-foreground' : 'text-muted-foreground')} aria-hidden="true" />
-					<span className="min-w-0 flex-1">{node.title}</span>
-					{meta && !compact && <span className="shrink-0 text-xs text-muted-foreground">{meta}</span>}
-				</Link>
+				<>
+					<Link to={href('course', courseId, node.path).replace(/^#/, '')} aria-current={compact && active ? 'page' : undefined} className={cn('flex min-h-11 min-w-0 flex-1 items-center rounded-md py-2 text-sm hover:underline', isDone ? 'text-muted-foreground' : current ? 'font-semibold text-foreground' : 'text-foreground/85')}>
+						{singleInModule && <span className="sr-only">{tr('Open lesson ', 'Abrir aula ')}</span>}
+						<span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{label}</span>
+					</Link>
+					{status && <span className={cn('shrink-0 text-[12.5px] tabular-nums', isDone ? 'text-muted-foreground' : 'text-primary')}>{status}</span>}
+				</>
 			)}
 			{studySyncSupported && mediaId && !missing && (
-				<Button variant="ghost" size="icon" aria-pressed={isFavorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ mediaId, favorite: !isFavorite })}
+				<Button variant="ghost" size="icon" className="shrink-0" aria-pressed={isFavorite} disabled={toggleFavorite.isPending} onClick={() => toggleFavorite.mutate({ mediaId, favorite: !isFavorite })}
 					aria-label={isFavorite ? tr(`Remove “${node.title}” from favorites`, `Remover “${node.title}” dos favoritos`) : tr(`Add “${node.title}” to favorites`, `Adicionar “${node.title}” aos favoritos`)}>
 					<Star className={cn(isFavorite ? 'fill-primary text-primary' : 'text-muted-foreground')} />
 				</Button>
+			)}
+			{reorderMode && onMove && (
+				<ReorderControls title={label} siblingIndex={siblingIndex} siblingPaths={siblingPaths} parentPath={parentPath} disabled={reordering} onMove={onMove} />
 			)}
 		</li>
 	);

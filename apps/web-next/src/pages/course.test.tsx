@@ -1,6 +1,6 @@
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
-import type { Catalog, CatalogNode, FileEntry } from '@/lib/transport';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { transport, type Catalog, type CatalogNode, type FileEntry } from '@/lib/transport';
 import { renderApp } from '@/test/render-app';
 
 const file = (name: string, kind: string, availability = 'available'): FileEntry => ({ name, path: `rust/${name}`, size: 1, mediaId: kind === 'media' ? name : undefined, kind, availability });
@@ -24,13 +24,25 @@ describe('course page', () => {
 	it('shows progress, resumes the last lesson and lists modules with per-lesson state', async () => {
 		renderApp('/course/rust', { catalog, recent: [{ mediaId: 'borrow.mp4', positionSeconds: 70, completed: false, updatedAt: 2, recorded: true }, { mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
 		expect(await screen.findByRole('heading', { level: 1, name: 'Rust from zero' })).toBeTruthy();
-		expect(screen.getByRole('progressbar', { name: '1 of 2 lessons completed (50%)' })).toBeTruthy();
-		expect(screen.getByRole('link', { name: /^Resume Borrowing/ }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
-		expect(screen.getByText('You are here')).toBeTruthy();
-		expect(screen.getByText('2 lessons')).toBeTruthy();
+		const segments = screen.getByRole('progressbar', { name: '1 of 2 lessons done' });
+		// Ownership is done, so the amber current marker sits on Borrowing, the lesson with a saved position.
+		expect([...segments.children].map((segment) => segment.getAttribute('data-state'))).toEqual(['done', 'current']);
+		expect(screen.getByRole('link', { name: 'Resume Borrowing at 1:10' }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing?t=70');
+		expect(screen.getByText('Resume at 1:10')).toBeTruthy();
+		expect(screen.getByText('Done')).toBeTruthy();
+		expect(screen.getByText('1 of 2 done')).toBeTruthy();
+		expect(screen.getByRole('group', { name: 'Course at a glance' }).textContent).toContain('2 lessons');
 		expect(screen.getByRole('button', { name: 'Mark “Ownership” as not completed' }).getAttribute('aria-pressed')).toBe('true');
-		expect(screen.getByRole('link', { name: /^Borrowing/ }).getAttribute('aria-current')).toBe('page');
+		expect(screen.getByRole('link', { name: /^Borrowing/ }).hasAttribute('aria-current')).toBe(false);
 		expect(screen.getByText('Missing media')).toBeTruthy();
+	});
+
+	it('marks the next lesson after the last one studied when nothing is in progress, never a done lesson', async () => {
+		renderApp('/course/rust', { catalog, recent: [{ mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
+		const segments = await screen.findByRole('progressbar', { name: '1 of 2 lessons done' });
+		expect([...segments.children].map((segment) => segment.getAttribute('data-state'))).toEqual(['done', 'current']);
+		expect(screen.getByRole('link', { name: 'Continue studying' }).getAttribute('href')).toBe('/course/rust/rust%2FBorrowing');
+		expect(screen.queryByText(/^Resume at/)).toBeNull();
 	});
 
 	it('returns to the library with the filter and search the learner left', async () => {
@@ -85,15 +97,61 @@ describe('course page', () => {
 		expect(await screen.findByRole('heading', { name: 'Course not found' })).toBeTruthy();
 	});
 
-	it('adds a blurred backdrop to the course hero when artwork is available', async () => {
+	it.each([true, false])('shows detailed cover art, but keeps the title card for a flat image (detail: %s)', async (detail) => {
 		const withCover: Catalog = { complete: true, looseFiles: [], nodes: [{ ...catalog.nodes[0], coverVersion: 3 }] };
 		renderApp('/course/rust', { catalog: withCover });
 		const heading = await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
-		const hero = heading.closest('[data-panel]');
-		expect(hero?.querySelectorAll('img[src*="/cover"]').length).toBe(2);
-		cleanup();
-		renderApp('/course/rust', { catalog });
-		const plainHeading = await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
-		expect(plainHeading.closest('[data-panel]')?.querySelectorAll('img[src*="/cover"]').length).toBe(0);
+		const hero = heading.closest('[data-course-hero]')!;
+		const covers = hero.querySelectorAll<HTMLImageElement>('img[src*="/cover"]');
+		expect(covers).toHaveLength(1);
+		// Under the image, the generated cover is a title card with the course name.
+		expect(covers[0].parentElement?.textContent).toContain('Rust from zero');
+		const data = new Uint8ClampedArray(8 * 8 * 4);
+		if (detail) data[4] = 255;
+		const read = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+			drawImage: vi.fn(),
+			getImageData: () => ({ data })
+		} as unknown as CanvasRenderingContext2D);
+		try {
+			fireEvent.load(covers[0]);
+			expect(covers[0].hasAttribute('data-ready')).toBe(detail);
+		} finally {
+			read.mockRestore();
+		}
+	});
+
+	it('filters lessons, marks a module complete, reorders siblings, and resets progress', async () => {
+		const setCompleted = vi.spyOn(transport, 'setCompleted').mockImplementation(async (mediaId, completed) => ({
+			mediaId,
+			positionSeconds: 0,
+			completed,
+			updatedAt: 10,
+			recorded: true
+		}));
+		const setOrder = vi.spyOn(transport, 'setCourseOrder').mockResolvedValue(undefined);
+		try {
+			renderApp('/course/rust', { catalog, recent: [{ mediaId: 'own.mp4', positionSeconds: 0, completed: true, updatedAt: 1, recorded: true }] });
+			await screen.findByRole('heading', { level: 1, name: 'Rust from zero' });
+
+			// Filter incomplete lessons
+			fireEvent.click(screen.getByRole('button', { name: 'Incomplete only' }));
+			expect(screen.queryByRole('link', { name: /^Ownership/ })).toBeNull();
+			expect(screen.getByRole('link', { name: /^Borrowing/ })).toBeTruthy();
+			fireEvent.click(screen.getByRole('button', { name: 'Incomplete only' }));
+
+			// Expand all and mark Basics module complete (Ownership + Borrowing)
+			fireEvent.click(screen.getByRole('button', { name: 'Expand all' }));
+			fireEvent.click(screen.getByRole('button', { name: 'Mark module complete' }));
+			await waitFor(() => expect(setCompleted).toHaveBeenCalledWith('own.mp4', true));
+			expect(setCompleted).toHaveBeenCalledWith('borrow.mp4', true);
+
+			// Reorder mode: move Basics down below Advanced
+			fireEvent.click(screen.getByRole('button', { name: 'Reorder' }));
+			fireEvent.click(screen.getByRole('button', { name: 'Move “Basics” down' }));
+			await waitFor(() => expect(setOrder).toHaveBeenCalledWith('rust', '', ['rust/Advanced', 'rust/Basics']));
+		} finally {
+			setCompleted.mockRestore();
+			setOrder.mockRestore();
+		}
 	});
 });

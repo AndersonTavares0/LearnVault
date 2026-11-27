@@ -814,3 +814,78 @@ async fn admin_rescan_keeps_healthz_responsive_across_multiple_courses() {
         "expected /api/healthz to succeed while multi-course rescan ran"
     );
 }
+
+#[tokio::test]
+async fn rescan_discovers_new_library_folders_and_imports_by_relative_name() {
+    let temp = tempfile::tempdir().unwrap();
+    let library = temp.path().join("library");
+    let first = library.join("Existing Course");
+    fs::create_dir_all(&first).unwrap();
+    fs::write(first.join("01 - Intro.mp4"), b"video").unwrap();
+
+    let mut cfg = Config::from_args([
+        "learnvault-server",
+        "--database",
+        temp.path().join("catalog.sqlite").to_str().unwrap(),
+        "--library-root",
+        library.to_str().unwrap(),
+    ])
+    .unwrap();
+    cfg.admin_username = Some("admin".to_owned());
+    cfg.admin_password = Some("uma senha local muito segura".to_owned());
+    cfg.cookie_secure = false;
+
+    let app = build_router(AppState::initialize(cfg).await.unwrap());
+    let cookie = login(&app).await;
+
+    let newcomer = library.join("02 - Fresh Rust");
+    fs::create_dir_all(&newcomer).unwrap();
+    fs::write(newcomer.join("01 - Basics.mp4"), b"video").unwrap();
+
+    let rescan = app
+        .clone()
+        .oneshot(
+            Request::post("/api/admin/catalog/rescan")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rescan.status(), StatusCode::OK);
+    let body: serde_json::Value =
+        serde_json::from_slice(&rescan.into_body().collect().await.unwrap().to_bytes()).unwrap();
+    let discovered = body["discovered"].as_array().unwrap();
+    assert_eq!(discovered.len(), 1);
+    assert_eq!(discovered[0]["folder"], "02 - Fresh Rust");
+    assert_eq!(discovered[0]["title"], "Fresh Rust");
+
+    let import = app
+        .clone()
+        .oneshot(
+            Request::post("/api/admin/courses")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"folder":"02 - Fresh Rust"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(import.status(), StatusCode::OK);
+
+    // Traversal outside --library-root via `folder` is rejected.
+    let escape = app
+        .oneshot(
+            Request::post("/api/admin/courses")
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .header("content-type", "application/json")
+                .body(Body::from(r#"{"folder":"../outside"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(escape.status(), StatusCode::BAD_REQUEST);
+}

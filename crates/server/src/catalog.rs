@@ -134,6 +134,9 @@ pub(crate) struct RescanResponse {
     ///
     /// It is only the count: the keys themselves are relative paths and never cross the API.
     pub(crate) ambiguous_count: usize,
+    /// Unregistered course folders discovered under `--library-root`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) discovered: Vec<crate::courses::DiscoveredCourse>,
 }
 
 pub(crate) async fn catalog(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -378,7 +381,7 @@ fn remote_node(
 
 /// Titles of the roots of one source: the folder name, plus as many parent folders in
 /// parentheses as it takes to tell equal names apart (`Redes (Pentest)`, `Redes (A/x)`).
-fn root_titles(roots: &[learnvault_core::SourceRoot]) -> Vec<String> {
+pub(crate) fn root_titles(roots: &[learnvault_core::SourceRoot]) -> Vec<String> {
     let segments: Vec<Vec<&str>> = roots
         .iter()
         .map(|root| root.prefix.split('/').collect())
@@ -436,7 +439,25 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     };
 
     let courses = state.courses_snapshot();
-    if courses.is_empty() {
+    let discovered = match state.config.library_root.clone() {
+        Some(root) => {
+            let Some(discover_permit) = state.try_acquire_blocking_task() else {
+                return service_unavailable();
+            };
+            let existing = courses.clone();
+            match tokio::task::spawn_blocking(move || {
+                let _discover_permit = discover_permit;
+                crate::courses::discover_unregistered_courses(&root, &existing)
+            })
+            .await
+            {
+                Ok(found) => found,
+                Err(_) => return internal_error("rescan failed"),
+            }
+        }
+        None => Vec::new(),
+    };
+    if courses.is_empty() && discovered.is_empty() {
         return private_no_store(
             (
                 StatusCode::BAD_REQUEST,
@@ -445,6 +466,24 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
                 }),
             )
                 .into_response(),
+        );
+    }
+
+    if courses.is_empty() {
+        return private_no_store(
+            Json(RescanResponse {
+                scan_id: 0,
+                complete: true,
+                courses: 0,
+                failed_courses: 0,
+                inserted: 0,
+                updated: 0,
+                marked_missing: 0,
+                preserved: 0,
+                ambiguous_count: 0,
+                discovered,
+            })
+            .into_response(),
         );
     }
 
@@ -466,7 +505,10 @@ pub(crate) async fn rescan(State(state): State<AppState>, headers: HeaderMap) ->
     };
 
     match run_rescan_courses(&state, &courses, &covers_dir).await {
-        Ok(summary) => private_no_store(Json(summary).into_response()),
+        Ok(mut summary) => {
+            summary.discovered = discovered;
+            private_no_store(Json(summary).into_response())
+        }
         Err(RescanFailure::Busy) => status_private_no_store(StatusCode::CONFLICT),
         Err(RescanFailure::Capacity) => service_unavailable(),
         Err(RescanFailure::Failed) => internal_error("rescan failed"),
@@ -518,6 +560,7 @@ async fn run_rescan_courses(
                 outcome,
                 root.as_ref().unwrap_or(&registered_root).as_path(),
             );
+            drop(database);
             if let (Ok(_), Some(root)) = (&result, root) {
                 let _ = crate::covers::auto_detect_course_cover(
                     &covers_dir,
@@ -722,6 +765,7 @@ impl From<RescanSummary> for RescanResponse {
             preserved: summary.preserved,
             // Never serializes the keys: the response exposes only the count, like the desktop.
             ambiguous_count: summary.ambiguous.len(),
+            discovered: Vec::new(),
         }
     }
 }

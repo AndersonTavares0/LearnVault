@@ -37,13 +37,15 @@ describe('PDF lesson', () => {
 		expect(screen.queryByLabelText(/Lesson player/)).toBeNull();
 	});
 
-	it('keeps cards but drops timed notes and the note shortcut', async () => {
+	it('keeps cards and untimed notes while omitting video timestamps', async () => {
 		renderApp('/course/c/c%2FReading', { catalog });
 		await screen.findByText('PDF document');
 		expect(screen.getByRole('tab', { name: 'Cards' })).toBeTruthy();
-		expect(screen.queryByRole('tab', { name: 'Notes' })).toBeNull();
-		expect(screen.queryByRole('button', { name: /^Note/ })).toBeNull();
-		fireEvent.click(screen.getByRole('button', { name: 'Card' }));
+		expect(screen.getByRole('tab', { name: 'Notes' })).toBeTruthy();
+		expect(screen.getByRole('button', { name: 'Write a note' })).toBeTruthy();
+		expect(screen.queryByRole('region', { name: 'Timestamps' })).toBeNull();
+		fireEvent.click(screen.getByRole('tab', { name: 'Cards' }));
+		fireEvent.click(screen.getByRole('button', { name: 'New card' }));
 		expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
 	});
 

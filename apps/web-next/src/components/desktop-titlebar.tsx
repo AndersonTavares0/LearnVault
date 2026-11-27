@@ -1,6 +1,5 @@
 import { Copy, Minus, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { BrandMark } from '@/components/brand';
 import { Button } from '@/components/ui/button';
 import { tr } from '@/lib/i18n';
 
@@ -52,7 +51,6 @@ export function DesktopTitlebar() {
 	if (__LEARNVAULT_TRANSPORT__ !== 'desktop') return null;
 	return (
 		<div data-tauri-drag-region className="flex h-11 items-center gap-2 border-b bg-muted/40 pl-3 select-none">
-			<BrandMark compact className="size-5 text-foreground" />
 			<span data-tauri-drag-region className="text-sm font-medium">LearnVault</span>
 			{error && <span role="alert" className="truncate text-xs text-destructive">{error}</span>}
 			<div role="group" aria-label={tr('Window controls', 'Controles da janela')} className="ml-auto flex">

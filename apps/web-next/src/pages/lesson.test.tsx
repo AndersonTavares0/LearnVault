@@ -44,8 +44,8 @@ describe('lesson page', () => {
 		expect(screen.getByLabelText('Lesson player: One').getAttribute('src')).toBe('/api/media?course=c&path=c%2Fone.mp4');
 		expect((screen.getByRole('button', { name: /Previous/ }) as HTMLButtonElement).disabled).toBe(true);
 		expect((screen.getByRole('button', { name: /Next/ }) as HTMLButtonElement).disabled).toBe(false);
-		expect(screen.getByRole('complementary', { name: 'Course content' })).toBeTruthy();
 		expect(screen.getByText('Lesson 1 of 3')).toBeTruthy();
+		fireEvent.click(screen.getByRole('tab', { name: 'Contents' }));
 		expect(await screen.findByRole('link', { name: /Two/ })).toBeTruthy();
 	});
 
@@ -101,6 +101,7 @@ describe('lesson page', () => {
 		const inModule = (moduleTitle: string, title: string): CatalogNode => ({ title, path: `Source/Course/${moduleTitle}/${title}.mp4`, role: 'lesson', files: [media(`${title}.mp4`)], looseFiles: [], children: [] });
 		const modules: Catalog = { complete: true, looseFiles: [], nodes: [{ title: 'Course', path: '', role: 'course', courseId: 'c', files: [], looseFiles: [], children: [module('A', [inModule('A', 'One')]), module('B', [inModule('B', 'Two')])] }] };
 		renderApp('/course/c/Source%2FCourse%2FB%2FTwo.mp4', { catalog: modules });
+		fireEvent.click(await screen.findByRole('tab', { name: 'Contents' }));
 		const current = await screen.findByRole('link', { name: 'Two', current: 'page' });
 		expect(current.closest('details')?.open).toBe(true);
 		expect(screen.getByRole('link', { name: 'One' }).closest('details')?.open).toBe(false);
@@ -108,7 +109,8 @@ describe('lesson page', () => {
 
 	it('finds a lesson in the course content and says when nothing matches', async () => {
 		renderApp('/course/c/c%2FOne', { catalog });
-		const sidebar = within(await screen.findByRole('complementary', { name: 'Course content' }));
+		fireEvent.click(await screen.findByRole('tab', { name: 'Contents' }));
+		const sidebar = within(screen.getByRole('tabpanel', { name: 'Contents' }));
 		expect(sidebar.getByRole('link', { name: 'Two' })).toBeTruthy();
 		fireEvent.change(sidebar.getByRole('searchbox', { name: 'Find a lesson' }), { target: { value: 'tw' } });
 		expect(sidebar.queryByRole('link', { name: 'One' })).toBeNull();
@@ -123,7 +125,8 @@ describe('lesson page', () => {
 		expect(localStorage.getItem('learnvault-cinema')).toBe('1');
 		fireEvent.click(screen.getByRole('button', { name: 'Hide contents' }));
 		expect(localStorage.getItem('learnvault-lesson-content')).toBe('0');
-		expect(screen.queryByRole('complementary', { name: 'Course content' })).toBeNull();
+		// Hidden on desktop; the rail stays in the DOM so phones still get the sheet.
+		expect(screen.getByRole('tab', { name: 'Contents' }).closest('aside')?.className).toContain('hidden');
 		cleanup();
 		renderApp('/course/c/c%2FOne', { catalog });
 		expect((await screen.findByRole('button', { name: 'Cinema mode' })).getAttribute('aria-pressed')).toBe('true');
@@ -143,7 +146,7 @@ describe('lesson page', () => {
 		Object.defineProperty(video, 'error', { value: { code: 3 }, configurable: true });
 		fireEvent.error(video);
 		expect(await screen.findByRole('alert')).toBeTruthy();
-		fireEvent.click(screen.getByRole('button', { name: /^Note/ }));
+		fireEvent.click(screen.getByRole('button', { name: 'Write a note at 0:00' }));
 		expect(await screen.findByLabelText('Note at 0:00')).toBeTruthy();
 	});
 
@@ -258,14 +261,80 @@ describe('lesson page', () => {
 			expect(screen.queryByRole('region', { name: 'Break' })).toBeNull();
 		});
 
-		it('opens a note draft and a blank card from the tools under the video', async () => {
+		it('opens a note draft and a blank card from the rail', async () => {
 			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
 			renderApp('/course/c/c%2FOne', { catalog });
-			fireEvent.click(await screen.findByRole('button', { name: /^Note/ }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Write a note at 0:00' }));
 			expect(await screen.findByLabelText('Note at 0:00')).toBeTruthy();
-			fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
-			fireEvent.click(screen.getByRole('button', { name: 'Card' }));
+			fireEvent.click(screen.getByRole('tab', { name: 'Cards' }));
+			fireEvent.click(screen.getByRole('button', { name: 'New card' }));
 			expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
+		});
+
+		it('saves a rail note at the time the draft was opened and seeks from its chip', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+			const create = vi.spyOn(transport, 'createNote').mockResolvedValue({ noteId: 'n-new', mediaId: 'one.mp4', positionSeconds: 65, content: 'Fresh', createdAt: 1, updatedAt: 1 });
+			vi.spyOn(transport, 'listNotes').mockResolvedValue([
+				{ noteId: 'n-old', mediaId: 'one.mp4', positionSeconds: 30, content: 'Earlier', createdAt: 1, updatedAt: 1 }
+			]);
+			renderApp('/course/c/c%2FOne', { catalog });
+			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
+			video.currentTime = 65;
+			fireEvent.timeUpdate(video);
+			fireEvent.click(await screen.findByRole('button', { name: 'Write a note at 1:05' }));
+			fireEvent.change(screen.getByLabelText('Note at 1:05'), { target: { value: 'Fresh' } });
+			fireEvent.click(screen.getByRole('button', { name: 'Save note' }));
+			await waitFor(() => expect(create).toHaveBeenCalledWith('one.mp4', 65, 'Fresh'));
+			fireEvent.click(await screen.findByRole('button', { name: 'Play from 0:30' }));
+			expect(video.currentTime).toBe(30);
+		});
+
+		it('edits a rail note in place without changing its timestamp', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			vi.mocked(transport.listNotes).mockResolvedValue([
+				{ noteId: 'n-edit', mediaId: 'one.mp4', positionSeconds: 83, content: 'Before', createdAt: 1, updatedAt: 1 }
+			]);
+			const update = vi.spyOn(transport, 'updateNote').mockResolvedValue({ noteId: 'n-edit', mediaId: 'one.mp4', positionSeconds: 83, content: 'After', createdAt: 1, updatedAt: 2 });
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('tab', { name: 'Notes (1)' }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Edit note at 1:23' }));
+			fireEvent.change(await screen.findByLabelText('Note text'), { target: { value: 'After' } });
+			fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+			await waitFor(() => expect(update).toHaveBeenCalledWith('n-edit', 'After'));
+			expect(screen.getByRole('button', { name: 'Play from 1:23' })).toBeTruthy();
+		});
+
+		it('asks before deleting a rail note and keeps it on cancel', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			vi.mocked(transport.listNotes).mockResolvedValue([
+				{ noteId: 'n-delete', mediaId: 'one.mp4', positionSeconds: 83, content: 'Keep me', createdAt: 1, updatedAt: 1 }
+			]);
+			const remove = vi.spyOn(transport, 'deleteNote').mockResolvedValue(undefined);
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('tab', { name: 'Notes (1)' }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Delete note at 1:23' }));
+			const dialog = await screen.findByRole('alertdialog');
+			expect(remove).not.toHaveBeenCalled();
+			fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+			expect(remove).not.toHaveBeenCalled();
+			expect(screen.queryByRole('alertdialog')).toBeNull();
+
+			fireEvent.click(screen.getByRole('button', { name: 'Delete note at 1:23' }));
+			fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete note' }));
+			await waitFor(() => expect(remove).toHaveBeenCalledWith('n-delete'));
+			await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+		});
+
+		it('puts the lesson in focus and leaves it with the button or Escape', async () => {
+			renderApp('/course/c/c%2FOne', { catalog });
+			const focus = await screen.findByRole('button', { name: 'Focus' });
+			expect(focus.getAttribute('aria-pressed')).toBe('false');
+			fireEvent.click(focus);
+			expect(focus.getAttribute('aria-pressed')).toBe('true');
+			expect(document.querySelector('[data-lesson-focus="on"]')).not.toBeNull();
+			fireEvent.keyDown(document, { key: 'Escape' });
+			expect(focus.getAttribute('aria-pressed')).toBe('false');
+			expect(document.querySelector('[data-lesson-focus]')).toBeNull();
 		});
 
 		it('creates a card at the current player time', async () => {
@@ -278,7 +347,8 @@ describe('lesson page', () => {
 			const video = await screen.findByLabelText('Lesson player: One') as HTMLVideoElement;
 			video.currentTime = 65;
 			fireEvent.timeUpdate(video);
-			fireEvent.click(screen.getByRole('button', { name: 'Card' }));
+			fireEvent.click(screen.getByRole('tab', { name: 'Cards' }));
+			fireEvent.click(screen.getByRole('button', { name: 'New card' }));
 			fireEvent.change(await screen.findByLabelText('Front: question or concept'), { target: { value: 'Question' } });
 			fireEvent.change(screen.getByLabelText('Back: answer or explanation'), { target: { value: 'Answer' } });
 			expect(await screen.findByText('Linked to this lesson at 1:05.')).toBeTruthy();
@@ -298,6 +368,25 @@ describe('lesson page', () => {
 			fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete card' }));
 			await waitFor(() => expect(remove).toHaveBeenCalledWith('card-1'));
 			await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+		});
+
+		it('turns a saved note into a card seeded with its content and timestamp', async () => {
+			vi.spyOn(HTMLMediaElement.prototype, 'pause').mockImplementation(() => undefined);
+			vi.mocked(transport.listNotes).mockResolvedValue([
+				{ noteId: 'note-1', mediaId: 'one.mp4', positionSeconds: 83, content: 'Noise floor sits around -60 dBFS.', createdAt: 1, updatedAt: 1 }
+			]);
+			const create = vi.spyOn(transport, 'createFlashcard').mockResolvedValue({
+				cardId: 'card-note', mediaId: 'one.mp4', positionSeconds: 83, front: 'Typical room tone floor?', back: 'Noise floor sits around -60 dBFS.', intervalDays: 0, nextDue: 1, createdAt: 1, updatedAt: 1
+			});
+			renderApp('/course/c/c%2FOne', { catalog });
+			fireEvent.click(await screen.findByRole('tab', { name: /Notes/ }));
+			fireEvent.click(await screen.findByRole('button', { name: 'Make card from note at 1:23' }));
+			expect(await screen.findByRole('form', { name: 'New card' })).toBeTruthy();
+			expect((screen.getByLabelText('Back: answer or explanation') as HTMLTextAreaElement).value).toBe('Noise floor sits around -60 dBFS.');
+			expect(await screen.findByText('Linked to this lesson at 1:23.')).toBeTruthy();
+			fireEvent.change(screen.getByLabelText('Front: question or concept'), { target: { value: 'Typical room tone floor?' } });
+			fireEvent.click(screen.getByRole('button', { name: 'Save card' }));
+			await waitFor(() => expect(create).toHaveBeenCalledWith('one.mp4', 'Typical room tone floor?', 'Noise floor sits around -60 dBFS.', 83));
 		});
 	});
 
@@ -443,7 +532,6 @@ describe('lesson page', () => {
 			});
 			const remove = vi.spyOn(transport, 'deleteBookmark').mockResolvedValue(undefined);
 			renderApp('/course/c/c%2FOne', { catalog });
-			fireEvent.click(await screen.findByRole('tab', { name: 'Timestamps' }));
 			fireEvent.click(await screen.findByRole('button', { name: /Add timestamp at 0:00/ }));
 			fireEvent.change(screen.getByLabelText(/Label at 0:00/), { target: { value: 'Intro' } });
 			fireEvent.click(screen.getByRole('button', { name: 'Save timestamp' }));

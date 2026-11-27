@@ -262,6 +262,7 @@ fn build_registers_the_app_commands_in_the_acl_manifest() {
         "desktop_record_position",
         "desktop_set_completed",
         "desktop_recent_study",
+        "desktop_study_state",
         "desktop_study_summary",
         "desktop_list_notes",
         "desktop_create_note",
@@ -335,10 +336,12 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-import-course-cover"));
     assert!(permissions.contains(&"allow-desktop-remove-course-cover"));
     assert!(permissions.contains(&"allow-desktop-rescan"));
+    assert!(permissions.contains(&"allow-desktop-search"));
     assert!(permissions.contains(&"allow-desktop-study-progress"));
     assert!(permissions.contains(&"allow-desktop-record-position"));
     assert!(permissions.contains(&"allow-desktop-set-completed"));
     assert!(permissions.contains(&"allow-desktop-recent-study"));
+    assert!(permissions.contains(&"allow-desktop-study-state"));
     assert!(permissions.contains(&"allow-desktop-study-summary"));
     assert!(permissions.contains(&"allow-desktop-list-notes"));
     assert!(permissions.contains(&"allow-desktop-create-note"));
@@ -373,6 +376,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-restart-to-update"));
     assert!(permissions.contains(&"allow-desktop-media-capabilities"));
     assert!(permissions.contains(&"allow-desktop-open-in-system-player"));
+    assert!(permissions.contains(&"allow-desktop-read-media-slice"));
     assert!(permissions.contains(&"allow-desktop-playback-preferences"));
     assert!(permissions.contains(&"allow-desktop-save-playback-preferences"));
     assert!(permissions.contains(&"allow-desktop-sync-state"));
@@ -382,7 +386,7 @@ fn capability_grants_only_the_core_default_and_the_app_commands() {
     assert!(permissions.contains(&"allow-desktop-sync-now"));
     assert_eq!(
         permissions.len(),
-        58,
+        60,
         "the capability must not extend beyond the core, the titlebar controls and the app commands: {permissions:?}"
     );
 }
@@ -530,6 +534,7 @@ fn invoke_handler_registers_only_the_desktop_commands() {
         "desktop_record_position",
         "desktop_set_completed",
         "desktop_recent_study",
+        "desktop_study_state",
         "desktop_list_notes",
         "desktop_create_note",
         "desktop_update_note",
@@ -574,6 +579,7 @@ fn study_commands_are_async_blocking_and_never_accept_an_owner() {
         ("desktop_record_position", "state.record_position("),
         ("desktop_set_completed", "state.set_completed("),
         ("desktop_recent_study", "state.recent_study("),
+        ("desktop_study_state", "state.study_state("),
         ("desktop_list_notes", "state.list_notes("),
         ("desktop_create_note", "state.create_note("),
         ("desktop_update_note", "state.update_note("),

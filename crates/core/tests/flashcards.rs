@@ -377,3 +377,28 @@ fn review_list_caps_the_limit() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn hard_and_easy_ratings_scale_intervals_and_persist_history() -> TestResult {
+    let db = library_db()?;
+    let card = create_flashcard(&db, OWNER, MEDIA_A, "SRS", "Four grades", None)?;
+
+    let after_hard_zero = review_flashcard(&db, OWNER, &card.card_id, ReviewRating::Hard)?;
+    assert_eq!(after_hard_zero.interval_days, 0);
+    assert!(after_hard_zero.next_due > after_hard_zero.updated_at);
+
+    let after_easy_zero = review_flashcard(&db, OWNER, &card.card_id, ReviewRating::Easy)?;
+    assert_eq!(after_easy_zero.interval_days, 4);
+
+    let after_hard_four = review_flashcard(&db, OWNER, &card.card_id, ReviewRating::Hard)?;
+    assert_eq!(after_hard_four.interval_days, 4);
+
+    let after_easy_four = review_flashcard(&db, OWNER, &card.card_id, ReviewRating::Easy)?;
+    assert_eq!(after_easy_four.interval_days, 12);
+
+    let history = list_flashcard_reviews(&db, OWNER, &card.card_id, 10)?;
+    assert_eq!(history.len(), 4);
+    assert_eq!(history[0].rating, ReviewRating::Easy);
+    assert_eq!(history[1].rating, ReviewRating::Hard);
+    Ok(())
+}

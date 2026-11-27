@@ -212,6 +212,104 @@ pub fn recent_study(db: &Database, owner_id: &str, limit: usize) -> Result<Vec<S
     Ok(states)
 }
 
+/// Ceiling of items per page of [`study_page`].
+pub const MAX_STUDY_PAGE: usize = 500;
+
+/// Position after the last item of a [`study_page`], in the order of [`recent_study`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StudyCursor {
+    updated_at: i64,
+    media_id: String,
+}
+
+impl StudyCursor {
+    /// Opaque text form, `updated_at` first because it never contains a dot.
+    pub fn encode(&self) -> String {
+        format!("{}.{}", self.updated_at, self.media_id)
+    }
+
+    /// Parses [`StudyCursor::encode`]; `None` for any other text.
+    pub fn parse(text: &str) -> Option<Self> {
+        let (updated_at, media_id) = text.split_once('.')?;
+        if media_id.is_empty() {
+            return None;
+        }
+        Some(Self {
+            updated_at: updated_at.parse().ok()?,
+            media_id: media_id.to_owned(),
+        })
+    }
+}
+
+/// One page of the owner's complete study state.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StudyPage {
+    /// Progress items, from most recently changed to oldest.
+    pub items: Vec<StudyProgress>,
+    /// Where the next page starts; `None` on the last page.
+    pub next: Option<StudyCursor>,
+}
+
+/// Pages through the owner's whole progress, in the order of [`recent_study`].
+///
+/// Unlike [`recent_study`] it has no overall ceiling: a caller walks `next` until it is `None`.
+/// `allowed_libraries` is the adapter's authorization, applied in the same query so a page is never
+/// short because of rows the caller may not see: `None` allows every library. The limit is
+/// clamped to `1..=`[`MAX_STUDY_PAGE`]. Media removed from the catalog do not appear.
+pub fn study_page(
+    db: &Database,
+    owner_id: &str,
+    allowed_libraries: Option<&[String]>,
+    after: Option<&StudyCursor>,
+    limit: usize,
+) -> Result<StudyPage> {
+    validate_owner(owner_id)?;
+
+    let limit = limit.clamp(1, MAX_STUDY_PAGE);
+    // A list that cannot be serialized allows nothing: authorization fails closed.
+    let allowed =
+        allowed_libraries.map(|ids| serde_json::to_string(ids).unwrap_or_else(|_| "[]".to_owned()));
+    let (after_at, after_id) =
+        after.map_or((i64::MAX, ""), |c| (c.updated_at, c.media_id.as_str()));
+
+    let mut statement = db.connection().prepare(
+        "SELECT s.media_id, s.position_seconds, s.completed, s.updated_at
+           FROM study_state s
+           JOIN media m ON m.media_id = s.media_id
+          WHERE s.owner_id = ?1
+            AND (s.updated_at < ?2 OR (s.updated_at = ?2 AND s.media_id > ?3))
+            AND (?4 IS NULL OR m.library_id IN (SELECT value FROM json_each(?4)))
+            AND NOT EXISTS (SELECT 1 FROM media_removal r
+                             WHERE r.library_id = m.library_id AND r.media_id = m.media_id)
+          ORDER BY s.updated_at DESC, s.media_id ASC
+          LIMIT ?5",
+    )?;
+    let rows = statement.query_map(
+        rusqlite::params![
+            owner_id,
+            after_at,
+            after_id,
+            allowed,
+            i64::try_from(limit + 1).unwrap_or(i64::MAX)
+        ],
+        progress_from_row,
+    )?;
+    let mut items = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let next = (items.len() > limit).then(|| {
+        items.truncate(limit);
+        items.last().map(|last| StudyCursor {
+            updated_at: last.updated_at,
+            media_id: last.media_id.clone(),
+        })
+    });
+
+    Ok(StudyPage {
+        items,
+        next: next.flatten(),
+    })
+}
+
 /// Refuses an unidentified owner.
 pub(crate) fn validate_owner(owner_id: &str) -> Result<()> {
     if owner_id.trim().is_empty() {
@@ -492,6 +590,10 @@ pub fn list_all_study_notes(db: &Database, owner_id: &str) -> Result<Vec<GlobalS
          FROM study_note n
          JOIN media m ON n.media_id = m.media_id
          WHERE n.owner_id = ?1
+           AND NOT EXISTS (SELECT 1
+                             FROM media_removal r
+                            WHERE r.library_id = m.library_id
+                              AND r.media_id = m.media_id)
          ORDER BY n.updated_at DESC, n.created_at DESC",
     )?;
     let rows = statement.query_map(rusqlite::params![owner_id], |row| {
@@ -543,7 +645,7 @@ pub(crate) fn create_study_note_on(
         return Err(Error::InvalidStudyPosition { position_seconds });
     }
     let trimmed = content.trim();
-    if trimmed.is_empty() || trimmed.len() > 10000 {
+    if trimmed.is_empty() || trimmed.chars().count() > 10000 {
         return Err(Error::InvalidStudyNoteContent);
     }
 
@@ -587,7 +689,7 @@ pub(crate) fn update_study_note_on(
 ) -> Result<StudyNote> {
     validate_owner(owner_id)?;
     let trimmed = content.trim();
-    if trimmed.is_empty() || trimmed.len() > 10000 {
+    if trimmed.is_empty() || trimmed.chars().count() > 10000 {
         return Err(Error::InvalidStudyNoteContent);
     }
 
@@ -657,18 +759,24 @@ fn note_from_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StudyNote> {
 /// Rating of a flashcard review.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ReviewRating {
-    /// The learner got it wrong or needs to repeat soon.
+    /// The learner got it wrong or needs to repeat soon (10 minutes).
     Again,
+    /// The learner recalled it with effort; shorter growth step.
+    Hard,
     /// The learner got it right and understood the concept.
     Good,
+    /// The learner recalled it effortlessly; faster interval growth.
+    Easy,
 }
 
 impl ReviewRating {
-    /// Converts from a string ("again" or "good"), case-insensitive.
+    /// Converts from a string (`"again"`, `"hard"`, `"good"`, or `"easy"`), case-insensitive.
     pub fn parse(s: &str) -> Option<Self> {
         match s.trim().to_ascii_lowercase().as_str() {
             "again" => Some(Self::Again),
+            "hard" => Some(Self::Hard),
             "good" => Some(Self::Good),
+            "easy" => Some(Self::Easy),
             _ => None,
         }
     }
@@ -677,7 +785,9 @@ impl ReviewRating {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Again => "again",
+            Self::Hard => "hard",
             Self::Good => "good",
+            Self::Easy => "easy",
         }
     }
 }
@@ -956,11 +1066,35 @@ pub(crate) fn schedule_review(
 ) -> (i64, i64) {
     match rating {
         ReviewRating::Again => (0_i64, reviewed_at + 600),
+        ReviewRating::Hard => {
+            if prev_interval == 0 {
+                (0_i64, reviewed_at + 43_200)
+            } else {
+                let next_interval = (prev_interval.saturating_mul(6) / 5)
+                    .max(prev_interval)
+                    .min(365);
+                (
+                    next_interval,
+                    reviewed_at + next_interval.saturating_mul(86_400),
+                )
+            }
+        }
         ReviewRating::Good => {
             let next_interval = if prev_interval == 0 {
                 1_i64
             } else {
                 prev_interval.saturating_mul(2).min(365)
+            };
+            (
+                next_interval,
+                reviewed_at + next_interval.saturating_mul(86_400),
+            )
+        }
+        ReviewRating::Easy => {
+            let next_interval = if prev_interval == 0 {
+                4_i64
+            } else {
+                prev_interval.saturating_mul(3).min(365)
             };
             (
                 next_interval,

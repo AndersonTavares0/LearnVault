@@ -15,6 +15,7 @@ type Props = {
 	courseId: string;
 	lessons: number;
 	compact?: boolean;
+	className?: string;
 	onRemoved?: () => void;
 };
 
@@ -26,7 +27,7 @@ function actionError(error: unknown, fallback: string): string {
 }
 
 /** Admin course actions available from the library and the course header. */
-export function CourseManagement({ course, courseId, lessons, compact = false, onRemoved }: Props) {
+export function CourseManagement({ course, courseId, lessons, compact = false, className, onRemoved }: Props) {
 	const remove = useRemoveCourse();
 	const reset = useResetCourseOrder();
 	const navigate = useNavigate();
@@ -54,7 +55,8 @@ export function CourseManagement({ course, courseId, lessons, compact = false, o
 				<DropdownMenuTrigger render={
 					<Button
 						variant={compact ? 'ghost' : 'outline'}
-						size={compact ? 'icon' : 'lg'}
+						size={compact ? 'icon' : 'default'}
+						className={className}
 						{...(compact ? { 'aria-label': tr(`Manage ${course.title}`, `Gerenciar ${course.title}`) } : {})}
 					/>
 				}>

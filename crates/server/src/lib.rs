@@ -138,6 +138,7 @@ pub fn build_router(state: AppState) -> Router {
             get(transcode::media_transcode).head(transcode::media_transcode),
         )
         .route("/api/study/recent", get(study::recent))
+        .route("/api/study/state", get(study::state))
         .route("/api/study/summary", get(study::summary))
         // The sync batch carries up to 200 operations with note text, so it
         // has a limit of its own, far above the default of the small routes.
@@ -274,6 +275,8 @@ pub fn build_router(state: AppState) -> Router {
 
 /// A source scan walks a remote tree and has its own 120 s limit; the request limit must not cut it short.
 const SOURCE_SCAN_REQUEST_TIMEOUT: Duration = Duration::from_secs(130);
+/// Full database backup generation runs synchronously; allow larger databases without timing out at 30 s.
+const BACKUP_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 
 fn with_request_limits(router: Router, timeout: Duration) -> Router {
     router.layer(
@@ -285,6 +288,8 @@ fn with_request_limits(router: Router, timeout: Duration) -> Router {
                     || path == "/api/admin/catalog/rescan";
                 let limit = if is_scan {
                     timeout.max(SOURCE_SCAN_REQUEST_TIMEOUT)
+                } else if path == "/api/admin/backup" {
+                    timeout.max(BACKUP_REQUEST_TIMEOUT)
                 } else {
                     timeout
                 };

@@ -251,9 +251,9 @@ pub fn logout(server_url: &str, session: &str) {
 }
 
 /// Runs a complete sync: pushes the outbox, confirms the acceptance and pulls from the
-/// cursor until the last page.
+/// cursor until the last page without holding the SQLite lock across network requests.
 pub fn run(
-    database: &Database,
+    database: &std::sync::Mutex<Database>,
     server_url: &str,
     session: &str,
 ) -> Result<SyncResultDto, SyncFailure> {
@@ -263,14 +263,18 @@ pub fn run(
     let base = validate_server_url(server_url).map_err(|_| SyncFailure::NotConfigured)?;
     let origin = origin_of(&base).map_err(|_| SyncFailure::NotConfigured)?;
     let client = http_client()?;
-    let state =
-        learnvault_core::sync_state(database, LOCAL_OWNER_ID).map_err(|_| SyncFailure::Local)?;
+    let state = {
+        let db = database.lock().map_err(|_| SyncFailure::Local)?;
+        learnvault_core::sync_state(&db, LOCAL_OWNER_ID).map_err(|_| SyncFailure::Local)?
+    };
 
     let mut pushed = 0_usize;
     loop {
-        let operations =
-            learnvault_core::pending_operations(database, LOCAL_OWNER_ID, MAX_SYNC_BATCH)
-                .map_err(|_| SyncFailure::Local)?;
+        let operations = {
+            let db = database.lock().map_err(|_| SyncFailure::Local)?;
+            learnvault_core::pending_operations(&db, LOCAL_OWNER_ID, MAX_SYNC_BATCH)
+                .map_err(|_| SyncFailure::Local)?
+        };
         if operations.is_empty() {
             break;
         }
@@ -287,8 +291,11 @@ pub fn run(
             .iter()
             .map(|operation| operation.op_id.clone())
             .collect();
-        learnvault_core::acknowledge_operations(database, LOCAL_OWNER_ID, &op_ids)
-            .map_err(|_| SyncFailure::Local)?;
+        {
+            let db = database.lock().map_err(|_| SyncFailure::Local)?;
+            learnvault_core::acknowledge_operations(&db, LOCAL_OWNER_ID, &op_ids)
+                .map_err(|_| SyncFailure::Local)?;
+        }
         pushed += outcome.applied + outcome.duplicated;
         if !full_page {
             break;
@@ -299,8 +306,11 @@ pub fn run(
     let mut pulled = 0_usize;
     loop {
         let batch = pull(&client, &base, &origin, session, &state.device_id, cursor)?;
-        learnvault_core::apply_operations(database, LOCAL_OWNER_ID, &batch.items, batch.cursor)
-            .map_err(|_| SyncFailure::Local)?;
+        {
+            let db = database.lock().map_err(|_| SyncFailure::Local)?;
+            learnvault_core::apply_operations(&db, LOCAL_OWNER_ID, &batch.items, batch.cursor)
+                .map_err(|_| SyncFailure::Local)?;
+        }
         pulled += batch.items.len();
         let advanced = batch.cursor > cursor;
         cursor = batch.cursor;
@@ -310,8 +320,10 @@ pub fn run(
         }
     }
 
-    let pending =
-        learnvault_core::pending_count(database, LOCAL_OWNER_ID).map_err(|_| SyncFailure::Local)?;
+    let pending = {
+        let db = database.lock().map_err(|_| SyncFailure::Local)?;
+        learnvault_core::pending_count(&db, LOCAL_OWNER_ID).map_err(|_| SyncFailure::Local)?
+    };
     Ok(SyncResultDto {
         pushed,
         pulled,

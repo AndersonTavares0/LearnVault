@@ -3,13 +3,10 @@ import type { FileEntry } from './transport';
 /**
  * Tells whether on-demand conversion of SRT subtitles is available.
  *
- * The desktop is offline: the path that downloads the SRT with `fetch` only exists in the HTTP build.
- * The constant is resolved at compile time by `__LEARNVAULT_TRANSPORT__`, so
- * that the `fetch` code leaves the desktop bundle through dead-code elimination. The decision
- * lives outside the Svelte component because there `===` becomes a runtime call that the
- * minifier cannot fold.
+ * Both transports convert SRT to WebVTT in the browser: HTTP fetches the subtitle file and the
+ * desktop reads it via `desktop_read_media_slice` IPC without opening the network.
  */
-export const srtConversionSupported: boolean = __LEARNVAULT_TRANSPORT__ === 'http';
+export const srtConversionSupported: boolean = true;
 
 /**
  * Tells whether the transport implements study progress.

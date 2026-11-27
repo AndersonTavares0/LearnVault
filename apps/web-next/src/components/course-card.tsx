@@ -3,12 +3,14 @@ import { useId, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { CourseCover } from '@/components/course-cover';
 import { CourseManagement } from '@/components/course-management';
+import { LessonSegments } from '@/components/lesson-segments';
 import { Button } from '@/components/ui/button';
 import { useStore } from '@/hooks/use-store';
 import { appearanceStore } from '@/lib/appearance';
-import { formatCount } from '@/lib/catalog';
+import { formatCount, isLessonMissing } from '@/lib/catalog';
 import { getLocale, tr } from '@/lib/i18n';
 import type { CourseEntry } from '@/lib/library';
+import type { CatalogNode } from '@/lib/transport';
 import { studySyncSupported } from '@/lib/player';
 import { href } from '@/lib/router';
 import { cn } from '@/lib/utils';
@@ -16,6 +18,13 @@ import { useToggleCourseFavorite } from '@/app/data';
 
 /** Router paths drop the leading `#` of the canonical hash links built by `href()`. */
 export const routerPath = (hash: string) => hash.replace(/^#/, '');
+
+/** Lesson paths in course order, the same lessons `courseProgress` counts; the segments follow this order. */
+export function lessonPaths(node: CatalogNode, out: string[] = []): string[] {
+	if (node.role === 'lesson' && !isLessonMissing(node)) out.push(node.path);
+	for (const child of node.children) lessonPaths(child, out);
+	return out;
+}
 
 export function ProgressBar({ value, label, action, className }: { value: number; label: string; action?: ReactNode; className?: string }) {
 	const id = useId();
@@ -54,6 +63,11 @@ type Props = { entry: CourseEntry; profile: string; variant?: 'grid' | 'shelf' |
 export function CourseCard({ entry, profile, variant = 'grid', canManage = false }: Props) {
 	const look = useStore(appearanceStore);
 	const toggle = useToggleCourseFavorite();
+	const favoriteError = toggle.isError && (
+		<p role="alert" className="mt-2 text-xs text-destructive">
+			{tr('Could not update favorites. Try again.', 'Não foi possível atualizar os favoritos. Tente novamente.')}
+		</p>
+	);
 	// Cover, lesson order and registry removal only exist for local courses; a remote course is managed from Settings.
 	const manageable = canManage && !entry.course.remote;
 	const listed = variant === 'list';
@@ -101,49 +115,80 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 			</li>
 		);
 	}
-	return (
-		<li data-card className={cn('group/card relative flex items-center gap-3.5 p-4 has-focus-visible:ring-3 has-focus-visible:ring-ring', !listed && 'rounded-2xl border bg-card transition-[border-color,box-shadow,transform] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] hover:border-[color:var(--border-strong)] hover:shadow-sm active:scale-[0.99]', variant === 'shelf' && 'w-64 shrink-0 snap-start', listed && 'rounded-xl')}>
-			<div className="relative w-12 shrink-0">
-				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="aspect-square rounded-lg ring-1 ring-border/75 [&_img]:transition-transform [&_img]:duration-200 [&_img]:ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/card:[&_img]:scale-[1.04]" />
-			</div>
-			{/* The star lives beside the title, so it never sits on the year drawn on the cover. */}
-			{studySyncSupported && !listed && (
-				<div className="absolute top-1.5 right-1.5 z-10">
-					<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
-						aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
-						className="text-muted-foreground opacity-0 transition-opacity group-hover/card:opacity-100 hover:text-foreground focus-visible:opacity-100 aria-pressed:text-primary aria-pressed:opacity-100 [@media(hover:none)]:opacity-100">
-						<Star className={cn(entry.favorite && 'fill-current')} />
-					</Button>
-				</div>
-			)}
-			{manageable && (
-				<div className={cn('absolute top-1.5 z-10 opacity-0 transition-opacity group-focus-within/card:opacity-100 group-hover/card:opacity-100 [@media(hover:none)]:opacity-100', studySyncSupported && !listed ? 'right-11' : 'right-1.5')}>
-					<CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact />
-				</div>
-			)}
-			<div className="min-w-0 flex-1 space-y-2">
-				<h3 className="card-heading text-[0.9375rem] leading-snug font-semibold">
-					{!listed && (manageable || studySyncSupported) && (
-						<span aria-hidden="true" data-action-reserve className={cn('float-right h-7 shrink-0', manageable && studySyncSupported ? 'w-[5.25rem]' : 'w-11')} />
-					)}
-					{/* The link covers the whole card; the favorite button sits above it. */}
-					<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline">{entry.course.title}</Link>
-				</h3>
-				{listed ? (
-					<div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-						{entry.total > 0 && (look.showProgress && entry.done > 0
-							? <div className="w-52 max-w-full"><ProgressBar value={entry.done / Math.max(1, entry.total)} label={progressLabel(entry)} /></div>
-							: <span className="text-sm text-muted-foreground">{progressLabel(entry)}</span>)}
-						<span className="text-sm text-muted-foreground">{entry.lastStudiedAt ? tr(`Studied ${lastStudied}`, `Estudado ${lastStudied}`) : tr('Not studied', 'Não estudado')}</span>
-						<span className="ml-auto text-sm font-semibold text-primary">{tr('Resume', 'Retomar')}</span>
+	if (variant === 'grid') {
+		const current = entry.status === 'in_progress' && entry.next ? lessonPaths(entry.course).indexOf(entry.next.path) : -1;
+		const doneLabel = entry.done > 0 ? tr(`${entry.done} done`, `${entry.done} ${entry.done === 1 ? 'concluída' : 'concluídas'}`) : entry.status === 'in_progress' ? tr('Started', 'Iniciado') : tr('Not started', 'Não iniciado');
+		return (
+			<li className="group/card relative grid min-w-0 grid-cols-[4.25rem_minmax(0,1fr)] items-start gap-3.5 border-t border-[var(--study-rule)] py-3.5 sm:grid-cols-[4.5rem_minmax(0,1fr)]">
+				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="aspect-square w-full rounded-[var(--radius)] border border-[var(--study-rule)] ring-0" />
+				<div className="flex min-h-[4.5rem] min-w-0 flex-col justify-between gap-2">
+					<div className="flex min-h-[2.4rem] items-start gap-1">
+						<h3 className="line-clamp-2 min-w-0 flex-1 text-base leading-snug font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">
+							<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:underline">{entry.course.title}</Link>
+						</h3>
+						{(studySyncSupported || manageable) && (
+							<div className="relative z-10 -mt-1.5 -mr-1.5 flex shrink-0 items-center text-muted-foreground">
+								{studySyncSupported && (
+									<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
+										aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
+										className="opacity-0 group-focus-within/card:opacity-100 group-hover/card:opacity-100 aria-pressed:text-primary aria-pressed:opacity-100 [@media(hover:none)]:opacity-100">
+										<Star className={cn(entry.favorite && 'fill-current')} aria-hidden="true" />
+									</Button>
+								)}
+								{manageable && <CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact className="opacity-0 group-focus-within/card:opacity-100 group-hover/card:opacity-100 aria-expanded:opacity-100 [@media(hover:none)]:opacity-100" />}
+							</div>
+						)}
 					</div>
-				) : entry.total > 0 ? (
+					{entry.total > 0 ? (
+						<div className="space-y-1.5">
+							<p className="flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-xs text-muted-foreground tabular-nums">
+								<span>{formatCount(entry.total, tr('lesson', 'aula'), tr('lessons', 'aulas'))}</span>
+								<span aria-hidden="true">·</span>
+								<span className={entry.status === 'completed' ? 'font-medium text-primary' : undefined}>{doneLabel}</span>
+							</p>
+							{(look.showProgress || entry.done > 0) && (
+								<LessonSegments done={entry.done} total={entry.total} current={current >= 0 ? current : undefined} />
+							)}
+						</div>
+					) : (
+						<p className="text-[12.5px] text-muted-foreground">{tr('No lessons found', 'Sem aulas')}</p>
+					)}
+					{favoriteError}
+				</div>
+			</li>
+		);
+	}
+	const resumeClass = 'relative z-10 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-1 text-xs font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring';
+	return (
+		<li data-card className="group/card study-surface relative flex w-64 shrink-0 snap-start flex-col items-stretch justify-between overflow-hidden p-0 transition-colors duration-150 hover:border-[color:var(--border-strong)] has-focus-visible:ring-2 has-focus-visible:ring-ring">
+			<div className="relative overflow-hidden border-b border-[var(--study-rule)]">
+				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} className="aspect-[2.4/1] w-full rounded-none ring-0 [&_img]:transition-transform [&_img]:duration-200 [&_img]:ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/card:[&_img]:scale-[1.03]" />
+			</div>
+			<div className="flex min-w-0 flex-1 flex-col justify-between gap-2 p-3.5">
+				<div className="flex items-center gap-2.5">
+					<h3 className="card-heading flex min-h-11 min-w-0 flex-1 items-center text-base leading-snug font-semibold">
+						<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:underline">{entry.course.title}</Link>
+					</h3>
+					{(studySyncSupported || manageable) && (
+						<div className="relative z-10 -mr-1.5 flex shrink-0 items-center text-muted-foreground">
+							{studySyncSupported && (
+								<Button variant="ghost" size="icon" aria-pressed={entry.favorite} disabled={toggle.isPending} onClick={() => toggle.mutate({ courseId: entry.courseId, favorite: !entry.favorite })}
+									aria-label={entry.favorite ? tr(`Remove ${entry.course.title} from favorites`, `Remover ${entry.course.title} dos favoritos`) : tr(`Add ${entry.course.title} to favorites`, `Adicionar ${entry.course.title} aos favoritos`)}
+									className="opacity-0 group-focus-within/card:opacity-100 group-hover/card:opacity-100 aria-pressed:text-primary aria-pressed:opacity-100 [@media(hover:none)]:opacity-100">
+									<Star className={cn(entry.favorite && 'fill-current')} aria-hidden="true" />
+								</Button>
+							)}
+							{manageable && <CourseManagement course={entry.course} courseId={entry.courseId} lessons={entry.total} compact className="opacity-0 group-focus-within/card:opacity-100 group-hover/card:opacity-100 aria-expanded:opacity-100 [@media(hover:none)]:opacity-100" />}
+						</div>
+					)}
+				</div>
+				{entry.total > 0 ? (
 					entry.done > 0 && look.showProgress ? (
 						<ProgressBar
 							value={entry.done / Math.max(1, entry.total)}
 							label={progressLabel(entry)}
 							action={entry.status === 'in_progress' && entry.next ? (
-								<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className="relative z-10 shrink-0 text-xs font-semibold text-primary hover:underline" aria-label={tr(`Resume ${entry.course.title}: ${entry.next.title}`, `Retomar ${entry.course.title}: ${entry.next.title}`)}>
+								<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className={resumeClass} aria-label={tr(`Resume ${entry.course.title}: ${entry.next.title}`, `Retomar ${entry.course.title}: ${entry.next.title}`)}>
 									{tr('Resume', 'Retomar')}
 								</Link>
 							) : undefined}
@@ -152,18 +197,18 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 						<div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
 							<span className="truncate">{progressLabel(entry)}</span>
 							{entry.done > 0 && entry.status === 'in_progress' && entry.next ? (
-								<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className="relative z-10 shrink-0 font-semibold text-primary hover:underline" aria-label={tr(`Resume ${entry.course.title}: ${entry.next.title}`, `Retomar ${entry.course.title}: ${entry.next.title}`)}>
+								<Link to={routerPath(href('course', entry.courseId, entry.next.path))} className={resumeClass} aria-label={tr(`Resume ${entry.course.title}: ${entry.next.title}`, `Retomar ${entry.course.title}: ${entry.next.title}`)}>
 									{tr('Resume', 'Retomar')}
 								</Link>
 							) : look.showCategories && entry.category ? (
-								<span className="max-w-[8.5rem] shrink-0 truncate rounded-md bg-panel px-2 py-0.5 text-[11px] font-medium text-foreground/75">{entry.category}</span>
+								<span className="max-w-[8.5rem] shrink-0 truncate text-xs font-medium text-muted-foreground">{entry.category}</span>
 							) : null}
 						</div>
 					)
 				) : (
 					<p className="text-xs text-muted-foreground">{tr('No lessons found', 'Sem aulas')}</p>
 				)}
-				{listed && entry.next && entry.status === 'in_progress' && <p className="truncate text-sm">{tr('Next:', 'Próxima:')} {entry.next.title}</p>}
+				{favoriteError}
 			</div>
 		</li>
 	);

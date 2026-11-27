@@ -27,7 +27,7 @@ describe('appearance', () => {
 		const root = document.createElement('html');
 		const saved = new Map<string, string>();
 		const storage = { getItem: (key: string) => saved.get(key) ?? null, setItem: (key: string, value: string) => void saved.set(key, value), removeItem: (key: string) => void saved.delete(key) } as unknown as Storage;
-		updateAppearance({ accent: '#6A32C9', radius: 'round', density: 'compact' }, storage, root);
+		updateAppearance({ theme: 'light', accent: '#6A32C9', radius: 'round', density: 'compact' }, storage, root);
 		expect(root.style.getPropertyValue('--brand')).toBe('#6A32C9');
 		expect(root.dataset.radius).toBe('round');
 		expect(root.dataset.density).toBe('compact');
@@ -64,28 +64,31 @@ describe('appearance', () => {
 });
 
 describe('brand palette', () => {
-	it('defaults to the warm ink accent, with its gold twin on the dark page', () => {
-		expect(DEFAULT_APPEARANCE.accent).toBe('#1C1815');
-		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'ink', hex: '#1C1815', dark: '#E0A83E', tone: '#5C4229' });
-		expect(darkAccent('#1C1815')).toBe('#E0A83E');
+	it('defaults to the petrol accent: deep petrol on cool paper and mint-teal on the dark slate', () => {
+		expect(DEFAULT_APPEARANCE).toMatchObject({ theme: 'dark', surface: 'paper', accent: '#115E59', reward: 'accent' });
+		expect(ACCENT_PRESETS[0]).toMatchObject({ id: 'petrol', hex: '#115E59', dark: '#4EC0B3' });
+		expect(darkAccent('#115E59')).toBe('#4EC0B3');
+		expect(contrast('#FFFFFF', readableAccent('#115E59'))).toBeGreaterThanOrEqual(4.5);
 	});
 
-	it('keeps white text on the ink accent and the gold accent on the dark panel above 4.5:1', () => {
+	it('keeps white text on the ink accent and the petrol accent on the dark panel above 4.5:1', () => {
 		expect(contrast('#FFFFFF', readableAccent('#1C1815'))).toBeGreaterThanOrEqual(4.5);
-		expect(contrast('#1C1510', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
-		expect(contrast('#1C1209', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
+		const accent = darkAccent(DEFAULT_APPEARANCE.accent);
+		expect(contrast('#292B2E', accent)).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#0A1A18', accent)).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#292B2E', darkAccent('#222222'))).toBeGreaterThanOrEqual(4.5);
 	});
 
 	it('gives the reward colour at least 3:1 as a graphic on every surface, light and dark', () => {
 		for (const surface of SURFACES) {
 			expect(contrast('#A8761F', SURFACE_SWATCHES[surface].light), `${surface} light`).toBeGreaterThanOrEqual(3);
-			expect(contrast('#E0A83E', SURFACE_SWATCHES[surface].dark), `${surface} dark`).toBeGreaterThanOrEqual(3);
+			expect(contrast('#C9B594', SURFACE_SWATCHES[surface].dark), `${surface} dark`).toBeGreaterThanOrEqual(3);
 		}
 	});
 
-	it.each(['light', 'dark'] as const)('keeps small reward text at least 4.5:1 on its %s tint', (theme) => {
+	it.each(['light', 'dark'] as const)('keeps small amber reward text at least 4.5:1 on its %s tint', (theme) => {
 		const root = document.createElement('html');
-		applyAppearance({ ...DEFAULT_APPEARANCE, theme }, root);
+		applyAppearance({ ...DEFAULT_APPEARANCE, reward: 'amber', theme }, root);
 		expect(contrast(root.style.getPropertyValue('--reward'), root.style.getPropertyValue('--reward-tint'))).toBeGreaterThanOrEqual(4.5);
 	});
 
@@ -95,7 +98,7 @@ describe('brand palette', () => {
 		// must not carry small text; it still beats white (4.0:1).
 		expect(contrast('#1C1815', '#A8761F')).toBeGreaterThan(contrast('#FFFFFF', '#A8761F'));
 		expect(contrast('#1C1815', '#A8761F')).toBeGreaterThanOrEqual(3);
-		expect(contrast('#1C1815', '#E0A83E')).toBeGreaterThanOrEqual(4.5);
+		expect(contrast('#1C1815', '#C9B594')).toBeGreaterThanOrEqual(4.5);
 	});
 
 	it('tints the light page from brown for the ink accent, and from the accent itself for every other colour', () => {

@@ -34,7 +34,7 @@ function spyOnProtected() {
 		vi.spyOn(transport, 'catalog'),
 		vi.spyOn(transport, 'checkUpdate'),
 		vi.spyOn(transport, 'indexingStatus'),
-		vi.spyOn(transport, 'recentStudy'),
+		vi.spyOn(transport, 'studyState'),
 		vi.spyOn(transport, 'listFavorites'),
 		vi.spyOn(transport, 'rewardSummary')
 	];

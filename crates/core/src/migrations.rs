@@ -741,10 +741,127 @@ CREATE TABLE library_root_dismissed (
 );
 ";
 
+/// Version 22: 4-grade flashcard ratings (`hard` and `easy`) and FTS5 search indexes for
+/// flashcards, time bookmarks, and PDF annotations.
+const V22: &str = "
+CREATE TABLE flashcard_review_next (
+    review_id INTEGER PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    card_id TEXT NOT NULL,
+    rating TEXT NOT NULL CHECK (rating IN ('again', 'hard', 'good', 'easy')),
+    previous_interval_days INTEGER NOT NULL CHECK (previous_interval_days >= 0 AND previous_interval_days <= 365),
+    next_due INTEGER NOT NULL,
+    reviewed_at INTEGER NOT NULL
+);
+
+INSERT INTO flashcard_review_next
+    (review_id, owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at)
+SELECT review_id, owner_id, card_id, rating, previous_interval_days, next_due, reviewed_at
+FROM flashcard_review;
+
+DROP TABLE flashcard_review;
+ALTER TABLE flashcard_review_next RENAME TO flashcard_review;
+CREATE INDEX IF NOT EXISTS flashcard_review_owner_card_idx
+    ON flashcard_review (owner_id, card_id, reviewed_at);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS flashcard_fts USING fts5(
+    front,
+    back,
+    content = 'flashcard',
+    content_rowid = 'rowid',
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER IF NOT EXISTS flashcard_fts_after_insert
+AFTER INSERT ON flashcard
+BEGIN
+    INSERT INTO flashcard_fts (rowid, front, back) VALUES (NEW.rowid, NEW.front, NEW.back);
+END;
+
+CREATE TRIGGER IF NOT EXISTS flashcard_fts_after_update
+AFTER UPDATE OF front, back ON flashcard
+BEGIN
+    INSERT INTO flashcard_fts (flashcard_fts, rowid, front, back)
+    VALUES ('delete', OLD.rowid, OLD.front, OLD.back);
+    INSERT INTO flashcard_fts (rowid, front, back) VALUES (NEW.rowid, NEW.front, NEW.back);
+END;
+
+CREATE TRIGGER IF NOT EXISTS flashcard_fts_after_delete
+AFTER DELETE ON flashcard
+BEGIN
+    INSERT INTO flashcard_fts (flashcard_fts, rowid, front, back)
+    VALUES ('delete', OLD.rowid, OLD.front, OLD.back);
+END;
+
+INSERT INTO flashcard_fts (flashcard_fts) VALUES ('rebuild');
+
+CREATE VIRTUAL TABLE IF NOT EXISTS media_bookmark_fts USING fts5(
+    label,
+    content = 'media_bookmark',
+    content_rowid = 'rowid',
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER IF NOT EXISTS media_bookmark_fts_after_insert
+AFTER INSERT ON media_bookmark
+BEGIN
+    INSERT INTO media_bookmark_fts (rowid, label) VALUES (NEW.rowid, NEW.label);
+END;
+
+CREATE TRIGGER IF NOT EXISTS media_bookmark_fts_after_update
+AFTER UPDATE OF label ON media_bookmark
+BEGIN
+    INSERT INTO media_bookmark_fts (media_bookmark_fts, rowid, label)
+    VALUES ('delete', OLD.rowid, OLD.label);
+    INSERT INTO media_bookmark_fts (rowid, label) VALUES (NEW.rowid, NEW.label);
+END;
+
+CREATE TRIGGER IF NOT EXISTS media_bookmark_fts_after_delete
+AFTER DELETE ON media_bookmark
+BEGIN
+    INSERT INTO media_bookmark_fts (media_bookmark_fts, rowid, label)
+    VALUES ('delete', OLD.rowid, OLD.label);
+END;
+
+INSERT INTO media_bookmark_fts (media_bookmark_fts) VALUES ('rebuild');
+
+CREATE VIRTUAL TABLE IF NOT EXISTS pdf_annotation_fts USING fts5(
+    quote,
+    content,
+    content = 'pdf_annotation',
+    content_rowid = 'rowid',
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+
+CREATE TRIGGER IF NOT EXISTS pdf_annotation_fts_after_insert
+AFTER INSERT ON pdf_annotation
+BEGIN
+    INSERT INTO pdf_annotation_fts (rowid, quote, content) VALUES (NEW.rowid, NEW.quote, NEW.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS pdf_annotation_fts_after_update
+AFTER UPDATE OF quote, content ON pdf_annotation
+BEGIN
+    INSERT INTO pdf_annotation_fts (pdf_annotation_fts, rowid, quote, content)
+    VALUES ('delete', OLD.rowid, OLD.quote, OLD.content);
+    INSERT INTO pdf_annotation_fts (rowid, quote, content) VALUES (NEW.rowid, NEW.quote, NEW.content);
+END;
+
+CREATE TRIGGER IF NOT EXISTS pdf_annotation_fts_after_delete
+AFTER DELETE ON pdf_annotation
+BEGIN
+    INSERT INTO pdf_annotation_fts (pdf_annotation_fts, rowid, quote, content)
+    VALUES ('delete', OLD.rowid, OLD.quote, OLD.content);
+END;
+
+INSERT INTO pdf_annotation_fts (pdf_annotation_fts) VALUES ('rebuild');
+";
+
 /// Migration chain applied by [`crate::db::Database`]; index `n` takes the database from
 /// version `n` to `n + 1`.
 pub(crate) const MIGRATIONS: &[&str] = &[
     V1, V2, V3, V4, V5, V6, V7, V8, V9, V10, V11, V12, V13, V14, V15, V16, V17, V18, V19, V20, V21,
+    V22,
 ];
 
 /// Schema version stored in `PRAGMA user_version` (0 when never migrated).

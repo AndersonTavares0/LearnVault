@@ -1,17 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
-import { Captions, Clapperboard, ExternalLink, Maximize, Minimize, Pause, PictureInPicture2, Play, Repeat, Rewind, FastForward, Settings, Volume2, VolumeX, Zap } from 'lucide-react';
+import { Captions, Clapperboard, ExternalLink, Keyboard, Maximize, Minimize, Pause, PictureInPicture2, Play, Repeat, Rewind, FastForward, Settings, Volume2, VolumeX, Zap } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { cn } from '@/lib/utils';
 import { Link } from 'react-router';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { tr } from '@/lib/i18n';
 import {
-	formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction, requiresTranscodingProbe,
+	formatDuration, mediaAvailability, mediaPlaybackKind, nextSpeed, PLAYBACK_SPEEDS, playerShortcutAction,
 	resumeTarget, seekPercentPosition, selectPlayableMedia, selectPlayableSubtitle, shouldSavePosition, srtConversionSupported, srtToWebVtt, stepVolume, subtitleFormat, subtitleLanguage, type PlaybackSpeed
 } from '@/lib/player';
 import { lessonPreferenceKey, updateLessonPreference, type PlayerPreferences } from '@/lib/player-preferences';
+import { decodeText } from '@/lib/text-lesson';
 import { transport, type FileEntry, type Lesson } from '@/lib/transport';
 
 export type PlayerHandle = { seek: (seconds: number) => void; pause: () => void; play: () => void };
@@ -28,7 +29,9 @@ type Props = {
 	onTime: (seconds: number) => void;
 	onOpenNotes: () => void;
 	/** Timestamp bookmarks drawn on the seek bar. */
-	markers?: { id: string; positionSeconds: number; label: string }[];
+	bookmarks?: { id: string; positionSeconds: number; label: string }[];
+	/** Note times in seconds, drawn as thin decorative ticks on the seek bar. */
+	markers?: number[];
 	/** Cinema mode: the page gives the picture the whole width. The button shows only when the page offers it. */
 	cinema?: boolean;
 	onCinema?: () => void;
@@ -37,25 +40,22 @@ type Props = {
 };
 
 const SAVE_INTERVAL_MS = 5000;
-// HTTP build only. The inline build constant lets the bundler drop the `fetch` from the
-// desktop bundle, which must never open the network (src/build-output.test.ts).
-const loadSrtAsVtt = __LEARNVAULT_TRANSPORT__ === 'http'
-	? async (url: string) => {
-		const response = await fetch(url);
-		if (!response.ok) throw new Error(tr('Failed to load subtitle.', 'Falha ao carregar legenda.'));
-		return URL.createObjectURL(new Blob([srtToWebVtt(await response.text())], { type: 'text/vtt' }));
-	}
-	: async (_url: string): Promise<string | null> => null;
+const SUBTITLE_SLICE_LIMIT = 512 * 1024;
+
+async function loadSrtAsVtt(subtitle: FileEntry, courseId: string): Promise<string> {
+	const { bytes } = await transport.readMediaSlice(subtitle, courseId, SUBTITLE_SLICE_LIMIT);
+	return URL.createObjectURL(new Blob([srtToWebVtt(decodeText(bytes))], { type: 'text/vtt' }));
+}
 
 /** Turns a subtitle file into something `<track>` can play, or explains why it cannot. */
 function useCaptions(subtitle: FileEntry | null, courseId: string) {
 	const url = subtitle ? transport.mediaUrl(subtitle, courseId) : null;
 	const format = subtitle ? subtitleFormat(subtitle.path) : null;
 	const converted = useQuery({
-		queryKey: ['captions', url],
-		enabled: Boolean(url) && format === 'srt' && srtConversionSupported,
+		queryKey: ['captions', courseId, subtitle?.mediaId ?? subtitle?.path ?? url],
+		enabled: Boolean(subtitle && url && format === 'srt' && srtConversionSupported),
 		staleTime: Infinity,
-		queryFn: () => loadSrtAsVtt(url!)
+		queryFn: () => loadSrtAsVtt(subtitle!, courseId)
 	});
 	if (!subtitle || !url) return { src: null, message: '', download: null };
 	if (format === 'vtt') return { src: url, message: '', download: url };
@@ -70,7 +70,7 @@ function useCaptions(subtitle: FileEntry | null, courseId: string) {
 	return { src: null, message, download: url };
 }
 
-export function MediaPlayer({ lesson, courseId, initialPosition, preferences, onPreferencesChange, onPosition, onEnded, onTime, onOpenNotes, markers = [], cinema = false, onCinema, handle }: Props) {
+export function MediaPlayer({ lesson, courseId, initialPosition, preferences, onPreferencesChange, onPosition, onEnded, onTime, onOpenNotes, bookmarks = [], markers = [], cinema = false, onCinema, handle }: Props) {
 	const lessonPreference = preferences.lessons[lessonPreferenceKey(courseId, lesson.path)] ?? {};
 	const available = (files: FileEntry[]) => files.filter((file) => file.availability?.trim().toLowerCase() !== 'missing');
 	const playable = selectPlayableMedia(lesson.media, lessonPreference.mediaId);
@@ -285,17 +285,19 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	const errorMessage = useMemo(() => {
 		if (serverBusy) return [tr('The server is busy right now.', 'O servidor está ocupado agora.'), tr('Too many streams are open or the server is under load. Wait a moment and try again; nothing is lost.', 'Há muitas reproduções abertas ou o servidor está sobrecarregado. Espere um momento e tente de novo; nada foi perdido.')];
 		if (errorCode === 4) {
-			const suggestSystemPlayer = capabilities.data?.systemPlayer === true && requiresTranscodingProbe(playable?.name ?? '');
+			const recovery = capabilities.data?.transcoding
+				? tr('Try compatibility mode.', 'Tente o modo de compatibilidade.')
+				: capabilities.data?.systemPlayer
+					? tr('Try opening the file in the system player.', 'Tente abrir o arquivo no reprodutor do sistema.')
+					: tr('Try opening the file in another player.', 'Tente abrir o arquivo em outro reprodutor.');
 			return [
-				tr('This media format or codec is not supported here.', 'Este formato ou codec de mídia não é suportado aqui.'),
-				suggestSystemPlayer
-					? tr('This kind of file usually needs on-demand transcoding or the system player.', 'Esse tipo de arquivo geralmente precisa de transcodificação sob demanda ou do player do sistema.')
-					: tr('Examples: HEVC/H.265 video or AC3 audio.', 'Exemplos: vídeo HEVC/H.265 ou áudio AC3.')
+				tr('This media format or codec is not supported here.', 'Este formato não pode ser reproduzido aqui.'),
+				recovery
 			];
 		}
-		if (errorCode === 3) return [tr('The media could not be decoded.', 'Não foi possível decodificar a mídia.'), tr('The file may be damaged or use a codec your hardware cannot decode.', 'O arquivo pode estar corrompido ou usar um codec que seu hardware não decodifica.')];
+		if (errorCode === 3) return [tr('The media could not be decoded.', 'Não foi possível reproduzir o arquivo.'), tr('The file may be damaged or use a codec your hardware cannot decode.', 'O arquivo pode estar danificado ou usar um formato incompatível com este dispositivo.')];
 		return [tr('Could not load this media.', 'Não foi possível carregar esta mídia.'), tr('The file may have moved or its drive may be disconnected. Reconnect it and use Refresh courses in My learning; your progress is kept.', 'O arquivo pode ter sido movido ou o disco desconectado. Reconecte e use Atualizar cursos em Meu aprendizado; seu progresso fica salvo.')];
-	}, [capabilities.data?.systemPlayer, errorCode, playable?.name, serverBusy]);
+	}, [capabilities.data?.systemPlayer, capabilities.data?.transcoding, errorCode, serverBusy]);
 
 	if (!activeSource) {
 		const missing = mediaAvailability(lesson.media) === 'missing';
@@ -365,7 +367,13 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 	} as const;
 
 	const onVideo = kind === 'video';
-	const hasChoices = available(lesson.media).length > 1 || available(lesson.subtitles).length > 0;
+	const hasChoices = available(lesson.media).length > 1;
+	const chooseSubtitle = (value: string) => {
+		const chosen = available(lesson.subtitles).find((file) => file.mediaId === value) ?? null;
+		const next = updateLessonPreference(preferences, courseId, lesson.path, { subtitleId: chosen?.mediaId ?? null });
+		// The language follows the chosen track, so another lesson prefers it too.
+		onPreferencesChange({ ...next, subtitleLanguage: chosen ? subtitleLanguage(chosen.name) ?? preferences.subtitleLanguage : preferences.subtitleLanguage });
+	};
 	// On the picture the bar is white on a dark fade; under audio it is an ordinary card.
 	const look = cn('size-11 rounded-full', onVideo && 'text-white hover:bg-white/20 hover:text-white aria-pressed:bg-white/25');
 	const loopText = !loop ? null : loop.b === null ? tr(`Loop from ${formatDuration(loop.a)}: set end`, `Laço de ${formatDuration(loop.a)}: marcar fim`) : tr(`Looping ${formatDuration(loop.a)}–${formatDuration(loop.b)}: clear`, `Repetindo ${formatDuration(loop.a)}–${formatDuration(loop.b)}: limpar`);
@@ -375,16 +383,20 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 		setCaptionsOn(!captionsOn);
 	};
 	const span = Math.max(1, Math.floor(total));
-	const timelineMarkers = markers.filter((marker) => marker.positionSeconds > 0 && marker.positionSeconds < span);
+	const timelineMarkers = bookmarks.filter((marker) => marker.positionSeconds > 0 && marker.positionSeconds < span);
+	const noteTicks = markers.filter((at) => at > 0 && at < span);
 	// Re-encoding is the fallback: it is offered only after on-demand transcoding failed.
 	const showReencode = Boolean(transcode && !transcode.reencode);
 	const bar = (
 		<div className={cn('space-y-1', onVideo ? 'relative bg-black px-3 pt-1 pb-2 text-white sm:absolute sm:inset-x-0 sm:bottom-0 sm:z-10 sm:bg-transparent sm:bg-linear-to-t sm:from-black/85 sm:via-black/55 sm:to-transparent sm:pt-12 sm:transition-opacity' : 'rounded-[1.5rem] border bg-card p-3', onVideo && (playing ? 'sm:opacity-0 sm:group-hover/player:opacity-100 sm:group-focus-within/player:opacity-100 sm:[@media(hover:none)]:opacity-100' : ''))}>
-			<div className="relative">
+			<div className="relative py-1 sm:py-0">
 				<input type="range" aria-label={tr('Seek', 'Posição')} min={0} max={span} step={1} value={Math.min(Math.floor(now), span)} aria-valuetext={`${formatDuration(now)} / ${formatDuration(total)}`}
-					onChange={(event) => seek(Number(event.target.value))} className="block h-5 w-full cursor-pointer accent-[var(--reward-fill)]" />
+					onChange={(event) => seek(Number(event.target.value))} className="block h-8 w-full cursor-pointer accent-[var(--reward-fill)] sm:h-5" />
+				{noteTicks.map((at) => (
+					<span key={at} aria-hidden="true" className="pointer-events-none absolute top-1/2 h-3 w-0.5 -translate-x-px -translate-y-1/2 rounded-full bg-current opacity-80" style={{ left: `${(at / span) * 100}%` }} />
+				))}
 				{timelineMarkers.length > 0 && (
-					<div className="pointer-events-none absolute inset-x-0 top-0 flex h-5 items-center">
+					<div className="pointer-events-none absolute inset-x-0 top-1 flex h-8 items-center sm:top-0 sm:h-5">
 						{timelineMarkers.map((marker) => (
 							<button key={marker.id} type="button" onClick={() => seek(marker.positionSeconds)} style={{ left: `${(marker.positionSeconds / span) * 100}%` }}
 								className="pointer-events-auto absolute size-3 -translate-x-1/2 rounded-full border border-black/40 bg-[var(--reward-fill)] hover:scale-125 focus-visible:ring-2 focus-visible:ring-ring"
@@ -395,27 +407,50 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 			</div>
 			<div role="toolbar" aria-label={tr('Player controls', 'Controles do player')} className="flex flex-wrap items-center gap-x-0.5">
 				<Button variant="ghost" size="icon" className={look} onClick={togglePlay} aria-label={playing ? tr('Pause', 'Pausar') : tr('Play', 'Reproduzir')} aria-keyshortcuts="k Space">{playing ? <Pause /> : <Play />}</Button>
-				<Button variant="ghost" size="icon" className={look} onClick={() => seek(absoluteTime() - 10)} aria-keyshortcuts="ArrowLeft j"><Rewind /><span className="sr-only">{tr('Back 10s', 'Voltar 10s')}</span></Button>
-				<Button variant="ghost" size="icon" className={look} onClick={() => seek(absoluteTime() + 10)} aria-keyshortcuts="ArrowRight l"><FastForward /><span className="sr-only">{tr('Forward 10s', 'Avançar 10s')}</span></Button>
+				<Button variant="ghost" size="icon" className={cn(look, 'hidden sm:inline-flex')} onClick={() => seek(absoluteTime() - 10)} aria-keyshortcuts="ArrowLeft j"><Rewind /><span className="sr-only">{tr('Back 10s', 'Voltar 10s')}</span></Button>
+				<Button variant="ghost" size="icon" className={cn(look, 'hidden sm:inline-flex')} onClick={() => seek(absoluteTime() + 10)} aria-keyshortcuts="ArrowRight l"><FastForward /><span className="sr-only">{tr('Forward 10s', 'Avançar 10s')}</span></Button>
 				<Button variant="ghost" size="icon" className={look} aria-pressed={muted} onClick={() => { if (media.current) media.current.muted = !media.current.muted; }} aria-label={muted ? tr('Unmute', 'Ativar o som') : tr('Mute', 'Silenciar')} aria-keyshortcuts="m">{muted || volume === 0 ? <VolumeX /> : <Volume2 />}</Button>
 				<input type="range" aria-label={tr('Volume', 'Volume')} min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={(event) => { const element = media.current; if (!element) return; element.volume = Number(event.target.value); element.muted = false; }} className="hidden h-5 w-20 cursor-pointer accent-[var(--reward-fill)] sm:block" />
-				<span className="mx-2 text-sm tabular-nums"><span className="sr-only">{tr('Time', 'Tempo')}: </span>{formatDuration(now)} <span className={onVideo ? 'text-white/70' : 'text-muted-foreground'}>/ {formatDuration(total)}</span></span>
+				<span className="mx-0.5 text-xs tabular-nums max-[374px]:hidden sm:mx-2 sm:text-sm"><span className="sr-only">{tr('Time', 'Tempo')}: </span>{formatDuration(now)} <span className={onVideo ? 'text-white/70' : 'text-muted-foreground'}>/ {formatDuration(total)}</span></span>
 				<div className="ml-auto flex flex-wrap items-center justify-end">
 					{captions.src && <Button variant="ghost" size="icon" className={look} aria-pressed={captionsOn} onClick={toggleCaptions} aria-label={tr('Subtitles', 'Legendas')}><Captions /></Button>}
 					{loopText && (
 						<Button variant="ghost" size="sm" className={cn(look, 'h-11 w-auto px-3 text-xs')} aria-pressed onClick={cycleLoop}><Repeat />{loopText}</Button>
 					)}
 					<Label htmlFor="player-speed" className="sr-only">{tr('Speed', 'Velocidade')}</Label>
-					<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={cn('h-11 w-16 cursor-pointer appearance-none rounded-full bg-transparent px-2 text-center text-sm font-medium', onVideo ? 'text-white hover:bg-white/20 [&>option]:bg-card [&>option]:text-foreground' : 'hover:bg-muted')} aria-keyshortcuts="[ ]">
+					<select id="player-speed" value={speed} onChange={(event) => changeSpeed(Number(event.target.value) as PlaybackSpeed)} className={cn('h-11 w-14 cursor-pointer appearance-none rounded-full bg-transparent px-1 text-center text-sm font-medium sm:w-16 sm:px-2', onVideo ? 'text-white hover:bg-white/20 [&>option]:bg-card [&>option]:text-foreground' : 'hover:bg-muted')} aria-keyshortcuts="[ ]">
 						{PLAYBACK_SPEEDS.map((value) => <option key={value} value={value}>{value}×</option>)}
 					</select>
 					<DropdownMenu>
 						<DropdownMenuTrigger render={<Button variant="ghost" size="icon" className={look} aria-label={tr('Player settings', 'Configurações do player')} />}><Settings /></DropdownMenuTrigger>
 						<DropdownMenuContent align="end" side="top" container={stage} className="w-64">
 							<DropdownMenuItem onClick={cycleLoop}><Repeat />{loop ? tr('Loop: next step', 'Laço: próximo passo') : tr('Loop a section', 'Repetir um trecho')}</DropdownMenuItem>
+							{available(lesson.subtitles).length > 0 && (
+								<DropdownMenuSub>
+									<DropdownMenuSubTrigger><Captions />{tr('Subtitles', 'Legendas')}</DropdownMenuSubTrigger>
+									<DropdownMenuSubContent container={stage} className="w-64">
+										<DropdownMenuRadioGroup value={lessonPreference.subtitleId === null ? '' : subtitle?.mediaId ?? ''} onValueChange={chooseSubtitle}>
+											<DropdownMenuRadioItem value="">{tr('Off', 'Desligadas')}</DropdownMenuRadioItem>
+											{available(lesson.subtitles).map((file) => <DropdownMenuRadioItem key={file.mediaId} value={file.mediaId ?? ''}>{file.name}</DropdownMenuRadioItem>)}
+										</DropdownMenuRadioGroup>
+									</DropdownMenuSubContent>
+								</DropdownMenuSub>
+							)}
 							{onVideo && supportsPip && <DropdownMenuItem onClick={togglePip}><PictureInPicture2 />{pip ? tr('Close picture-in-picture', 'Fechar picture-in-picture') : tr('Picture-in-picture', 'Picture-in-picture')}</DropdownMenuItem>}
-							{capabilities.data?.transcoding && <DropdownMenuItem onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}><Zap />{transcode ? tr('Stop transcoding', 'Parar a transcodificação') : tr('Play with transcoding', 'Reproduzir com transcodificação')}</DropdownMenuItem>}
-							{capabilities.data?.systemPlayer && <DropdownMenuItem onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no player do sistema')}</DropdownMenuItem>}
+							{capabilities.data?.transcoding && <DropdownMenuItem onClick={() => (transcode ? setTranscode(null) : startTranscode(false))}><Zap />{transcode ? tr('Stop transcoding', 'Sair do modo de compatibilidade') : tr('Play with transcoding', 'Usar modo de compatibilidade')}</DropdownMenuItem>}
+							{capabilities.data?.systemPlayer && <DropdownMenuItem onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no reprodutor do sistema')}</DropdownMenuItem>}
+							<DropdownMenuSub>
+								<DropdownMenuSubTrigger><Keyboard />{tr('Keyboard shortcuts', 'Atalhos de teclado')}</DropdownMenuSubTrigger>
+								<DropdownMenuSubContent container={stage} className="w-64 p-2 text-xs">
+									<dl className="space-y-1.5 px-1.5 py-1">
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Play / Pause', 'Reproduzir / Pausar')}</dt><dd className="font-mono font-semibold">{tr('Space / K', 'Espaço / K')}</dd></div>
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Seek 10s', 'Avançar / Voltar 10s')}</dt><dd className="font-mono font-semibold">J / L</dd></div>
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Playback speed', 'Velocidade')}</dt><dd className="font-mono font-semibold">[ / ]</dd></div>
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Add note', 'Nova nota')}</dt><dd className="font-mono font-semibold">N</dd></div>
+										<div className="flex items-center justify-between gap-3"><dt className="text-muted-foreground">{tr('Mute / Fullscreen', 'Silenciar / Tela cheia')}</dt><dd className="font-mono font-semibold">M / F</dd></div>
+									</dl>
+								</DropdownMenuSubContent>
+							</DropdownMenuSub>
 						</DropdownMenuContent>
 					</DropdownMenu>
 					{onVideo && onCinema && <Button variant="ghost" size="icon" className={cn(look, 'hidden lg:inline-flex')} aria-pressed={cinema} onClick={onCinema} aria-label={tr('Cinema mode', 'Modo cinema')} aria-keyshortcuts="t"><Clapperboard /></Button>}
@@ -434,16 +469,16 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 					<p className="text-sm text-muted-foreground">{errorMessage[1]}</p>
 					<div className="flex flex-wrap gap-2">
 						{(serverBusy || errorCode !== 4) && <Button variant="outline" onClick={retry}>{tr('Try again', 'Tentar de novo')}</Button>}
-						{capabilities.data?.transcoding && <Button onClick={() => startTranscode(false)}><Zap />{tr('Play with on-demand transcoding', 'Reproduzir com transcodificação sob demanda')}</Button>}
-						{capabilities.data?.transcoding && showReencode && <Button variant="outline" onClick={() => startTranscode(true)}>{tr('Re-encode video (H.264)', 'Recodificar vídeo (H.264)')}</Button>}
-						{capabilities.data?.systemPlayer && <Button variant="outline" onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no player do sistema')}</Button>}
+						{capabilities.data?.transcoding && <Button onClick={() => startTranscode(false)}><Zap />{tr('Play with on-demand transcoding', 'Usar modo de compatibilidade')}</Button>}
+						{capabilities.data?.transcoding && showReencode && <Button variant="outline" onClick={() => startTranscode(true)}>{tr('Re-encode video (H.264)', 'Tentar em outro formato')}</Button>}
+						{capabilities.data?.systemPlayer && <Button variant="outline" onClick={openSystemPlayer}><ExternalLink />{tr('Open in system player', 'Abrir no reprodutor do sistema')}</Button>}
 						<Link to="/" className={buttonVariants({ variant: 'ghost' })}>{tr('Go to My learning', 'Ir para Meu aprendizado')}</Link>
 					</div>
 				</div>
 			) : (
 				// The group takes focus so single-key shortcuts only act on the player (WCAG 2.1.4).
 				// eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex, jsx-a11y/no-noninteractive-element-interactions
-				<div ref={setContainer} role="group" tabIndex={0} onKeyDown={onKeyDown} data-player aria-label={tr('Media player', 'Player de mídia')} aria-describedby="player-shortcuts" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0 1 2 3 4 5 6 7 8 9" className="relative group/player overflow-hidden rounded-xl bg-black focus-visible:ring-3 focus-visible:ring-ring">
+				<div ref={setContainer} role="group" tabIndex={0} onKeyDown={onKeyDown} data-player aria-label={tr('Media player', 'Player de mídia')} aria-describedby="player-shortcuts" aria-keyshortcuts="Space ArrowLeft ArrowRight ArrowUp ArrowDown k j l [ ] f p m n 0 1 2 3 4 5 6 7 8 9" className="relative group/player overflow-hidden bg-black max-sm:rounded-none sm:rounded-xl focus-visible:ring-3 focus-visible:ring-ring">
 					{/* Captions come from the course's own subtitle files; many lessons have none (WCAG 1.2.2 depends on the content). */}
 					{kind === 'audio' ? (
 						// eslint-disable-next-line jsx-a11y/media-has-caption
@@ -468,20 +503,6 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 						<Label htmlFor="player-media" className="ml-2">{tr('Video', 'Vídeo')}</Label>
 						<select id="player-media" value={mediaId ?? ''} onChange={(event) => onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, { mediaId: event.target.value }))} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
 							{available(lesson.media).map((file) => <option key={file.mediaId} value={file.mediaId}>{file.name}</option>)}
-						</select>
-					</>
-				)}
-				{available(lesson.subtitles).length > 0 && (
-					<>
-						<Label htmlFor="player-subtitles" className="ml-2">{tr('Subtitles', 'Legendas')}</Label>
-						<select id="player-subtitles" value={lessonPreference.subtitleId === null ? '' : subtitle?.mediaId ?? ''} onChange={(event) => {
-							const chosen = available(lesson.subtitles).find((file) => file.mediaId === event.target.value) ?? null;
-							const next = updateLessonPreference(preferences, courseId, lesson.path, { subtitleId: chosen?.mediaId ?? null });
-							// The language follows the chosen track, so another lesson prefers it too.
-							onPreferencesChange({ ...next, subtitleLanguage: chosen ? subtitleLanguage(chosen.name) ?? preferences.subtitleLanguage : preferences.subtitleLanguage });
-						}} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
-							<option value="">{tr('Off', 'Desligadas')}</option>
-							{available(lesson.subtitles).map((file) => <option key={file.mediaId} value={file.mediaId}>{file.name}</option>)}
 						</select>
 					</>
 				)}

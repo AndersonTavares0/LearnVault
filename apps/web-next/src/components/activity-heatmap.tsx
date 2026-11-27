@@ -1,3 +1,4 @@
+import { ChevronDown } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { formatCount } from '@/lib/catalog';
 import { getLocale, tr } from '@/lib/i18n';
@@ -110,7 +111,7 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 	return (
 		<section aria-labelledby="heatmap-heading" className="space-y-3">
 			<div className="flex flex-wrap items-baseline justify-between gap-2">
-				<h2 id="heatmap-heading" className="text-base font-medium">{tr('Study days', 'Dias de estudo')}</h2>
+				<h2 id="heatmap-heading" className="text-[15px] font-semibold">{tr('Study days', 'Dias de estudo')}</h2>
 				<p className="text-sm text-muted-foreground">{summary}</p>
 			</div>
 			<div ref={containerRef} className="relative flex gap-2">
@@ -151,7 +152,7 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 										}}
 										className={cn(
 											'size-3 rounded-[3px] transition-[transform,box-shadow] duration-100 hover:ring-2 hover:ring-foreground/60 sm:size-auto sm:aspect-square',
-											level > 0 ? 'bg-primary' : 'bg-muted ring-1 ring-inset ring-border/60'
+											level > 0 ? 'bg-primary' : 'border border-border/80 bg-panel/80'
 										)}
 									/>
 								);
@@ -165,41 +166,44 @@ export function ActivityHeatmap({ today, activeDays, activity }: { today: string
 					</div>
 				)}
 			</div>
-			<div aria-hidden="true" className="flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
-				<span>{tr('Less', 'Menos')}</span>
-				<span className="size-3 rounded-[3px] bg-muted ring-1 ring-inset ring-border/60" />
-				{([1, 2, 3, 4] as const).map((level) => (
-					<span key={level} data-level={level} style={levelStyle(level)} className="size-3 rounded-[3px] bg-primary" />
-				))}
-				<span>{tr('More', 'Mais')}</span>
+			<div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+				<details className="group min-w-0 flex-1" onToggle={(event) => setShowDetails(event.currentTarget.open)}>
+					<summary className="inline-flex min-h-11 w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-2 text-sm font-medium text-foreground transition-colors hover:bg-panel/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground [&::-webkit-details-marker]:hidden">
+						<ChevronDown className="size-4 shrink-0 text-muted-foreground transition-transform duration-150 group-open:rotate-180" aria-hidden="true" />
+						{tr('View daily study activity', 'Ver atividade diária de estudo')}
+					</summary>
+					{showDetails && (
+						<table className="mt-2 w-full text-left text-sm text-foreground">
+							<caption className="sr-only">{tr('Daily study activity', 'Atividade diária de estudo')}</caption>
+							<thead>
+								<tr className="border-b border-[var(--study-rule)]">
+									<th scope="col" className="px-2 py-1.5">{tr('Date', 'Data')}</th>
+									<th scope="col" className="px-2 py-1.5">{tr('Activity', 'Atividade')}</th>
+								</tr>
+							</thead>
+							<tbody>
+								{days.filter((day) => day <= today).reverse().map((day) => {
+									const info = activity?.[day];
+									return (
+										<tr key={day} className="border-b border-[var(--study-rule)]">
+											<th scope="row" className="px-2 py-1.5 font-normal">{formatDay(day)}</th>
+											<td className="px-2 py-1.5">{describeActivity(dayLevel(active.has(day), info), info)}</td>
+										</tr>
+									);
+								})}
+							</tbody>
+						</table>
+					)}
+				</details>
+				<div aria-hidden="true" className="flex items-center gap-1.5 text-xs text-muted-foreground">
+					<span>{tr('Less', 'Menos')}</span>
+					<span className="size-3 rounded-[3px] border border-border/80 bg-panel/80" />
+					{([1, 2, 3, 4] as const).map((level) => (
+						<span key={level} data-level={level} style={levelStyle(level)} className="size-3 rounded-[3px] bg-primary" />
+					))}
+					<span>{tr('More', 'Mais')}</span>
+				</div>
 			</div>
-			<details onToggle={(event) => setShowDetails(event.currentTarget.open)}>
-				<summary className="w-fit min-h-11 cursor-pointer rounded-md px-2 py-3 text-sm font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground">
-					{tr('View daily study activity', 'Ver atividade diária de estudo')}
-				</summary>
-				{showDetails && (
-					<table className="w-full text-left text-sm text-foreground">
-						<caption className="sr-only">{tr('Daily study activity', 'Atividade diária de estudo')}</caption>
-						<thead>
-							<tr className="border-b">
-								<th scope="col" className="px-2 py-1.5">{tr('Date', 'Data')}</th>
-								<th scope="col" className="px-2 py-1.5">{tr('Activity', 'Atividade')}</th>
-							</tr>
-						</thead>
-						<tbody>
-							{days.filter((day) => day <= today).reverse().map((day) => {
-								const info = activity?.[day];
-								return (
-									<tr key={day} className="border-b">
-										<th scope="row" className="px-2 py-1.5 font-normal">{formatDay(day)}</th>
-										<td className="px-2 py-1.5">{describeActivity(dayLevel(active.has(day), info), info)}</td>
-									</tr>
-								);
-							})}
-						</tbody>
-					</table>
-				)}
-			</details>
 		</section>
 	);
 }

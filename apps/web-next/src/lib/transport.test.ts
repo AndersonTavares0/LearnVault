@@ -3,7 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { setLocale } from './i18n';
 import type { NewPdfAnnotation } from './transport';
 import { findLesson } from './router';
-import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeSearchResults, normalizeSourceListing, normalizeSourceRoots, normalizeSourceRootsResult, normalizeSourceScan, normalizeStudyProgress, normalizeStudySummary, normalizeSyncResult, normalizeSyncState, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, validSyncServerUrl, type Transport } from './transport';
+import { desktopCoverUrl, desktopMediaUrl, DesktopStub, FocusSessionConflict, HttpTransport, InvalidFocusSession, lessonFromNode, MAX_COVER_BYTES, normalizeBookmark, normalizeCatalog, normalizeFocusSession, normalizeFocusSummary, normalizeRecentStudy, normalizeRewardSummary, normalizeStudyState, normalizeSearchResults, normalizeSourceListing, normalizeSourceRoots, normalizeSourceRootsResult, normalizeSourceScan, normalizeStudyProgress, normalizeStudySummary, normalizeSyncResult, normalizeSyncState, normalizeUpdateStatus, normalizeUser, STUDY_NOT_AVAILABLE, CATALOG_LIMITS, validSyncServerUrl, type Transport } from './transport';
 
 // Tauri is only loaded on the desktop: outside it the module is replaced by the mock, so
 // the suite never touches `window.__TAURI_INTERNALS__`.
@@ -15,8 +15,8 @@ beforeEach(() => {
 
 describe('transport contract', () => {
 	it('exposes the HTTP transport seam without routing assumptions', () => {
-		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studySummary', 'listNotes', 'search', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'syncState', 'syncConfigure', 'syncSignIn', 'syncSignOut', 'syncNow', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'downloadUpdate', 'restartToUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
-		expect(methods).toHaveLength(59);
+		const methods: (keyof Transport)[] = ['me', 'login', 'logout', 'catalog', 'importCourse', 'importCoursePath', 'removeCourse', 'rescan', 'updateCredentials', 'studyProgress', 'recordPosition', 'setCompleted', 'recentStudy', 'studyState', 'studySummary', 'listNotes', 'search', 'createNote', 'updateNote', 'deleteNote', 'listBookmarks', 'createBookmark', 'deleteBookmark', 'listPdfAnnotations', 'createPdfAnnotation', 'updatePdfAnnotation', 'deletePdfAnnotation', 'listFlashcards', 'createFlashcard', 'updateFlashcard', 'deleteFlashcard', 'reviewFlashcard', 'listFavorites', 'setCourseFavorite', 'setLessonFavorite', 'recordFocusSession', 'listFocusSessions', 'focusSummary', 'rewardSummary', 'claimDailyMission', 'setWeeklyGoal', 'syncState', 'syncConfigure', 'syncSignIn', 'syncSignOut', 'syncNow', 'userAvatarUrl', 'uploadUserAvatar', 'deleteUserAvatar', 'checkUpdate', 'downloadUpdate', 'restartToUpdate', 'updateHistory', 'mediaUrl', 'coverUrl', 'importCourseCover', 'removeCourseCover', 'mediaCapabilities', 'transcodeUrl', 'openInSystemPlayer'];
+		expect(methods).toHaveLength(60);
 	});
 	it('does not advertise the system player over HTTP', async () => {
 		const fetchMock = vi.fn().mockResolvedValue(Response.json({ transcoding: true, systemPlayer: true }));
@@ -490,6 +490,12 @@ describe('transport contract', () => {
 		expect(recent.items).toHaveLength(1);
 		expect(recent.items[0].mediaId).toBe('m1');
 	});
+	it('normalizes a study state page and rejects a malformed cursor', () => {
+		const item = { media_id: 'm1', position_seconds: 10, completed: true, recorded: true };
+		expect(normalizeStudyState({ items: [item], next_cursor: '5.m1' })).toMatchObject({ nextCursor: '5.m1', items: [{ mediaId: 'm1' }] });
+		expect(normalizeStudyState({ items: [item] }).nextCursor).toBeNull();
+		expect(() => normalizeStudyState({ items: [item], next_cursor: 7 })).toThrow();
+	});
 	it('normalizes a study summary with a seven-day week', () => {
 		const days = ['2026-10-19', '2026-10-20', '2026-10-21', '2026-10-22', '2026-10-23', '2026-10-24', '2026-10-25'].map((day, index) => ({ day, active: index < 3 }));
 		const summary = normalizeStudySummary({ current_streak: 3, longest_streak: 9, today: '2026-10-21', today_active: true, at_risk: false, week_active_days: 3, completed_lessons: 12, days });
@@ -572,6 +578,17 @@ describe('transport contract', () => {
 		const recent = await new HttpTransport().recentStudy(5);
 		expect(fetchMock).toHaveBeenCalledWith('/api/study/recent?limit=5');
 		expect(recent.items[0].mediaId).toBe('m1');
+		vi.unstubAllGlobals();
+	});
+	it('pages the complete study state over HTTP with an opaque cursor', async () => {
+		const body = JSON.stringify({ items: [{ media_id: 'm1', position_seconds: 7, completed: true, recorded: true }], next_cursor: '9.m1' });
+		const fetchMock = vi.fn().mockImplementation(async () => new Response(body, { status: 200 }));
+		vi.stubGlobal('fetch', fetchMock);
+		const page = await new HttpTransport().studyState('3.m0', 500);
+		expect(fetchMock).toHaveBeenCalledWith('/api/study/state?limit=500&cursor=3.m0');
+		expect(page).toMatchObject({ nextCursor: '9.m1', items: [{ mediaId: 'm1', completed: true }] });
+		await new HttpTransport().studyState();
+		expect(fetchMock).toHaveBeenLastCalledWith('/api/study/state');
 		vi.unstubAllGlobals();
 	});
 	it('reports study endpoints as unavailable when the server returns 404', async () => {
@@ -893,6 +910,15 @@ describe('desktop transport over IPC', () => {
 		vi.mocked(invoke).mockResolvedValue({ items: [] });
 		await expect(new DesktopStub().recentStudy()).resolves.toEqual({ items: [] });
 		expect(invoke).toHaveBeenLastCalledWith('desktop_recent_study', {});
+	});
+
+	it('pages the complete study state through the desktop IPC command', async () => {
+		vi.mocked(invoke).mockResolvedValue({ items: [{ media_id: 'm1', position_seconds: 7, completed: false, updated_at: 9, recorded: true }], next_cursor: '9.m1' });
+		await expect(new DesktopStub().studyState('3.m0', 500)).resolves.toMatchObject({ nextCursor: '9.m1', items: [{ mediaId: 'm1' }] });
+		expect(invoke).toHaveBeenCalledWith('desktop_study_state', { limit: 500, cursor: '3.m0' });
+		vi.mocked(invoke).mockResolvedValue({ items: [], next_cursor: null });
+		await new DesktopStub().studyState();
+		expect(invoke).toHaveBeenLastCalledWith('desktop_study_state', {});
 	});
 
 	it('persists playback preferences through the desktop IPC using percentages', async () => {

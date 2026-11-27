@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path, { resolve } from 'node:path';
 
 const root = resolve(import.meta.dirname, '..');
@@ -266,17 +267,38 @@ test('Containerfile copies every repository file referenced by relative imports 
         'Every relative import or compile-time include escaping apps/web-next/ or crates/ must be copied into the corresponding Containerfile stage'
     );
 
-    const preFixContainerfile = containerfileSource
-        .split(/\r?\n/)
-        .filter((line) => !line.includes('docs/design/branding'))
-        .join('\n');
-    const regressions = auditContainerfileBuildInputs({
-        containerfileSource: preFixContainerfile,
-        rootDir: root
-    });
+    const fixtureRoot = mkdtempSync(path.join(tmpdir(), 'lv-container-audit-'));
+    try {
+        mkdirSync(path.join(fixtureRoot, 'apps/web-next/src/pages/settings'), { recursive: true });
+        mkdirSync(path.join(fixtureRoot, 'crates/core/src'), { recursive: true });
+        mkdirSync(path.join(fixtureRoot, 'crates/server/src'), { recursive: true });
+        writeFileSync(
+            path.join(fixtureRoot, 'apps/web-next/src/pages/settings/about.tsx'),
+            [
+                "import lightSeal from '../../../../../docs/design/branding/learnvault-seal.svg';",
+                "import darkSeal from '../../../../../docs/design/branding/learnvault-seal-dark.svg';"
+            ].join('\n')
+        );
 
-    assert.equal(regressions.length, 2, 'Removing COPY docs/design/branding must flag both light and dark seal imports');
-    assert.match(regressions[0], /apps\/web-next\/src\/pages\/settings\/about\.tsx/);
-    assert.match(regressions[0], /docs\/design\/branding\/learnvault-seal\.svg/);
-    assert.match(regressions[1], /docs\/design\/branding\/learnvault-seal-dark\.svg/);
+        assert.deepEqual(
+            auditContainerfileBuildInputs({ containerfileSource, rootDir: fixtureRoot }),
+            []
+        );
+
+        const preFixContainerfile = containerfileSource
+            .split(/\r?\n/)
+            .filter((line) => !line.includes('docs/design/branding'))
+            .join('\n');
+        const regressions = auditContainerfileBuildInputs({
+            containerfileSource: preFixContainerfile,
+            rootDir: fixtureRoot
+        });
+
+        assert.equal(regressions.length, 2, 'Removing COPY docs/design/branding must flag both light and dark seal imports');
+        assert.match(regressions[0], /apps\/web-next\/src\/pages\/settings\/about\.tsx/);
+        assert.match(regressions[0], /docs\/design\/branding\/learnvault-seal\.svg/);
+        assert.match(regressions[1], /docs\/design\/branding\/learnvault-seal-dark\.svg/);
+    } finally {
+        rmSync(fixtureRoot, { recursive: true, force: true });
+    }
 });

@@ -14,7 +14,7 @@ export function PasswordField({ id, label, labelClassName, className, ...props }
 			<Label htmlFor={id} className={labelClassName}>{label}</Label>
 			<div className="relative">
 				<Input id={id} name={id} type={visible ? 'text' : 'password'} className={cn('pr-12', className)} {...props} />
-				<Button type="button" variant="ghost" size="icon" className="absolute top-0 right-0" aria-label={visible ? tr('Hide password', 'Ocultar senha') : tr('Show password', 'Mostrar senha')} aria-pressed={visible} onClick={() => setVisible((value) => !value)}>
+				<Button type="button" variant="ghost" size="icon" className="absolute top-0 right-0 text-muted-foreground hover:bg-transparent hover:text-foreground" aria-label={visible ? tr('Hide password', 'Ocultar senha') : tr('Show password', 'Mostrar senha')} aria-pressed={visible} onClick={() => setVisible((value) => !value)}>
 					{visible ? <EyeOff /> : <Eye />}
 				</Button>
 			</div>

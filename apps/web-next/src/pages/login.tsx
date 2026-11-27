@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router';
 import { CircleAlert } from 'lucide-react';
-import { BrandMark, Motto } from '@/components/brand';
+import { Motto } from '@/components/brand';
 import { PasswordField } from '@/components/password-field';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,13 +42,10 @@ export function LoginPage() {
 	return (
 		<main id="main" className="grid min-h-dvh place-items-center bg-background px-4 py-10">
 			<div className="flex w-full max-w-sm flex-col gap-6">
-				<div className="rounded-[2rem] border bg-card p-7 shadow-sm sm:p-9">
-					<div className="mb-7 flex flex-col items-center gap-2 text-center">
-						<BrandMark className="size-12 text-foreground" />
-						<span className="font-heading text-2xl font-semibold tracking-tight">LearnVault</span>
-					</div>
+				<div className="study-surface p-7 shadow-xs sm:p-9">
+					<p className="mb-7 text-center font-heading text-2xl font-semibold tracking-tight">LearnVault</p>
 					<form onSubmit={submit} className="space-y-5">
-						<h1 className="text-center text-2xl font-bold">{tr('Sign in', 'Entrar')}</h1>
+						<h1 className="text-center font-heading text-2xl font-semibold">{tr('Sign in', 'Entrar')}</h1>
 						{error && (
 							<p id="login-error" role="alert" className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
 								<CircleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
@@ -65,8 +62,8 @@ export function LoginPage() {
 						</Button>
 					</form>
 				</div>
-				<Motto name="sapereAude" className="text-center" />
-				<Button variant="ghost" className="mx-auto" onClick={() => setLocale(otherLocale)} aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)}>
+				<Motto name="sapereAude" className="text-center text-foreground/75" />
+				<Button variant="outline" size="sm" className="mx-auto" onClick={() => setLocale(otherLocale)} aria-label={tr(`Switch language to ${LOCALE_LABELS[otherLocale]}`, `Mudar idioma para ${LOCALE_LABELS[otherLocale]}`)}>
 					{LOCALE_LABELS[otherLocale]}
 				</Button>
 			</div>

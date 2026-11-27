@@ -27,12 +27,12 @@ describe('refreshLibrary', () => {
 		const outcome = await refreshLibrary(transport, (message) => progress.push(message));
 		expect(calls).toEqual(['rescan', 'scan:a', 'scan:b']);
 		expect(progress).toEqual(['Reading “Cursos”…', 'Reading “Outros”…']);
-		expect(outcome).toEqual({ sources: 2, failed: [] });
+		expect(outcome).toEqual({ sources: 2, failed: [], discovered: [] });
 	});
 
 	it('is not a failure when only remote sources exist', async () => {
 		const { transport, calls } = fake([source('a', 'Cursos')], { rescan: async () => { throw noCourses(); } });
-		expect(await refreshLibrary(transport)).toEqual({ sources: 1, failed: [] });
+		expect(await refreshLibrary(transport)).toEqual({ sources: 1, failed: [], discovered: [] });
 		expect(calls).toEqual(['rescan', 'scan:a']);
 	});
 
@@ -51,7 +51,7 @@ describe('refreshLibrary', () => {
 		const { transport, calls } = fake([source('a', 'Cursos'), source('b', 'Outros')], { scanSource: async (id) => { if (id === 'a') throw new Error('The server could not be reached.'); } });
 		const outcome = await refreshLibrary(transport);
 		expect(calls).toEqual(['rescan', 'scan:a', 'scan:b']);
-		expect(outcome).toEqual({ sources: 2, failed: [{ name: 'Cursos', message: 'The server could not be reached.' }] });
+		expect(outcome).toEqual({ sources: 2, failed: [{ name: 'Cursos', message: 'The server could not be reached.' }], discovered: [] });
 	});
 
 	it('skips a source whose stored password cannot be read', async () => {
@@ -62,7 +62,7 @@ describe('refreshLibrary', () => {
 
 	it('works without a source list (desktop, or an account that cannot list sources)', async () => {
 		const { transport, calls } = fake(undefined);
-		expect(await refreshLibrary(transport)).toEqual({ sources: 0, failed: [] });
+		expect(await refreshLibrary(transport)).toEqual({ sources: 0, failed: [], discovered: [] });
 		expect(calls).toEqual(['rescan']);
 		const denied = { ...fake([source('a', 'x')]).transport, listSources: vi.fn(async () => { throw new Error('credentials_change_required'); }) };
 		expect((await refreshLibrary(denied)).sources).toBe(0);

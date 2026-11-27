@@ -361,3 +361,99 @@ fn lesson_search_finds_video_beyond_higher_ranked_markdown() -> TestResult {
     assert_eq!(results.lessons[0].media_id, "lesson");
     Ok(())
 }
+
+#[test]
+fn removed_media_notes_are_excluded_from_search_and_global_list() -> TestResult {
+    let db = database()?;
+    insert_media(&db, "kept", "Course/01 - Kept.mp4")?;
+    insert_media(&db, "gone", "Course/02 - Gone.mp4")?;
+
+    create_study_note(&db, "teacher", "kept", 5, "unique token keptnote")?;
+    create_study_note(&db, "teacher", "gone", 5, "unique token gonenote")?;
+    db.connection().execute(
+        "INSERT INTO media_removal (library_id, media_id, removed_at)
+         VALUES (?1, 'gone', 1760000010)",
+        [LIB],
+    )?;
+
+    let found = search(&db, "teacher", false, "unique", 20)?;
+    assert_eq!(found.notes.len(), 1);
+    assert_eq!(found.notes[0].media_id, "kept");
+
+    let all = learnvault_core::list_all_study_notes(&db, "teacher")?;
+    assert_eq!(all.len(), 1);
+    assert_eq!(all[0].media_id, "kept");
+    Ok(())
+}
+
+#[test]
+fn study_notes_count_characters_not_bytes_near_limit() -> TestResult {
+    let db = database()?;
+    insert_media(&db, "kept", "Course/01 - Kept.mp4")?;
+    let multibyte = "á".repeat(9000);
+    assert!(multibyte.len() > 10_000);
+    let note = create_study_note(&db, "teacher", "kept", 0, &multibyte)?;
+    assert_eq!(note.content.chars().count(), 9000);
+    Ok(())
+}
+
+#[test]
+fn flashcards_bookmarks_and_pdf_annotations_are_indexed_with_owner_isolation() -> TestResult {
+    let db = database()?;
+    insert_media(&db, "vid", "Course/01 - Ownership.mp4")?;
+    insert_media(&db, "doc", "Course/02 - Handbook.pdf")?;
+
+    learnvault_core::create_flashcard(
+        &db,
+        "owner-a",
+        "vid",
+        "What is borrow splitting?",
+        "Disjoint struct fields can be borrowed mutably",
+        Some(42),
+    )?;
+    learnvault_core::create_flashcard(
+        &db,
+        "owner-b",
+        "vid",
+        "Private splitting",
+        "Secret answer",
+        None,
+    )?;
+    learnvault_core::create_media_bookmark(&db, "owner-a", "vid", 90, "Splitting borrows demo")?;
+    learnvault_core::create_pdf_annotation(
+        &db,
+        "owner-a",
+        "doc",
+        learnvault_core::NewPdfAnnotation {
+            page: 7,
+            kind: learnvault_core::PdfAnnotationKind::Note,
+            color: learnvault_core::PdfAnnotationColor::Yellow,
+            rects: vec![learnvault_core::PdfRect {
+                x: 0.1,
+                y: 0.2,
+                width: 0.3,
+                height: 0.1,
+            }],
+            quote: "Splitting borrows across fields".to_owned(),
+            content: "Key rule on page 7".to_owned(),
+        },
+    )?;
+
+    let found = search(&db, "owner-a", false, "splitting", 20)?;
+    assert_eq!(found.flashcards.len(), 1);
+    assert_eq!(found.flashcards[0].position_seconds, Some(42));
+    assert_eq!(found.bookmarks.len(), 2);
+    assert!(
+        found
+            .bookmarks
+            .iter()
+            .any(|b| b.kind == "bookmark" && b.position_seconds == 90)
+    );
+    assert!(
+        found
+            .bookmarks
+            .iter()
+            .any(|b| b.kind == "pdf" && b.position_seconds == 7)
+    );
+    Ok(())
+}

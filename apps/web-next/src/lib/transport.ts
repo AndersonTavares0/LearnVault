@@ -40,6 +40,8 @@ export type StudyProgress = { mediaId: string; positionSeconds: number; complete
 /** Per-user playback preferences. Speeds arrive as percentages of normal speed. */
 export type PlaybackPreferences = { videoSpeed: number; audioSpeed: number; subtitleLanguage: string };
 export type RecentStudy = { items: StudyProgress[] };
+/** One page of the complete study state; `nextCursor` is opaque and `null` on the last page. */
+export type StudyStatePage = { items: StudyProgress[]; nextCursor: string | null };
 export type StudyDay = { day: string; active: boolean };
 export type StudySummary = {
 	currentStreak: number;
@@ -117,7 +119,11 @@ export type SearchNoteResult = {
 };
 export type SearchCourseResult = { courseId: string; title: string };
 export type SearchLessonResult = { courseId: string; courseTitle: string; mediaId: string; path: string; title: string };
-export type SearchResults = { notes: SearchNoteResult[]; courses: SearchCourseResult[]; lessons: SearchLessonResult[] };
+export type SearchFlashcardResult = { cardId: string; mediaId: string; courseId: string; courseTitle: string; lessonPath: string; lessonTitle: string; positionSeconds: number | null; snippet: string };
+export type SearchBookmarkResult = { bookmarkId: string; kind: 'bookmark' | 'pdf'; mediaId: string; courseId: string; courseTitle: string; lessonPath: string; lessonTitle: string; positionSeconds: number; snippet: string };
+export type SearchResults = { notes: SearchNoteResult[]; courses: SearchCourseResult[]; lessons: SearchLessonResult[]; flashcards?: SearchFlashcardResult[]; bookmarks?: SearchBookmarkResult[] };
+export type DiscoveredCourse = { id: string; title: string; folder: string };
+export type RescanResult = { discovered: DiscoveredCourse[] };
 export type PdfAnnotationKind = 'highlight' | 'underline' | 'note';
 export type PdfAnnotationColor = 'yellow' | 'green' | 'blue' | 'pink';
 /** A rectangle on a page, as fractions of its width and height, origin at the top left. */
@@ -156,7 +162,7 @@ export type MediaBookmark = {
 	label: string;
 	createdAt: number;
 };
-export type ReviewRating = 'again' | 'good';
+export type ReviewRating = 'again' | 'hard' | 'good' | 'easy';
 /** One row of a card's append-only review log. */
 export type FlashcardReview = {
 	reviewId: number;
@@ -237,11 +243,11 @@ export interface Transport {
 	catalog(): Promise<Catalog>;
 	// Desktop: triggers the native picker and registers the chosen folder as a course.
 	importCourse(): Promise<void>;
-	// Server: registers a course by the path the admin gives.
-	importCoursePath(path: string): Promise<void>;
+	// Server: registers a course by the path the admin gives, or a relative folder under --library-root.
+	importCoursePath(path: string, folder?: string): Promise<void>;
 	// Removes a course from the registry, without touching the files.
 	removeCourse(courseId: string): Promise<void>;
-	rescan(): Promise<void>;
+	rescan(): Promise<RescanResult | void>;
 	/** State of the automatic indexing job; the desktop returns `idle`. */
 	indexingStatus(): Promise<IndexingSnapshot>;
 	/** Requests cancellation of the running job; `false` when there was no active job. */
@@ -267,6 +273,8 @@ export interface Transport {
 	getPlaybackPreferences?(): Promise<PlaybackPreferences>;
 	savePlaybackPreferences?(preferences: PlaybackPreferences): Promise<PlaybackPreferences>;
 	recentStudy(limit?: number): Promise<RecentStudy>;
+	/** The whole authorized study state, newest first, one page per call (recentStudy stops at 100). */
+	studyState(cursor?: string | null, limit?: number): Promise<StudyStatePage>;
 	studySummary(): Promise<StudySummary>;
 	listNotes(mediaId?: string): Promise<StudyNote[]>;
 	/** Global search: the owner's notes plus shared course and lesson titles. */
@@ -317,6 +325,7 @@ export interface Transport {
 	updateHistory(): Promise<UpdateHistoryEntry[]>;
 	mediaCapabilities(): Promise<MediaCapabilities>;
 	mediaUrl(file: FileEntry, courseId?: string): string | null;
+	readMediaSlice(file: FileEntry, courseId?: string, maxBytes?: number): Promise<{ bytes: Uint8Array; total: number }>;
 	transcodeUrl(file: FileEntry, courseId?: string, startSeconds?: number, reencode?: boolean): string | null;
 	openInSystemPlayer?(file: FileEntry): Promise<boolean>;
 	// URL of the custom cover, derived from the version the catalog exposes. Without a version (no
@@ -651,6 +660,12 @@ export function normalizeRecentStudy(value: unknown): RecentStudy {
 	return { items: (value as { items: unknown[] }).items.map(normalizeStudyProgress) };
 }
 
+export function normalizeStudyState(value: unknown): StudyStatePage {
+	const next = (value as { next_cursor?: unknown } | null)?.next_cursor;
+	if (next !== undefined && next !== null && typeof next !== 'string') throw invalidPayload('invalid study state.', 'estado de estudo inválido.');
+	return { items: normalizeRecentStudy(value).items, nextCursor: next ?? null };
+}
+
 export function normalizePlaybackPreferences(value: unknown): PlaybackPreferences {
 	if (!value || typeof value !== 'object') throw invalidPayload('missing playback preferences.', 'preferências de reprodução ausentes.');
 	const preferences = value as { video_speed?: unknown; audio_speed?: unknown; subtitle_language?: unknown };
@@ -946,6 +961,34 @@ export function normalizeSearchResults(value: unknown): SearchResults {
 				path: searchString(lesson.path, 'path'),
 				title: searchString(lesson.title, 'title')
 			};
+		}),
+		flashcards: list('flashcards').map((raw) => {
+			const card = record(raw, 'flashcards');
+			const pos = card.position_seconds;
+			return {
+				cardId: searchString(card.card_id, 'card_id'),
+				mediaId: searchString(card.media_id, 'media_id'),
+				courseId: searchString(card.course_id, 'course_id'),
+				courseTitle: searchString(card.course_title, 'course_title'),
+				lessonPath: searchString(card.lesson_path, 'lesson_path'),
+				lessonTitle: searchString(card.lesson_title, 'lesson_title'),
+				positionSeconds: typeof pos === 'number' && Number.isSafeInteger(pos) && pos >= 0 ? pos : null,
+				snippet: searchString(card.snippet, 'snippet')
+			};
+		}),
+		bookmarks: list('bookmarks').map((raw) => {
+			const mark = record(raw, 'bookmarks');
+			return {
+				bookmarkId: searchString(mark.bookmark_id, 'bookmark_id'),
+				kind: mark.kind === 'pdf' ? 'pdf' : 'bookmark',
+				mediaId: searchString(mark.media_id, 'media_id'),
+				courseId: searchString(mark.course_id, 'course_id'),
+				courseTitle: searchString(mark.course_title, 'course_title'),
+				lessonPath: searchString(mark.lesson_path, 'lesson_path'),
+				lessonTitle: searchString(mark.lesson_title, 'lesson_title'),
+				positionSeconds: searchInteger(mark.position_seconds, 'position_seconds'),
+				snippet: searchString(mark.snippet, 'snippet')
+			};
 		})
 	};
 }
@@ -1008,11 +1051,15 @@ export function normalizeFlashcardReviews(raw: unknown): FlashcardReviews {
 	const items = Array.isArray(obj.items)
 		? obj.items.map((item) => {
 				const review = item && typeof item === 'object' && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
-				const rating = review.rating === 'again' ? 'again' : 'good';
+				const rawRating = review.rating;
+				const rating: ReviewRating =
+					rawRating === 'again' || rawRating === 'hard' || rawRating === 'good' || rawRating === 'easy'
+						? rawRating
+						: 'good';
 				return {
 					reviewId: Number(review.review_id ?? review.reviewId ?? 0),
 					cardId: String(review.card_id ?? review.cardId ?? ''),
-					rating: rating as ReviewRating,
+					rating,
 					previousIntervalDays: Number(review.previous_interval_days ?? review.previousIntervalDays ?? 0),
 					nextDue: Number(review.next_due ?? review.nextDue ?? 0),
 					reviewedAt: Number(review.reviewed_at ?? review.reviewedAt ?? 0)
@@ -1172,8 +1219,9 @@ export class HttpTransport implements Transport {
 	}
 	async logout() { await fetch('/api/logout', { method: 'POST' }); }
 	importCourse() { return Promise.reject(new Error(tr('The desktop application selects folders on disk; on the server provide the course path.', 'O desktop é quem escolhe pastas no disco; no servidor informe o caminho do curso.'))); }
-	async importCoursePath(path: string) {
-		const response = await fetch('/api/admin/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path }) });
+	async importCoursePath(path: string, folder?: string) {
+		const payload = folder ? { folder } : { path };
+		const response = await fetch('/api/admin/courses', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
 		if (!response.ok) throw new Error(await importErrorMessage(response));
 	}
 	async removeCourse(courseId: string) {
@@ -1181,9 +1229,22 @@ export class HttpTransport implements Transport {
 		if (!response.ok) throw new Error(response.status === 403 ? credentialsChangeMessage() : tr('Could not remove course.', 'Não foi possível remover o curso.'));
 	}
 	async catalog() { const response = await fetch('/api/catalog'); if (!response.ok) throw new Error(response.status === 403 ? credentialsChangeMessage() : tr('Could not load catalog.', 'Não foi possível carregar o catálogo.')); return normalizeCatalog(await response.json()); }
-	async rescan() {
+	async rescan(): Promise<RescanResult> {
 		const response = await fetch('/api/admin/catalog/rescan', { method: 'POST' });
-		if (response.ok) return;
+		if (response.ok) {
+			const data = await response.json().catch(() => null) as { discovered?: unknown } | null;
+			const discovered = Array.isArray(data?.discovered)
+				? data.discovered
+					.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === 'object'))
+					.map((item) => ({
+						id: typeof item.id === 'string' ? item.id : '',
+						title: typeof item.title === 'string' ? item.title : '',
+						folder: typeof item.folder === 'string' ? item.folder : ''
+					}))
+					.filter((item) => item.id && item.folder)
+				: [];
+			return { discovered };
+		}
 		const error = new Error(response.status === 403 ? credentialsChangeMessage() : response.status === 409 ? tr('A rescan is already in progress.', 'Já existe um rescan em andamento.') : response.status === 400 ? tr('No courses imported yet.', 'Nenhum curso foi importado ainda.') : tr('Could not index courses.', 'Não foi possível indexar os cursos.'));
 		// These two have names of their own, so callers never match translated text.
 		if (response.status === 400) error.name = 'NoCoursesError';
@@ -1314,6 +1375,14 @@ export class HttpTransport implements Transport {
 	}
 	async recordPosition(mediaId: string, positionSeconds: number) { const response = await fetch('/api/study/position', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, position_seconds: positionSeconds }) }); if (!response.ok) throw new Error(response.status === 403 ? credentialsChangeMessage() : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : response.status === 422 ? tr('Invalid position.', 'Posição inválida.') : tr('Could not save progress.', 'Não foi possível salvar o progresso.')); return normalizeStudyProgress(await response.json()); }
 	async setCompleted(mediaId: string, completed: boolean) { const response = await fetch('/api/study/completed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media_id: mediaId, completed }) }); if (!response.ok) throw new Error(response.status === 403 ? credentialsChangeMessage() : response.status === 404 ? tr('Media not found.', 'Mídia não encontrada.') : tr('Could not update completion.', 'Não foi possível atualizar a conclusão.')); return normalizeStudyProgress(await response.json()); }
+	async studyState(cursor?: string | null, limit?: number) {
+		const query = new URLSearchParams();
+		if (limit !== undefined) query.set('limit', String(limit));
+		if (cursor) query.set('cursor', cursor);
+		const response = await fetch(`/api/study/state${query.size ? `?${query}` : ''}`);
+		if (!response.ok) throw response.status === 404 ? Object.assign(new Error(tr('Study not available on this server.', 'Estudo não disponível neste servidor.')), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? credentialsChangeMessage() : tr('Could not load history.', 'Não foi possível carregar o histórico.'));
+		return normalizeStudyState(await response.json());
+	}
 	async recentStudy(limit?: number) { const url = limit === undefined ? '/api/study/recent' : `/api/study/recent?limit=${limit}`; const response = await fetch(url); if (!response.ok) throw response.status === 404 ? Object.assign(new Error(tr('Study not available on this server.', 'Estudo não disponível neste servidor.')), { code: STUDY_NOT_AVAILABLE }) : new Error(response.status === 403 ? credentialsChangeMessage() : tr('Could not load history.', 'Não foi possível carregar o histórico.')); return normalizeRecentStudy(await response.json()); }
 	async studySummary() { const response = await fetch('/api/study/summary'); if (!response.ok) throw new Error(response.status === 403 ? credentialsChangeMessage() : tr('Could not load your evolution.', 'Não foi possível carregar sua evolução.')); return normalizeStudySummary(await response.json()); }
 	async listNotes(mediaId?: string) {
@@ -1554,6 +1623,15 @@ export class HttpTransport implements Transport {
 		}
 	}
 	mediaUrl(file: FileEntry, courseId?: string) { return `/api/media?course=${encodeURIComponent(courseId ?? '')}&path=${encodeURIComponent(file.path)}`; }
+	async readMediaSlice(file: FileEntry, courseId?: string, maxBytes?: number) {
+		const url = this.mediaUrl(file, courseId);
+		const response = await fetch(url, maxBytes ? { headers: { Range: `bytes=0-${maxBytes - 1}` } } : undefined);
+		if (!response.ok) throw new Error(tr('Could not load file.', 'Não foi possível carregar o arquivo.'));
+		const bytes = new Uint8Array(await response.arrayBuffer());
+		const range = response.headers.get('content-range');
+		const parsedTotal = range ? Number(range.split('/')[1]) : NaN;
+		return { bytes, total: Number.isFinite(parsedTotal) ? parsedTotal : bytes.length };
+	}
 	transcodeUrl(file: FileEntry, courseId?: string, startSeconds: number = 0, reencode: boolean = false) {
 		const params = new URLSearchParams({
 			course: courseId ?? '',
@@ -1680,6 +1758,7 @@ export class DesktopStub implements Transport {
 	async setCompleted(mediaId: string, completed: boolean) { try { return normalizeStudyProgress(await invoke<unknown>('desktop_set_completed', { mediaId, completed })); } catch (cause) { throw desktopError(cause, tr('Could not update completion status.', 'Não foi possível atualizar a conclusão.')); } }
 	// Without a limit given, the command uses the contract's default; that is why the argument is
 	// omitted instead of being sent as `undefined`.
+	async studyState(cursor?: string | null, limit?: number) { try { return normalizeStudyState(await invoke<unknown>('desktop_study_state', { ...(limit === undefined ? {} : { limit }), ...(cursor ? { cursor } : {}) })); } catch (cause) { throw desktopError(cause, tr('Could not load study history.', 'Não foi possível carregar o histórico de estudo.')); } }
 	async recentStudy(limit?: number) { try { return normalizeRecentStudy(await invoke<unknown>('desktop_recent_study', limit === undefined ? {} : { limit })); } catch (cause) { throw desktopError(cause, tr('Could not load study history.', 'Não foi possível carregar o histórico de estudo.')); } }
 	async studySummary() { try { return normalizeStudySummary(await invoke<unknown>('desktop_study_summary')); } catch (cause) { throw desktopError(cause, tr('Could not load your progress summary.', 'Não foi possível carregar sua evolução.')); } }
 	// Preferences live in the local database and enter the sync queue; the
@@ -1962,6 +2041,22 @@ export class DesktopStub implements Transport {
 	mediaUrl(file: FileEntry, _courseId?: string) {
 		if (!file.mediaId || !['media', 'subtitle', 'material'].includes(file.kind ?? '')) return null;
 		return desktopMediaUrl(file.mediaId, navigator.userAgent);
+	}
+	async readMediaSlice(file: FileEntry, _courseId?: string, maxBytes: number = 512 * 1024) {
+		if (!file.mediaId) throw new Error(tr('Media unavailable.', 'Mídia indisponível.'));
+		try {
+			const res = await invoke<{ bytes?: unknown; total?: unknown }>('desktop_read_media_slice', {
+				mediaId: file.mediaId,
+				start: 0,
+				length: maxBytes
+			});
+			const list = Array.isArray(res?.bytes) ? res.bytes : [];
+			const bytes = Uint8Array.from(list, (value) => Number(value) & 0xff);
+			const total = typeof res?.total === 'number' ? res.total : bytes.length;
+			return { bytes, total };
+		} catch (cause) {
+			throw desktopError(cause, tr('Could not load file.', 'Não foi possível carregar o arquivo.'));
+		}
 	}
 	transcodeUrl(_file: FileEntry, _courseId?: string, _startSeconds: number = 0, _reencode: boolean = false) {
 		return null;

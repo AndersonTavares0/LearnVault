@@ -59,6 +59,8 @@ fn card_created(card_id: &str, front: &str, back: &str, created_at: i64) -> Sync
         front: front.to_owned(),
         back: back.to_owned(),
         created_at,
+        interval_days: None,
+        next_due: None,
     }
 }
 
@@ -1044,5 +1046,28 @@ fn a_future_client_clock_is_clamped_to_the_server_time() -> TestResult {
         |row| row.get(0),
     )?;
     assert_eq!(position, 77);
+    Ok(())
+}
+
+#[test]
+fn flashcard_backfill_preserves_srs_interval_and_due_date() -> TestResult {
+    let source = database();
+    let card = learnvault_core::create_flashcard(&source, OWNER, "m1", "Q", "A", None)?;
+    let reviewed = learnvault_core::review_flashcard(
+        &source,
+        OWNER,
+        &card.card_id,
+        learnvault_core::ReviewRating::Good,
+    )?;
+    assert!(reviewed.interval_days >= 1);
+
+    let batch = pull_operations(&source, OWNER, "desktop-client", 0, 50)?;
+    let replica = database();
+    apply_operations(&replica, OWNER, &batch.items, batch.cursor)?;
+
+    let synced = learnvault_core::list_flashcards(&replica, OWNER, "m1")?;
+    assert_eq!(synced.len(), 1);
+    assert_eq!(synced[0].interval_days, reviewed.interval_days);
+    assert_eq!(synced[0].next_due, reviewed.next_due);
     Ok(())
 }

@@ -170,6 +170,9 @@ async fn study_requires_authentication() {
         Request::get("/api/study/recent")
             .body(Body::empty())
             .unwrap(),
+        Request::get("/api/study/state")
+            .body(Body::empty())
+            .unwrap(),
         Request::get("/api/study/progress?media_id=m1")
             .body(Body::empty())
             .unwrap(),
@@ -827,7 +830,11 @@ async fn current_database_carries_study_tables_and_constraints() {
         .connection()
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .unwrap();
-    assert_eq!(version, 21, "o formato persistido está na versão 21");
+    assert_eq!(
+        version,
+        learnvault_core::CURRENT_SCHEMA_VERSION as i64,
+        "persisted format matches CURRENT_SCHEMA_VERSION"
+    );
     let present: i64 = db
         .connection()
         .query_row(
@@ -1466,6 +1473,7 @@ async fn revoked_course_access_blocks_course_linked_study_reads_and_writes() {
 
     for (uri, key) in [
         ("/api/study/recent?limit=999", "items"),
+        ("/api/study/state", "items"),
         ("/api/study/notes", "items"),
         ("/api/study/favorites", "course_ids"),
     ] {
@@ -1561,4 +1569,76 @@ async fn playback_preferences_round_trip_per_owner_and_reject_invalid_values() {
         .await
         .unwrap();
     assert_eq!(invalid.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn state_pages_past_the_recent_ceiling_and_rejects_a_bad_cursor() {
+    let temp = tempfile::tempdir().unwrap();
+    let ids: Vec<String> = (0..101).map(|n| format!("m{n:03}")).collect();
+    let refs: Vec<&str> = ids.iter().map(String::as_str).collect();
+    let states: Vec<_> = refs
+        .iter()
+        .enumerate()
+        .map(|(n, id)| {
+            (
+                ADMIN_ID,
+                *id,
+                5,
+                n % 2 == 0,
+                1_000 + i64::try_from(n).unwrap(),
+            )
+        })
+        .collect();
+    seed(&temp, &refs, &states);
+    let app = build_router(AppState::initialize(config(&temp)).await.unwrap());
+    let cookie = login(&app, ADMIN, ADMIN_PASSWORD).await;
+
+    let recent = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/recent?limit=500", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(
+        json_body(recent).await["items"].as_array().unwrap().len(),
+        100
+    );
+
+    let first = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/state?limit=100", &cookie))
+        .await
+        .unwrap();
+    assert_private_no_store(&first);
+    let first = json_body(first).await;
+    assert_eq!(first["items"].as_array().unwrap().len(), 100);
+    let cursor = first["next_cursor"].as_str().unwrap().to_owned();
+
+    let second = app
+        .clone()
+        .oneshot(get_with_cookie(
+            &format!("/api/study/state?limit=100&cursor={cursor}"),
+            &cookie,
+        ))
+        .await
+        .unwrap();
+    let second = json_body(second).await;
+    assert_eq!(second["items"].as_array().unwrap().len(), 1);
+    assert_eq!(second["items"][0]["media_id"], "m000");
+    assert!(second["next_cursor"].is_null());
+
+    let all = app
+        .clone()
+        .oneshot(get_with_cookie("/api/study/state", &cookie))
+        .await
+        .unwrap();
+    assert_eq!(json_body(all).await["items"].as_array().unwrap().len(), 101);
+
+    for uri in ["/api/study/state?cursor=nope", "/api/study/state?limit=abc"] {
+        let response = app
+            .clone()
+            .oneshot(get_with_cookie(uri, &cookie))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{uri}");
+    }
 }

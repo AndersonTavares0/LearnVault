@@ -311,37 +311,58 @@ async fn remote_media(
         }
     };
     let body = match client {
-        RemoteClient::WebDav(dav) => {
-            let upstream = match dav.open_range(&reference.relative_path, start, end).await {
-                Ok(upstream) => upstream,
-                Err(learnvault_core::SourceError::NotFound) => {
-                    return error_private_no_store(StatusCode::NOT_FOUND);
+        RemoteClient::WebDav(dav) => match permit {
+            Some(permit) => {
+                let upstream = match dav
+                    .open_range(&reference.relative_path, start, end, !partial)
+                    .await
+                {
+                    Ok(upstream) => upstream,
+                    Err(learnvault_core::SourceError::NotFound) => {
+                        return error_private_no_store(StatusCode::NOT_FOUND);
+                    }
+                    Err(learnvault_core::SourceError::Denied) => {
+                        return remote_media_error(StatusCode::BAD_GATEWAY, "source_denied");
+                    }
+                    Err(_) => {
+                        return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable");
+                    }
+                };
+                if upstream
+                    .content_length()
+                    .is_some_and(|upstream_length| upstream_length != length)
+                {
+                    return remote_media_error(StatusCode::BAD_GATEWAY, "source_range_mismatch");
                 }
-                Err(learnvault_core::SourceError::Denied) => {
-                    return remote_media_error(StatusCode::BAD_GATEWAY, "source_denied");
-                }
-                Err(_) => {
-                    return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable");
-                }
-            };
-            if upstream
-                .content_length()
-                .is_some_and(|upstream_length| upstream_length != length)
-            {
-                return remote_media_error(StatusCode::BAD_GATEWAY, "source_range_mismatch");
-            }
-            match permit {
-                Some(permit) => Body::from_stream(upstream.bytes_stream().map(move |chunk| {
+                Body::from_stream(upstream.bytes_stream().map(move |chunk| {
                     // The permit lives while the body is consumed and is released at the end.
                     let _ = &permit;
                     chunk.map_err(std::io::Error::other)
-                })),
-                None => Body::empty(),
+                }))
             }
-        }
+            None => {
+                match dav.head_file(&reference.relative_path).await {
+                    Ok(()) => {}
+                    Err(learnvault_core::SourceError::NotFound) => {
+                        return error_private_no_store(StatusCode::NOT_FOUND);
+                    }
+                    Err(learnvault_core::SourceError::Denied) => {
+                        return remote_media_error(StatusCode::BAD_GATEWAY, "source_denied");
+                    }
+                    Err(_) => {
+                        return remote_media_error(StatusCode::BAD_GATEWAY, "source_unavailable");
+                    }
+                }
+                Body::empty()
+            }
+        },
         RemoteClient::Smb(smb) => {
             let upstream = match smb
-                .open_stream(&reference.relative_path, start, length)
+                .open_stream(
+                    &reference.relative_path,
+                    start,
+                    if permit.is_some() { length } else { 0 },
+                )
                 .await
             {
                 Ok(upstream) => upstream,

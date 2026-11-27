@@ -65,11 +65,10 @@ describe('player media and subtitles', () => {
 		expect(formatDuration(3661)).toBe('1:01:01');
 		expect(formatDuration(-1)).toBe('0:00');
 	});
-	it('advertises study sync on both transports and keeps SRT conversion on HTTP', () => {
-		// Os dois transportes implementam Study: o HTTP pelas rotas e o desktop pelos
-		// IPC commands. On-demand SRT conversion still depends on `fetch`.
+	it('advertises study sync and SRT conversion on both transports', () => {
+		// Both transports implement study sync and offline/HTTP SRT conversion.
 		expect(studySyncSupported).toBe(true);
-		expect(srtConversionSupported).toBe(__LEARNVAULT_TRANSPORT__ === 'http');
+		expect(srtConversionSupported).toBe(true);
 	});
 	it('only syncs study when the transport delivers a media source', () => {
 		// HTTP: the source accompanies the media, so the player syncs as before.
