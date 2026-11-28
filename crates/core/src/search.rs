@@ -10,8 +10,16 @@
 //! query, so operators like `NEAR`, `*` or `-` are searched literally. The query is bound
 //! as a SQL parameter, never interpolated.
 
+use std::collections::{HashMap, hash_map::Entry};
+
+use rusqlite::OptionalExtension;
+
+use crate::catalog::{
+    Availability, CatalogNode, NodeRole, build_catalog_below, shape_course_catalog,
+};
 use crate::db::Database;
 use crate::error::Result;
+use crate::scanner::{MediaKind, classify};
 
 /// Shortest accepted query in Unicode scalar values. Shorter queries return no results.
 pub const MIN_SEARCH_QUERY_CHARS: usize = 2;
@@ -57,8 +65,10 @@ pub struct SearchLessonHit {
     pub media_id: String,
     /// Course that owns the media.
     pub course_id: String,
-    /// Relative path inside the course.
+    /// Relative path of the matched file inside the course.
     pub relative_path: String,
+    /// Catalog path when the reader opens a folder rather than the matched file.
+    pub lesson_path: Option<String>,
 }
 
 /// A flashcard matched by the query.
@@ -217,6 +227,7 @@ pub fn search(
              LIMIT ?4 OFFSET ?5",
             access_predicate = access_predicate("m.library_id"),
         ))?;
+        let mut text_lessons = HashMap::new();
         'pages: for offset in (0..MAX_LESSON_CANDIDATES).step_by(LESSON_CANDIDATE_PAGE_SIZE) {
             let page_size = LESSON_CANDIDATE_PAGE_SIZE.min(MAX_LESSON_CANDIDATES - offset);
             let rows = statement.query_map(
@@ -233,6 +244,7 @@ pub fn search(
                             media_id: row.get(0)?,
                             course_id: row.get(1)?,
                             relative_path: row.get(2)?,
+                            lesson_path: None,
                         },
                         row.get::<_, i64>(3)?,
                     ))
@@ -241,7 +253,7 @@ pub fn search(
             let mut candidates = 0;
             for row in rows {
                 candidates += 1;
-                let (hit, raw_size) = row?;
+                let (mut hit, raw_size) = row?;
                 let Ok(size) = u64::try_from(raw_size) else {
                     continue;
                 };
@@ -250,11 +262,25 @@ pub fn search(
                     .rsplit('/')
                     .next()
                     .unwrap_or(&hit.relative_path);
-                if crate::scanner::classify(file_name, size) == crate::scanner::MediaKind::Media {
-                    lessons.push(hit);
-                    if lessons.len() == limit {
-                        break 'pages;
+                if classify(file_name, size) != MediaKind::Media {
+                    if !is_text_file(file_name) || hit.relative_path.split('/').count() < 3 {
+                        continue;
                     }
+                    // Only build the same catalog the reader uses for courses with a text match.
+                    let paths = match text_lessons.entry(hit.course_id.clone()) {
+                        Entry::Occupied(entry) => entry.into_mut(),
+                        Entry::Vacant(entry) => {
+                            entry.insert(text_lesson_paths(db, &hit.course_id)?)
+                        }
+                    };
+                    let Some(path) = paths.get(&hit.media_id) else {
+                        continue;
+                    };
+                    hit.lesson_path = Some(path.clone());
+                }
+                lessons.push(hit);
+                if lessons.len() == limit {
+                    break 'pages;
                 }
             }
             if candidates < page_size {
@@ -399,6 +425,55 @@ pub fn search(
         flashcards,
         bookmarks,
     })
+}
+
+fn is_text_file(name: &str) -> bool {
+    name.rsplit_once('.').is_some_and(|(_, extension)| {
+        ["txt", "md", "markdown"]
+            .iter()
+            .any(|candidate| extension.eq_ignore_ascii_case(candidate))
+    })
+}
+
+fn text_lesson_paths(db: &Database, course_id: &str) -> Result<HashMap<String, String>> {
+    let prefix: Option<String> = db
+        .connection()
+        .query_row(
+            "SELECT prefix FROM library_root WHERE library_id = ?1",
+            [course_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+    let skip = prefix
+        .as_deref()
+        .map_or(0, |prefix| prefix.split('/').count());
+    let (nodes, _) = shape_course_catalog(build_catalog_below(db, course_id, skip)?);
+    let mut paths = HashMap::new();
+    collect_text_lesson_paths(nodes, &mut paths);
+    Ok(paths)
+}
+
+fn collect_text_lesson_paths(nodes: Vec<CatalogNode>, paths: &mut HashMap<String, String>) {
+    for node in nodes {
+        let files = node.files.iter().chain(&node.loose_files);
+        // Match the reader's choice: a video or a readable PDF takes precedence over text.
+        if node.role == NodeRole::Lesson
+            && !files.clone().any(|file| {
+                file.kind == MediaKind::Media
+                    || (file.availability == Availability::Available
+                        && file
+                            .name
+                            .rsplit_once('.')
+                            .is_some_and(|(_, ext)| ext.eq_ignore_ascii_case("pdf")))
+            })
+            && let Some(text) = files
+                .filter(|file| file.availability == Availability::Available)
+                .find(|file| is_text_file(&file.name))
+        {
+            paths.insert(text.media_id.clone(), node.path);
+        }
+        collect_text_lesson_paths(node.children, paths);
+    }
 }
 
 /// SQL predicate that keeps only rows the caller may open.

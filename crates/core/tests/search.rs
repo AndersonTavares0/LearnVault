@@ -305,6 +305,66 @@ fn lesson_search_excludes_markdown_and_keeps_video() -> TestResult {
 }
 
 #[test]
+fn lesson_search_returns_readable_text_lessons_at_their_catalog_path() -> TestResult {
+    let mut db = database()?;
+    insert_media(&db, "text", "Module/01 - Reading/01 - Ownership.md")?;
+    insert_media(&db, "extra", "Module/01 - Reading/02 - Ownership.md")?;
+    insert_media(&db, "loose", "Module/Ownership.md")?;
+    insert_media(&db, "mixed", "Module/02 - Video/Ownership.md")?;
+    insert_media(&db, "video", "Module/02 - Video/Lesson.mp4")?;
+    insert_media(&db, "pdf-text", "Module/03 - PDF/Ownership.md")?;
+    insert_media(&db, "pdf", "Module/03 - PDF/Handout.pdf")?;
+
+    let results = search(&db, "teacher", false, "ownership", 20)?;
+    assert_eq!(results.lessons.len(), 1);
+    assert_eq!(results.lessons[0].media_id, "text");
+    assert_eq!(
+        results.lessons[0].lesson_path.as_deref(),
+        Some("Module/01 - Reading")
+    );
+
+    insert_user(&db, "restricted")?;
+    set_user_course_access(&mut db, "restricted", Some(&[]))?;
+    assert!(
+        search(&db, "restricted", false, "ownership", 20)?
+            .lessons
+            .is_empty()
+    );
+    set_user_course_access(&mut db, "restricted", Some(&[LIB.to_owned()]))?;
+    assert_eq!(
+        search(&db, "restricted", false, "ownership", 20)?
+            .lessons
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn text_lesson_search_uses_the_catalog_path_below_a_remote_course_root() -> TestResult {
+    let db = database()?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('source', 1)",
+        [],
+    )?;
+    db.connection().execute(
+        "INSERT INTO library_root (library_id, source_id, prefix, prefix_key)
+         VALUES (?1, 'source', 'Store/Course', 'Store/Course')",
+        [LIB],
+    )?;
+    insert_media(&db, "text", "Store/Course/Module/Reading/Ownership.MD")?;
+    insert_media(&db, "loose", "Store/Course/Module/Ownership.md")?;
+
+    let result = search(&db, "teacher", false, "ownership", 20)?;
+    assert_eq!(result.lessons.len(), 1);
+    assert_eq!(
+        result.lessons[0].lesson_path.as_deref(),
+        Some("Module/Reading")
+    );
+    Ok(())
+}
+
+#[test]
 fn lesson_search_excludes_small_ts_files() -> TestResult {
     let db = database()?;
     insert_media_with_size(&db, "ts-small", "Course/01 - Ownership.ts", 1024)?;
