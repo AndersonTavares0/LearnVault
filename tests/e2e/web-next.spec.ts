@@ -95,6 +95,34 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	expect(violations).toEqual([]);
 });
 
+test('Space activates the focused Close button during flashcard review', async ({ page, origin }) => {
+	await signIn(page, origin);
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await expect(page.getByText('Catalog updated.')).toBeVisible();
+	const catalog = await (await page.request.get(`${origin}/api/catalog`)).json();
+	const mediaId = JSON.stringify(catalog).match(/"media_id":"([^"]+)"/)?.[1];
+	expect(mediaId).toBeTruthy();
+	await expect(await page.request.post(`${origin}/api/study/flashcards`, {
+		headers: { Origin: origin },
+		data: { media_id: mediaId, front: 'Test question', back: 'Test answer' }
+	})).toBeOK();
+
+	await page.goto(`${origin}/#/review?course=__all`);
+	await page.getByRole('button', { name: 'Start review' }).click();
+	const showAnswer = page.getByRole('button', { name: 'Show answer' });
+	await expect(showAnswer).toBeFocused();
+	await page.keyboard.press('Space');
+	await expect(page.getByText('Test answer')).toBeVisible();
+	await page.getByRole('button', { name: 'Close' }).click();
+
+	const startReview = page.getByRole('button', { name: 'Start review' });
+	await startReview.click();
+	const close = page.getByRole('button', { name: 'Close' });
+	await close.focus();
+	await page.keyboard.press('Space');
+	await expect(startReview).toBeVisible();
+});
+
 test('customizing the look passes axe for every accent and breaks no CSP rule', async ({ page, origin }) => {
 	const violations = collectCspViolations(page);
 	// Reduced motion turns transitions off, so axe measures settled colours, not mid-fade ones.
