@@ -43,7 +43,7 @@ const AUTO_NEXT_SECONDS = 5;
  * you write and the course map stay beside the video. Focus mode dims everything but the player. When a focus block ends the lesson pauses and a break
  * screen covers the video (docs/design/redesign.md, "Player").
  */
-export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNode; courseId: string; lessonPath: string }) {
+export function LessonPage({ course, courseId, lessonPath: requestedPath }: { course: CatalogNode; courseId: string; lessonPath: string }) {
 	useLocale();
 	const session = useSession();
 	const catalog = useCatalog();
@@ -72,7 +72,11 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	const [seenRound, setSeenRound] = useState(timer.lastCompleted?.at ?? 0);
 	const [countdown, setCountdown] = useState<number | null>(null);
 
-	const lesson = findLesson(catalog.data ?? null, courseId, lessonPath);
+	const lesson = findLesson(catalog.data ?? null, courseId, requestedPath);
+	const lessonPath = lesson?.path ?? requestedPath;
+	const linkedMediaId = requestedPath !== lessonPath
+		? lesson?.media.find((file) => file.path === requestedPath)?.mediaId
+		: undefined;
 	// A lesson with nothing to play and a PDF is a PDF lesson: the PDF is read here and drives progress.
 	const pdf = lesson ? findLessonPdf(lesson) : null;
 	const text = lesson ? findLessonText(lesson, Boolean(pdf)) : null;
@@ -82,7 +86,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	}, [catalog.data, lesson, pdf]);
 	const { previous, next } = neighboringLessons([course], lessonPath);
 	const playableMedia = lesson ? mediaAvailability(lesson.media) === 'playable' : false;
-	const mediaId = pdf?.mediaId ?? (lesson ? lessonStudyMediaId(lesson.media, preferences.lessons[lessonPreferenceKey(courseId, lessonPath)]?.mediaId) : null);
+	const preferredMediaId = linkedMediaId ?? preferences.lessons[lessonPreferenceKey(courseId, lessonPath)]?.mediaId;
+	const mediaId = pdf?.mediaId ?? (lesson ? lessonStudyMediaId(lesson.media, preferredMediaId) : null);
 	const completed = useMemo(() => new Set((recent.data ?? []).filter((item) => item.completed).map((item) => item.mediaId)), [recent.data]);
 	const favoriteMedia = useMemo(() => new Set(favorites.data?.mediaIds ?? []), [favorites.data]);
 	const progress = useQuery({ queryKey: ['progress', mediaId], enabled: Boolean(mediaId) && studySyncSupported, queryFn: () => transport.studyProgress(mediaId!) });
@@ -161,9 +166,9 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 	};
 
 	// Reset per-lesson state when the lesson changes.
-	const [shownLesson, setShownLesson] = useState(lessonPath);
-	if (shownLesson !== lessonPath) {
-		setShownLesson(lessonPath);
+	const [shownLesson, setShownLesson] = useState(requestedPath);
+	if (shownLesson !== requestedPath) {
+		setShownLesson(requestedPath);
 		setCountdown(null);
 		setNoteRequest(0);
 		setCardSeed(null);
@@ -270,6 +275,8 @@ export function LessonPage({ course, courseId, lessonPath }: { course: CatalogNo
 							lesson={lesson}
 							courseId={courseId}
 							initialPosition={resumeAt}
+							preferredMediaId={preferredMediaId}
+							onSelectMedia={linkedMediaId ? () => navigate(path(href('course', courseId, lessonPath)), { replace: true }) : undefined}
 							preferences={preferences}
 							onPreferencesChange={savePreferences}
 							onPosition={recordPosition}

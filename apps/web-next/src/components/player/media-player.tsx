@@ -21,6 +21,8 @@ type Props = {
 	lesson: Lesson;
 	courseId: string;
 	initialPosition: number | null;
+	preferredMediaId?: string;
+	onSelectMedia?: () => void;
 	preferences: PlayerPreferences;
 	onPreferencesChange: (next: PlayerPreferences) => void;
 	/** Called every few seconds and on pause with the absolute position. */
@@ -70,10 +72,10 @@ function useCaptions(subtitle: FileEntry | null, courseId: string) {
 	return { src: null, message, download: url };
 }
 
-export function MediaPlayer({ lesson, courseId, initialPosition, preferences, onPreferencesChange, onPosition, onEnded, onTime, onOpenNotes, bookmarks = [], markers = [], cinema = false, onCinema, handle }: Props) {
+export function MediaPlayer({ lesson, courseId, initialPosition, preferredMediaId, onSelectMedia, preferences, onPreferencesChange, onPosition, onEnded, onTime, onOpenNotes, bookmarks = [], markers = [], cinema = false, onCinema, handle }: Props) {
 	const lessonPreference = preferences.lessons[lessonPreferenceKey(courseId, lesson.path)] ?? {};
 	const available = (files: FileEntry[]) => files.filter((file) => file.availability?.trim().toLowerCase() !== 'missing');
-	const playable = selectPlayableMedia(lesson.media, lessonPreference.mediaId);
+	const playable = selectPlayableMedia(lesson.media, preferredMediaId ?? lessonPreference.mediaId);
 	const subtitle = selectPlayableSubtitle(lesson.subtitles, lessonPreference.subtitleId, preferences.subtitleLanguage);
 	const captions = useCaptions(subtitle, courseId);
 	const capabilities = useQuery({ queryKey: ['media-capabilities'], staleTime: Infinity, queryFn: () => transport.mediaCapabilities() });
@@ -501,7 +503,10 @@ export function MediaPlayer({ lesson, courseId, initialPosition, preferences, on
 					{available(lesson.media).length > 1 && (
 					<>
 						<Label htmlFor="player-media" className="ml-2">{tr('Video', 'Vídeo')}</Label>
-						<select id="player-media" value={mediaId ?? ''} onChange={(event) => onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, { mediaId: event.target.value }))} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
+						<select id="player-media" value={mediaId ?? ''} onChange={(event) => {
+							onPreferencesChange(updateLessonPreference(preferences, courseId, lesson.path, { mediaId: event.target.value }));
+							onSelectMedia?.();
+						}} className="h-11 max-w-48 rounded-lg border border-input bg-background px-2 text-sm">
 							{available(lesson.media).map((file) => <option key={file.mediaId} value={file.mediaId}>{file.name}</option>)}
 						</select>
 					</>

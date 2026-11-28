@@ -95,6 +95,26 @@ test('signs in, indexes the library and resumes a lesson from My learning', asyn
 	expect(violations).toEqual([]);
 });
 
+test('opens a lesson from a search hit on a file inside its folder', async ({ page, origin, libraryDir }) => {
+	await writeFile(join(libraryDir, 'Course', 'Rust from zero', '01 Ownership', 'Supplement.mp4'), 'video-fixture');
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await signIn(page, origin);
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await expect(page.getByText('Catalog updated.')).toBeVisible();
+
+	await page.getByRole('combobox', { name: 'Search notes, courses and lessons' }).fill('supplement');
+	await page.getByRole('group', { name: 'Lessons' }).getByRole('option').click();
+
+	await expect(page.getByRole('heading', { level: 1, name: 'Ownership' })).toBeVisible();
+	await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeEnabled();
+	const source = page.getByLabel('Video', { exact: true });
+	await expect(source.locator('option:checked')).toHaveText('Supplement.mp4');
+	await source.selectOption({ label: 'Lesson.mp4' });
+	await expect(source.locator('option:checked')).toHaveText('Lesson.mp4');
+	await page.reload();
+	await expect(page.getByLabel('Video', { exact: true }).locator('option:checked')).toHaveText('Lesson.mp4');
+});
+
 test('Space activates the focused Close button during flashcard review', async ({ page, origin }) => {
 	await signIn(page, origin);
 	await page.getByRole('button', { name: 'Refresh courses' }).click();

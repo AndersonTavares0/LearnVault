@@ -149,6 +149,8 @@ export function findLesson(catalog: Catalog | null, courseId: string | null, les
 		function visit(node: CatalogNode): Lesson | null {
 			if (node.role === 'lesson' && node.path === lessonPath) return lessonFromNode(node);
 			const loose = node.looseFiles.find(playable);
+			// Search and study records can link to a file inside a folder-based lesson.
+			if (node.role === 'lesson' && (loose || node.files.some(playable))) return lessonFromNode(node);
 			if (loose) return { title: loose.name, path: loose.path, media: [loose], subtitles: [], materials: [] };
 			const document = node.looseFiles.find(readablePdf);
 			if (document) return { title: cleanMediaTitle(document.name), path: document.path, media: [], subtitles: [], materials: [document] };
