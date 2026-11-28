@@ -160,11 +160,11 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 	}
 	const resumeClass = 'relative z-10 inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center px-1 text-xs font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-ring';
 	return (
-		<li data-card className="group/card study-surface relative flex w-64 shrink-0 snap-start flex-col items-stretch justify-between overflow-hidden p-0 transition-colors duration-150 hover:border-[color:var(--border-strong)] has-focus-visible:ring-2 has-focus-visible:ring-ring">
-			<div className="relative overflow-hidden border-b border-[var(--study-rule)]">
-				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} className="aspect-[2.4/1] w-full rounded-none ring-0 [&_img]:transition-transform [&_img]:duration-200 [&_img]:ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/card:[&_img]:scale-[1.03]" />
+		<li data-card className="group/card relative flex w-64 shrink-0 snap-start flex-col items-stretch justify-between rounded-[var(--radius)] has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-ring">
+			<div className="relative overflow-hidden rounded-[var(--radius)] border border-[var(--study-rule)]">
+				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} className="aspect-video w-full rounded-none ring-0" />
 			</div>
-			<div className="flex min-w-0 flex-1 flex-col justify-between gap-2 p-3.5">
+			<div className="flex min-w-0 flex-1 flex-col justify-between gap-1 px-1 pt-1 pb-2">
 				<div className="flex items-center gap-2.5">
 					<h3 className="card-heading flex min-h-11 min-w-0 flex-1 items-center text-base leading-snug font-semibold">
 						<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="line-clamp-2 [overflow-wrap:anywhere] after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:underline">{entry.course.title}</Link>

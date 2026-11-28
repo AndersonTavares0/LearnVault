@@ -111,7 +111,7 @@ export function HomePage() {
 	return (
 		<div className="space-y-7 sm:space-y-8">
 			<div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-3">
-				<h1 className="study-page-title">{tr('My learning', 'Meu aprendizado')}</h1>
+				<h1 className="study-page-title study-editorial-title">{tr('My learning', 'Meu aprendizado')}</h1>
 				{user?.isAdmin && library.entries.length > 0 && (
 					<div className="flex flex-wrap items-center justify-end gap-2">
 						<p role="status" aria-live="polite" className="order-last w-full text-right text-xs font-medium text-muted-foreground empty:hidden sm:order-first sm:w-auto sm:text-left">{message}</p>
@@ -299,8 +299,8 @@ function ResumeCard({ next, profile }: { next: UpNext | null; profile: string })
 	if (!next || !look.showContinue) return null;
 	const { courseId, course, lesson, title, index, lessons, done, position } = next;
 	return (
-		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="grid rounded-xl border border-[var(--study-rule)] bg-card p-4 sm:grid-cols-[minmax(9rem,22%)_minmax(0,1fr)] sm:items-center sm:gap-6 sm:p-5">
-			<div className="relative hidden aspect-video overflow-hidden rounded-xl border border-[var(--study-rule)] sm:block" aria-hidden="true">
+		<section aria-label={tr('Continue learning', 'Continuar estudando')} className="grid items-center gap-5 border-y border-[var(--study-rule)] py-4 sm:grid-cols-[minmax(8rem,18%)_minmax(0,1fr)] sm:gap-7 sm:py-5">
+			<div className="relative hidden aspect-video overflow-hidden rounded-[var(--radius)] border border-[var(--study-rule)] sm:block" aria-hidden="true">
 				<CourseCover course={course} profile={profile} eager done={done} total={lessons.length} className="size-full rounded-none ring-0" />
 			</div>
 			<div className="min-w-0">
@@ -309,15 +309,15 @@ function ResumeCard({ next, profile }: { next: UpNext | null; profile: string })
 					<span>{course.title}</span>
 					<span className="tabular-nums">{tr(`Lesson ${index + 1} of ${lessons.length}`, `Aula ${index + 1} de ${lessons.length}`)}</span>
 				</p>
-				<h2 className="mt-2 text-2xl font-semibold tracking-tight break-words text-balance sm:text-3xl sm:leading-tight">{title}</h2>
-				{position !== null && position > 0 && <p className="mt-3 max-w-[42ch] text-sm text-muted-foreground">{tr(`You stopped at ${formatDuration(position)}.`, `Você parou em ${formatDuration(position)}.`)}</p>}
-				<div className="mt-4 flex flex-wrap gap-2.5 sm:mt-5">
+				<h2 className="study-editorial-title mt-1.5 text-2xl leading-tight font-semibold tracking-tight wrap-anywhere text-balance sm:text-3xl">{title}</h2>
+				{position !== null && position > 0 && <p className="mt-2 text-sm text-muted-foreground">{tr(`You stopped at ${formatDuration(position)}.`, `Você parou em ${formatDuration(position)}.`)}</p>}
+				<div className="mt-3 flex flex-wrap gap-2.5">
 					<Link to={routerPath(href('course', courseId, lesson.path, position))} className={buttonVariants({ className: 'font-semibold' })}>
 						<Play className="size-4 fill-current" aria-hidden="true" />{position ? tr(`Resume at ${formatDuration(position)}`, `Retomar em ${formatDuration(position)}`) : tr('Start lesson', 'Começar aula')}
 					</Link>
 					<Link to={routerPath(href('course', courseId))} className={buttonVariants({ variant: 'outline' })}>{tr('Open course', 'Abrir curso')}</Link>
 				</div>
-				<LessonSegments className="mt-4 max-w-[300px] sm:mt-6" done={done} total={lessons.length} current={index} />
+				<LessonSegments className="mt-3 max-w-[300px] sm:mt-4" done={done} total={lessons.length} current={index} />
 			</div>
 		</section>
 	);
@@ -366,7 +366,7 @@ function Shelf({ entries, profile, canManage }: { entries: CourseEntry[]; profil
 				if (items.length === 0) return null;
 				return (
 					<section key={status} aria-label={label} className="space-y-3">
-						<div className="flex items-center justify-between gap-3">
+						<div className="flex items-baseline justify-between gap-3 border-t border-[var(--study-rule)] pt-3">
 							<h3 className="text-lg font-bold">{label}</h3>
 							<span className="text-sm text-muted-foreground tabular-nums">{items.length}</span>
 						</div>
