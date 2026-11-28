@@ -662,6 +662,11 @@ html[data-app-shell], html[data-app-shell] body { height: 100%; overflow: hidden
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
+@media (width >= 64rem) {
+  :root[data-font="sans"] .study-editorial-title {
+    font-family: var(--font-reading);
+  }
+}
 .study-empty {
   max-inline-size: 56ch;
   padding: clamp(1rem, 3vw, 1.5rem);

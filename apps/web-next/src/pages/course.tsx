@@ -172,7 +172,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 					<p className="text-[13px] text-muted-foreground">
 						<Link to={libraryReturn()} className="inline-flex min-h-11 items-center hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">{tr('My learning', 'Meu aprendizado')}</Link> / {course.title}
 					</p>
-					<h1 className="font-heading text-2xl leading-tight font-semibold tracking-tight text-balance sm:text-[2.5rem] sm:leading-[1.08]">{course.title}</h1>
+					<h1 className="study-editorial-title font-heading text-2xl leading-tight font-semibold tracking-tight wrap-anywhere text-balance sm:text-[2.5rem] sm:leading-[1.08]">{course.title}</h1>
 					<div role="group" aria-label={tr('Course at a glance', 'Resumo do curso')} className="flex flex-wrap items-center gap-x-3.5 gap-y-1.5 text-sm text-muted-foreground">
 						{counts.modules > 0 && <span><b className="font-semibold text-foreground tabular-nums">{counts.modules}</b> {counts.modules === 1 ? tr('module', 'módulo') : tr('modules', 'módulos')}</span>}
 						{counts.lessons > 0 && <span><b className="font-semibold text-foreground tabular-nums">{counts.lessons}</b> {counts.lessons === 1 ? tr('lesson', 'aula') : tr('lessons', 'aulas')}</span>}
