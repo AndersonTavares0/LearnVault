@@ -31,6 +31,12 @@ function run(command, args, options = {}) {
 		...options
 	});
 	children.add(child);
+	child.once('error', (error) => {
+		children.delete(child);
+		if (exiting) return;
+		console.error(`Could not start ${command}: ${error.message}`);
+		shutdown(1);
+	});
 	child.on('exit', (code, signal) => {
 		children.delete(child);
 		if (exiting) return;
@@ -108,6 +114,6 @@ if (mode === 'localhost') {
 	}
 
 	if (!exiting) {
-		run(`"${tauri}"`, ['dev'], { cwd: path.join(root, 'crates', 'desktop') });
+		run(isWindows ? `"${tauri}"` : tauri, ['dev'], { cwd: path.join(root, 'crates', 'desktop') });
 	}
 }

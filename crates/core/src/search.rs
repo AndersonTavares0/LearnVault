@@ -122,14 +122,22 @@ pub struct SearchResults {
     pub bookmarks: Vec<SearchBookmarkHit>,
 }
 
-/// Replaces the standalone course index with the current registered courses.
+/// Refreshes the standalone course index when the registered courses change.
 ///
 /// The registry is configuration, not database state, so this runs before a search with
-/// the server's snapshot. The course list is small; deleting and reinserting keeps it
-/// exact without stale rows.
+/// the server's snapshot. Retaining the same rows avoids rewriting FTS on each query.
 pub fn sync_course_index(db: &Database, courses: &[(String, String)]) -> Result<()> {
     let conn = db.connection();
     let tx = conn.unchecked_transaction()?;
+    let existing = {
+        let mut statement = tx.prepare("SELECT course_id, title FROM course_fts ORDER BY rowid")?;
+        let rows = statement.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        rows.collect::<rusqlite::Result<Vec<(String, String)>>>()?
+    };
+    if existing == courses {
+        tx.commit()?;
+        return Ok(());
+    }
     tx.execute("DELETE FROM course_fts", [])?;
     {
         let mut statement =
