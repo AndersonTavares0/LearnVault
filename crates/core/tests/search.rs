@@ -186,6 +186,19 @@ fn media_index_tracks_renames_and_explicit_removal() -> TestResult {
 }
 
 #[test]
+fn course_index_identical_snapshot_does_not_write_rows() -> TestResult {
+    let db = database()?;
+    let courses = [(LIB.to_owned(), "Rust Deep Dive".to_owned())];
+    sync_course_index(&db, &courses)?;
+    let writes = db.connection().total_changes();
+
+    sync_course_index(&db, &courses)?;
+
+    assert_eq!(db.connection().total_changes(), writes);
+    Ok(())
+}
+
+#[test]
 fn course_index_is_replaced_without_stale_rows() -> TestResult {
     let db = database()?;
     sync_course_index(&db, &[(LIB.to_owned(), "Rust Deep Dive".to_owned())])?;
@@ -288,6 +301,66 @@ fn lesson_search_excludes_markdown_and_keeps_video() -> TestResult {
     let results = search(&db, "teacher", false, "rust", 20)?;
     assert_eq!(results.lessons.len(), 1);
     assert_eq!(results.lessons[0].media_id, "media-mp4");
+    Ok(())
+}
+
+#[test]
+fn lesson_search_returns_readable_text_lessons_at_their_catalog_path() -> TestResult {
+    let mut db = database()?;
+    insert_media(&db, "text", "Module/01 - Reading/01 - Ownership.md")?;
+    insert_media(&db, "extra", "Module/01 - Reading/02 - Ownership.md")?;
+    insert_media(&db, "loose", "Module/Ownership.md")?;
+    insert_media(&db, "mixed", "Module/02 - Video/Ownership.md")?;
+    insert_media(&db, "video", "Module/02 - Video/Lesson.mp4")?;
+    insert_media(&db, "pdf-text", "Module/03 - PDF/Ownership.md")?;
+    insert_media(&db, "pdf", "Module/03 - PDF/Handout.pdf")?;
+
+    let results = search(&db, "teacher", false, "ownership", 20)?;
+    assert_eq!(results.lessons.len(), 1);
+    assert_eq!(results.lessons[0].media_id, "text");
+    assert_eq!(
+        results.lessons[0].lesson_path.as_deref(),
+        Some("Module/01 - Reading")
+    );
+
+    insert_user(&db, "restricted")?;
+    set_user_course_access(&mut db, "restricted", Some(&[]))?;
+    assert!(
+        search(&db, "restricted", false, "ownership", 20)?
+            .lessons
+            .is_empty()
+    );
+    set_user_course_access(&mut db, "restricted", Some(&[LIB.to_owned()]))?;
+    assert_eq!(
+        search(&db, "restricted", false, "ownership", 20)?
+            .lessons
+            .len(),
+        1
+    );
+    Ok(())
+}
+
+#[test]
+fn text_lesson_search_uses_the_catalog_path_below_a_remote_course_root() -> TestResult {
+    let db = database()?;
+    db.connection().execute(
+        "INSERT INTO library (library_id, available) VALUES ('source', 1)",
+        [],
+    )?;
+    db.connection().execute(
+        "INSERT INTO library_root (library_id, source_id, prefix, prefix_key)
+         VALUES (?1, 'source', 'Store/Course', 'Store/Course')",
+        [LIB],
+    )?;
+    insert_media(&db, "text", "Store/Course/Module/Reading/Ownership.MD")?;
+    insert_media(&db, "loose", "Store/Course/Module/Ownership.md")?;
+
+    let result = search(&db, "teacher", false, "ownership", 20)?;
+    assert_eq!(result.lessons.len(), 1);
+    assert_eq!(
+        result.lessons[0].lesson_path.as_deref(),
+        Some("Module/Reading")
+    );
     Ok(())
 }
 

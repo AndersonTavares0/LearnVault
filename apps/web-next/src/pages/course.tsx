@@ -143,16 +143,21 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 	const hasStarted = Boolean(lastStudied) || lessons.some(isDone);
 	const resumeLesson = resumeAt ? lastStudied?.location?.lesson ?? null : null;
 	const lastIndex = lastStudied?.location ? lessons.findIndex((node) => node.path === lastStudied.location!.lesson.path) : -1;
-	const currentPath = hasStarted ? (resumeLesson ?? lessons.slice(lastIndex + 1).find((node) => !isDone(node)))?.path ?? null : null;
-	const continuePath = currentPath ?? lastStudied?.location?.lesson.path ?? entry?.next?.path;
+	const currentPath = hasStarted ? (resumeLesson ?? lessons.slice(lastIndex + 1).find((node) => !isDone(node)) ?? lessons.find((node) => !isDone(node)))?.path ?? null : null;
 	const lessonStates = lessons.map((node): SegmentState => (isDone(node) ? 'done' : node.path === currentPath ? 'current' : 'pending'));
 	const doneLessons = lessonStates.filter((state) => state === 'done').length;
+	const isCourseComplete = lessons.length > 0 && doneLessons === lessons.length;
+	const continuePath = isCourseComplete && !resumeLesson
+		? (lessons[0]?.path ?? lastStudied?.location?.lesson.path ?? entry?.next?.path)
+		: (currentPath ?? lastStudied?.location?.lesson.path ?? entry?.next?.path);
 	const courseNotes = (notes.data ?? []).filter((note) => findLessonLocation(catalog.data ?? null, note.mediaId)?.courseId === courseId);
 	const customCategory = customCategories[course.courseId || course.path]?.trim() || null;
 	const shownCategory = customCategory ?? (category && category.toLowerCase() !== 'library' ? category : null);
 	const primaryLabel = resumeLesson && resumeAt
 		? tr(`Resume ${resumeLesson.title} at ${formatDuration(resumeAt)}`, `Retomar ${resumeLesson.title} em ${formatDuration(resumeAt)}`)
-		: lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso');
+		: isCourseComplete
+			? tr('Review course from start', 'Rever curso do início')
+			: lastStudied ? tr('Continue studying', 'Continuar estudando') : tr('Start course', 'Começar curso');
 
 	return (
 		<div className="space-y-8">
@@ -182,7 +187,7 @@ function CourseOverview({ course, courseId }: { course: CatalogNode; courseId: s
 				</div>
 				<div className="col-span-2 row-start-2 grid grid-cols-2 gap-2 lg:col-span-1 lg:col-start-1 lg:flex lg:flex-wrap lg:items-center">
 					{continuePath ? (
-						<Link to={path(href('course', courseId, continuePath, resumeLesson ? resumeAt : null))} className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-primary px-5 text-center text-base font-semibold whitespace-nowrap text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:col-span-auto lg:flex-none">
+						<Link to={path(href('course', courseId, continuePath, resumeLesson ? resumeAt : null))} className="col-span-2 inline-flex min-h-11 items-center justify-center rounded-[var(--radius)] bg-primary px-5 py-2 text-center text-base font-semibold text-primary-foreground hover:bg-brand-deep focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none lg:col-span-auto lg:flex-none">
 							{primaryLabel}
 						</Link>
 					) : documents.length > 0 ? (

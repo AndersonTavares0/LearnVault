@@ -89,7 +89,7 @@ fn present(results: SearchResults, titles: &HashMap<&str, &str>) -> SearchResult
                 title: lesson_title(&hit.relative_path),
                 course_id: hit.course_id,
                 media_id: hit.media_id,
-                path: hit.relative_path,
+                path: hit.lesson_path.unwrap_or(hit.relative_path),
             })
         })
         .collect();
