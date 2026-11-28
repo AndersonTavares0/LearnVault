@@ -431,3 +431,124 @@ async fn sources_are_admin_only() {
         Some("private, no-store")
     );
 }
+
+#[tokio::test(start_paused = true)]
+async fn idle_remote_media_streams_release_capacity_without_reading_the_body() {
+    let payload = "x".repeat(32 * 1024);
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        loop {
+            let Ok((mut stream, _)) = listener.accept().await else {
+                return;
+            };
+            let payload = payload.clone();
+            tokio::spawn(async move {
+                let mut request = Vec::new();
+                loop {
+                    let mut chunk = [0_u8; 2048];
+                    let Ok(read) = stream.read(&mut chunk).await else {
+                        return;
+                    };
+                    if read == 0 {
+                        return;
+                    }
+                    request.extend_from_slice(&chunk[..read]);
+                    if request.windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let lower = String::from_utf8_lossy(&request).to_ascii_lowercase();
+                let bytes = if lower.starts_with("propfind /dav/ ") {
+                    response(
+                        "207 Multi-Status",
+                        &[("content-type", "application/xml")],
+                        r#"<?xml version="1.0"?>
+<D:multistatus xmlns:D="DAV:">
+ <D:response><D:href>/dav/</D:href><D:propstat><D:prop><D:resourcetype><D:collection/></D:resourcetype></D:prop></D:propstat></D:response>
+ <D:response><D:href>/dav/aula.mp4</D:href><D:propstat><D:prop><D:resourcetype/><D:getcontentlength>32768</D:getcontentlength></D:prop></D:propstat></D:response>
+</D:multistatus>"#,
+                    )
+                } else if lower.starts_with("get /dav/aula.mp4 ") {
+                    response("200 OK", &[], &payload)
+                } else {
+                    response("404 Not Found", &[], "")
+                };
+                let _ = stream.write_all(&bytes).await;
+                let _ = stream.shutdown().await;
+            });
+        }
+    });
+
+    let temp = tempfile::tempdir().unwrap();
+    let state = AppState::initialize(config(&temp)).await.unwrap();
+    let app = build_router(state);
+    let cookie = login(&app).await;
+    let url = format!("dav://{address}/dav");
+    let created = create_source(&app, &cookie, &url, PASSWORD).await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let id = json_body(created).await["id"].as_str().unwrap().to_owned();
+
+    let scanned = app
+        .clone()
+        .oneshot(
+            Request::post(format!("/api/admin/sources/{id}/scan"))
+                .header("origin", "http://localhost")
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(scanned.status(), StatusCode::OK);
+
+    let mut idle_responses = Vec::new();
+    for _ in 0..4 {
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::get(format!("/api/media?course={id}&path=aula.mp4"))
+                    .header("cookie", &cookie)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        idle_responses.push(resp);
+    }
+
+    let saturated = app
+        .clone()
+        .oneshot(
+            Request::get(format!("/api/media?course={id}&path=aula.mp4"))
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(saturated.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+    for _ in 0..32 {
+        tokio::task::yield_now().await;
+        tokio::time::advance(std::time::Duration::from_secs(1)).await;
+    }
+    tokio::task::yield_now().await;
+
+    let recovered = app
+        .oneshot(
+            Request::get(format!("/api/media?course={id}&path=aula.mp4"))
+                .header("cookie", &cookie)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(recovered.status(), StatusCode::OK);
+    let bytes = recovered.into_body().collect().await.unwrap().to_bytes();
+    assert_eq!(bytes.len(), 32 * 1024);
+
+    drop(idle_responses);
+    server.abort();
+}
