@@ -361,6 +361,24 @@ test('the top bar fits a 320 px phone with every control inside the screen', asy
 	expect(Math.max(...rights)).toBeLessThanOrEqual(320);
 });
 
+test('library grid aligns course status under single- and two-line titles', async ({ page, origin, libraryDir }) => {
+	const longTitle = 'Fundamentos de análise de dados e visualização para pesquisas quantitativas';
+	await basicLibrary(join(libraryDir, longTitle));
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await signIn(page, origin);
+	await page.getByRole('button', { name: 'Refresh courses' }).click();
+	await page.getByRole('region', { name: 'New course folders found' }).getByRole('button', { name: 'Import', exact: true }).click();
+	const library = page.getByRole('region', { name: 'Your library' });
+	const card = (name: string) => library.getByRole('listitem').filter({ has: page.getByRole('heading', { name, exact: true }) });
+	const shortStatus = card('Course').getByText('Not started', { exact: true });
+	const longStatus = card(longTitle).getByText('Not started', { exact: true });
+	await expect(shortStatus).toBeVisible();
+	await expect(longStatus).toBeVisible();
+	await page.evaluate(() => document.fonts.ready.then(() => undefined));
+	const [short, long] = await Promise.all([shortStatus.boundingBox(), longStatus.boundingBox()]);
+	expect(Math.abs(short!.y - long!.y)).toBeLessThanOrEqual(1);
+});
+
 test('imports a course folder from the interface and refuses a folder outside the library', async ({ page, origin, libraryDir }) => {
 	await signIn(page, origin);
 	await page.getByRole('button', { name: 'Refresh courses' }).click();
