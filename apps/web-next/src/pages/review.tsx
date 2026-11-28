@@ -218,7 +218,10 @@ function Deck({ courseId, title, cards, now }: { courseId: string; title: string
 	};
 	const onKeyDown = (event: KeyboardEvent) => {
 		if (!current || review.isPending) return;
-		if (!revealed && (event.key === ' ' || event.key === 'Enter')) { event.preventDefault(); setRevealed(true); }
+		if (!revealed && event.target === event.currentTarget && (event.key === ' ' || event.key === 'Enter')) {
+			event.preventDefault();
+			setRevealed(true);
+		}
 		else if (revealed && event.key === '1') { event.preventDefault(); rate('again'); }
 		else if (revealed && event.key === '2') { event.preventDefault(); rate('hard'); }
 		else if (revealed && event.key === '3') { event.preventDefault(); rate('good'); }
