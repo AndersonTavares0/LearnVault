@@ -186,6 +186,19 @@ fn media_index_tracks_renames_and_explicit_removal() -> TestResult {
 }
 
 #[test]
+fn course_index_identical_snapshot_does_not_write_rows() -> TestResult {
+    let db = database()?;
+    let courses = [(LIB.to_owned(), "Rust Deep Dive".to_owned())];
+    sync_course_index(&db, &courses)?;
+    let writes = db.connection().total_changes();
+
+    sync_course_index(&db, &courses)?;
+
+    assert_eq!(db.connection().total_changes(), writes);
+    Ok(())
+}
+
+#[test]
 fn course_index_is_replaced_without_stale_rows() -> TestResult {
     let db = database()?;
     sync_course_index(&db, &[(LIB.to_owned(), "Rust Deep Dive".to_owned())])?;
