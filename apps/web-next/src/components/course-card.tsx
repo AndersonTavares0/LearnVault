@@ -122,8 +122,8 @@ export function CourseCard({ entry, profile, variant = 'grid', canManage = false
 			<li className="group/card relative grid min-w-0 grid-cols-[4.25rem_minmax(0,1fr)] items-start gap-3.5 border-t border-[var(--study-rule)] py-3.5 sm:grid-cols-[4.5rem_minmax(0,1fr)]">
 				<CourseCover course={entry.course} profile={profile} done={entry.done} total={entry.total} compact className="aspect-square w-full rounded-[var(--radius)] border border-[var(--study-rule)] ring-0" />
 				<div className="flex min-h-[4.5rem] min-w-0 flex-col justify-between gap-2">
-					<div className="flex min-h-[2.4rem] items-start gap-1">
-						<h3 className="line-clamp-2 min-w-0 flex-1 text-base leading-snug font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">
+					<div className="flex min-h-[2lh] items-start gap-1 text-base leading-snug">
+						<h3 className="line-clamp-2 min-w-0 flex-1 font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">
 							<Link to={routerPath(href('course', entry.courseId))} title={entry.course.title} className="after:absolute after:inset-0 after:content-[''] hover:underline focus-visible:underline">{entry.course.title}</Link>
 						</h3>
 						{(studySyncSupported || manageable) && (
